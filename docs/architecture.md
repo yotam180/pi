@@ -13,12 +13,14 @@ internal/
     root.go                        Root command, wires subcommands, exit code handling
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
     list.go                        pi list — discovers and prints automations
+    info.go                        pi info — shows automation name, description, and input docs
     setup.go                       pi setup — runs setup entries, then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
     run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column test)
+    info_test.go                   pi info tests (9 tests)
     setup_test.go                  pi setup tests (4 tests)
     shell_test.go                  pi shell tests (3 tests)
   config/                          pi.yaml parsing
@@ -91,6 +93,23 @@ pi shell
        GenerateShellFile() → builds function definitions
        Install() → writes to ~/.pi/shell/<project>.sh
        ensureSourceLine() → injects source block into .zshrc/.bashrc
+```
+
+```
+pi info <name>
+  │
+  ├─ CLI (internal/cli)
+  │    Parses args, gets CWD
+  │
+  ├─ Project (internal/project)
+  │    Walks up from CWD to find pi.yaml → repo root path
+  │
+  ├─ Discovery (internal/discovery)
+  │    Walks .pi/ → map[name]*Automation
+  │    Find(name) → *Automation
+  │
+  └─ Output
+       Prints name, description, step count, and input specs
 ```
 
 ```
@@ -228,7 +247,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 205 (27 automation + 37 CLI + 9 config + 18 discovery + 55 executor + 4 project + 14 shell + 41 integration)
+Total tests: 228 (33 automation + 48 CLI + 9 config + 18 discovery + 54 executor + 4 project + 14 shell + 48 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -238,3 +257,4 @@ Total tests: 205 (27 automation + 37 CLI + 9 config + 18 discovery + 55 executor
 - Polyglot tests cover Python (inline/file), TypeScript (inline/file), multi-step pipe chains (bash→Python→TypeScript), and `run:` step piping
 - Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`
 - Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
+- Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
