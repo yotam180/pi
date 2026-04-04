@@ -3,6 +3,7 @@ package automation
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -42,6 +43,10 @@ type Automation struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Steps       []Step `yaml:"steps"`
+
+	// FilePath is the absolute path to the YAML file this automation was loaded from.
+	// Set by Load(), not parsed from YAML.
+	FilePath string `yaml:"-"`
 }
 
 // stepRaw is the intermediate representation used during YAML unmarshalling.
@@ -142,10 +147,17 @@ func Load(path string) (*Automation, error) {
 		return nil, fmt.Errorf("reading automation file %s: %w", path, err)
 	}
 
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolving absolute path for %s: %w", path, err)
+	}
+
 	a := &Automation{}
 	if err := yaml.Unmarshal(data, a); err != nil {
 		return nil, fmt.Errorf("parsing automation file %s: %w", path, err)
 	}
+
+	a.FilePath = absPath
 
 	if err := a.validate(path); err != nil {
 		return nil, err
@@ -173,6 +185,11 @@ func (a *Automation) validate(path string) error {
 	}
 
 	return nil
+}
+
+// Dir returns the directory containing this automation's YAML file.
+func (a *Automation) Dir() string {
+	return filepath.Dir(a.FilePath)
 }
 
 // IsImplemented returns true if the step type is currently implemented in the engine.
