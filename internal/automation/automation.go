@@ -60,11 +60,60 @@ type Step struct {
 	If     string            `yaml:"-"`
 }
 
+// InstallPhase represents a phase (test, run, verify) in an install: block.
+// It can be either a single bash string or a list of steps.
+type InstallPhase struct {
+	IsScalar bool
+	Scalar   string
+	Steps    []Step
+}
+
+// UnmarshalYAML handles both scalar strings and step lists for install phases.
+func (p *InstallPhase) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		p.IsScalar = true
+		p.Scalar = value.Value
+		return nil
+	}
+	if value.Kind == yaml.SequenceNode {
+		p.IsScalar = false
+		var rawSteps []stepRaw
+		if err := value.Decode(&rawSteps); err != nil {
+			return err
+		}
+		for i, sr := range rawSteps {
+			step, err := sr.toStep(i)
+			if err != nil {
+				return err
+			}
+			p.Steps = append(p.Steps, step)
+		}
+		return nil
+	}
+	return fmt.Errorf("install phase must be a string or list of steps")
+}
+
+// InstallSpec defines the structured installer lifecycle.
+type InstallSpec struct {
+	Test    InstallPhase `yaml:"test"`
+	Run     InstallPhase `yaml:"run"`
+	Verify  *InstallPhase `yaml:"verify"`
+	Version string       `yaml:"version"`
+}
+
+// HasVerify returns true if an explicit verify phase was declared.
+func (s *InstallSpec) HasVerify() bool {
+	return s.Verify != nil
+}
+
 // Automation represents a parsed automation YAML file.
 type Automation struct {
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Steps       []Step `yaml:"steps"`
+
+	// Install defines the structured installer lifecycle. Mutually exclusive with Steps.
+	Install *InstallSpec `yaml:"-"`
 
 	// If contains a boolean condition expression. When present, the entire
 	// automation is skipped if the expression evaluates to false.
@@ -78,6 +127,11 @@ type Automation struct {
 	// FilePath is the absolute path to the YAML file this automation was loaded from.
 	// Set by Load(), not parsed from YAML.
 	FilePath string `yaml:"-"`
+}
+
+// IsInstaller returns true if this automation uses the install: block schema.
+func (a *Automation) IsInstaller() bool {
+	return a.Install != nil
 }
 
 // stepRaw is the intermediate representation used during YAML unmarshalling.
@@ -116,14 +170,15 @@ func (r *inputsRaw) UnmarshalYAML(value *yaml.Node) error {
 }
 
 // UnmarshalYAML implements custom unmarshalling for Automation to handle
-// the polymorphic step type and ordered inputs.
+// the polymorphic step type, ordered inputs, and install: blocks.
 func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 	var raw struct {
-		Name        string     `yaml:"name"`
-		Description string     `yaml:"description"`
-		Steps       []stepRaw  `yaml:"steps"`
-		Inputs      *inputsRaw `yaml:"inputs"`
-		If          string     `yaml:"if"`
+		Name        string       `yaml:"name"`
+		Description string       `yaml:"description"`
+		Steps       []stepRaw    `yaml:"steps"`
+		Install     *InstallSpec `yaml:"install"`
+		Inputs      *inputsRaw   `yaml:"inputs"`
+		If          string       `yaml:"if"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -133,6 +188,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 	a.Name = raw.Name
 	a.Description = raw.Description
 	a.If = raw.If
+	a.Install = raw.Install
 
 	if raw.Inputs != nil {
 		a.Inputs = raw.Inputs.Specs
@@ -242,14 +298,25 @@ func (a *Automation) validate(path string) error {
 		return fmt.Errorf("%s: \"name\" is required", path)
 	}
 
-	if len(a.Steps) == 0 {
-		return fmt.Errorf("%s: automation must have at least one step", path)
+	hasSteps := len(a.Steps) > 0
+	hasInstall := a.Install != nil
+
+	if hasSteps && hasInstall {
+		return fmt.Errorf("%s: automation cannot have both \"steps\" and \"install\"", path)
+	}
+
+	if !hasSteps && !hasInstall {
+		return fmt.Errorf("%s: automation must have \"steps\" or \"install\"", path)
 	}
 
 	if a.If != "" {
 		if _, err := conditions.Predicates(a.If); err != nil {
 			return fmt.Errorf("%s: invalid if expression: %w", path, err)
 		}
+	}
+
+	if hasInstall {
+		return a.validateInstall(path)
 	}
 
 	for i, step := range a.Steps {
@@ -266,6 +333,57 @@ func (a *Automation) validate(path string) error {
 		}
 	}
 
+	return nil
+}
+
+func (a *Automation) validateInstall(path string) error {
+	inst := a.Install
+
+	if err := validateInstallPhase(path, "test", &inst.Test); err != nil {
+		return err
+	}
+	if err := validateInstallPhase(path, "run", &inst.Run); err != nil {
+		return err
+	}
+	if inst.Verify != nil {
+		if err := validateInstallPhase(path, "verify", inst.Verify); err != nil {
+			return err
+		}
+	}
+
+	if !inst.Test.IsScalar && len(inst.Test.Steps) == 0 {
+		return fmt.Errorf("%s: install.test must have content", path)
+	}
+	if inst.Test.IsScalar && inst.Test.Scalar == "" {
+		return fmt.Errorf("%s: install.test must have content", path)
+	}
+	if !inst.Run.IsScalar && len(inst.Run.Steps) == 0 {
+		return fmt.Errorf("%s: install.run must have content", path)
+	}
+	if inst.Run.IsScalar && inst.Run.Scalar == "" {
+		return fmt.Errorf("%s: install.run must have content", path)
+	}
+
+	return nil
+}
+
+func validateInstallPhase(path, phaseName string, phase *InstallPhase) error {
+	if phase.IsScalar {
+		return nil
+	}
+	for i, step := range phase.Steps {
+		if step.Value == "" {
+			return fmt.Errorf("%s: install.%s step[%d] has empty value", path, phaseName, i)
+		}
+		if !implementedStepTypes[step.Type] {
+			return fmt.Errorf("%s: install.%s step[%d] type %q is not implemented", path, phaseName, i, step.Type)
+		}
+		if step.If != "" {
+			if _, err := conditions.Predicates(step.If); err != nil {
+				return fmt.Errorf("%s: install.%s step[%d] invalid if expression: %w", path, phaseName, i, err)
+			}
+		}
+	}
 	return nil
 }
 

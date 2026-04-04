@@ -1,0 +1,5 @@
+name: steps-automation
+description: Regular steps automation (not installer)
+
+steps:
+  - bash: echo "I am a regular automation"

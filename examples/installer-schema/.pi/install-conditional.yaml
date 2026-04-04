@@ -1,0 +1,11 @@
+name: install-conditional
+description: Installer with conditional run steps
+
+install:
+  test: "false"
+  run:
+    - bash: "exit 0"
+      if: os.windows
+    - bash: "true"
+  verify: "true"
+  version: echo "2.0.0"

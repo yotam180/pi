@@ -1,14 +1,7 @@
 name: install-tsx
 description: Install tsx globally for TypeScript execution
 
-steps:
-  - bash: |
-      if command -v tsx >/dev/null 2>&1; then
-        CURRENT=$(tsx --version 2>&1)
-        echo "[already installed] tsx ${CURRENT}"
-        exit 0
-      fi
-      echo "Installing tsx..."
-      npm install -g tsx
-      INSTALLED=$(tsx --version 2>&1)
-      echo "[installed] tsx ${INSTALLED}"
+install:
+  test: command -v tsx >/dev/null 2>&1
+  run: npm install -g tsx
+  version: tsx --version 2>&1

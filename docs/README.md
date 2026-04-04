@@ -116,6 +116,53 @@ steps:
 
 Steps can pass data to the next step using `pipe_to: next`. Full inter-step communication (env, named outputs) is planned for a future iteration.
 
+### Installer Automations (`install:`)
+
+Automations that install tools use the `install:` block instead of `steps:`. The two are mutually exclusive. The `install:` block explicitly declares a test-run-verify lifecycle, and PI manages all status output.
+
+```yaml
+# Scalar shorthand for simple installs
+name: install-homebrew
+description: Install Homebrew (macOS only)
+if: os.macos
+
+install:
+  test: command -v brew >/dev/null 2>&1
+  run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  version: brew --version | head -1 | awk '{print $2}'
+```
+
+```yaml
+# Step list for conditional install paths
+name: install-python
+description: Install Python at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Python version to install
+
+install:
+  test:
+    - bash: python3 --version 2>&1 | grep -q "Python $PI_INPUT_VERSION"
+  run:
+    - bash: mise install "python@$PI_INPUT_VERSION" && mise use "python@$PI_INPUT_VERSION"
+      if: command.mise
+    - bash: brew install "python@$PI_INPUT_VERSION"
+      if: command.brew and not command.mise
+  version: python3 --version 2>&1 | awk '{print $2}'
+```
+
+PI prints one status line per installer:
+```
+  ✓  install-homebrew      already installed   (4.2.1)
+  →  install-python        installing...
+  ✓  install-python        installed           (3.13.0)
+  ✗  install-node          failed
+```
+
+When `verify:` is omitted, PI re-runs `test:` as verification after `run:` completes. Use `--silent` to suppress status lines.
+
 ### Conditional Steps (`if:`)
 
 Steps can declare an `if:` field to conditionally execute based on the runtime environment. If the condition evaluates to false, the step is silently skipped.
@@ -220,9 +267,11 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | `pi run <name> [args]`                  | Run an automation by name (args mapped to inputs)        |
 | `pi run <name> --with key=value`        | Run with explicit named inputs (repeatable)              |
 | `pi run --repo <path> <name>`           | Run an automation with explicit project root             |
+| `pi run --silent <name>`                | Suppress PI status lines for installer automations       |
 | `pi info <name>`                        | Show name, description, and input docs for an automation |
 | `pi setup`                    | Run all setup automations, then install shell shortcuts  |
 | `pi setup --no-shell`         | Run setup automations without installing shortcuts       |
+| `pi setup --silent`           | Suppress PI status lines for installer automations       |
 | `pi shell`                    | Install shortcut functions into the current shell config |
 | `pi shell uninstall`          | Remove shortcuts for the current project                 |
 | `pi shell list`               | List all installed shortcut files across all projects    |

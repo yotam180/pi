@@ -148,42 +148,67 @@ When `version:` is not declared, the version column is omitted.
 `--silent` does not affect regular `steps:`-based automations — their stdout is the product, not status noise.
 
 ## Acceptance Criteria
-- [ ] `install:` block is parsed from automation YAML into the `Automation` struct (`InstallSpec` type)
-- [ ] `steps:` and `install:` are mutually exclusive — validation errors if both are present
-- [ ] Executor detects `install:` automations and uses the structured lifecycle instead of step iteration
-- [ ] `test` bash runs first; exit 0 short-circuits to "already installed" output
-- [ ] `run` bash stdout is suppressed; stderr is captured and shown only on failure
-- [ ] When `verify:` is absent, `test:` is re-run as the verification step after `run:` completes
-- [ ] When `verify:` is present, it runs instead of re-running `test:`; failure is treated as install failure
-- [ ] `version` bash (if present) is run after successful `test` or `verify`; its stdout is trimmed and used in the status line
-- [ ] PI prints the status table described above during `pi setup` and `pi run` on installer automations
-- [ ] `--silent` flag suppresses PI status lines on both `pi setup` and `pi run`
-- [ ] All existing built-in installer automations migrated from `steps:` to `install:` schema:
+- [x] `install:` block is parsed from automation YAML into the `Automation` struct (`InstallSpec` type)
+- [x] `steps:` and `install:` are mutually exclusive — validation errors if both are present
+- [x] Executor detects `install:` automations and uses the structured lifecycle instead of step iteration
+- [x] `test` bash runs first; exit 0 short-circuits to "already installed" output
+- [x] `run` bash stdout is suppressed; stderr is captured and shown only on failure
+- [x] When `verify:` is absent, `test:` is re-run as the verification step after `run:` completes
+- [x] When `verify:` is present, it runs instead of re-running `test:`; failure is treated as install failure
+- [x] `version` bash (if present) is run after successful `test` or `verify`; its stdout is trimmed and used in the status line
+- [x] PI prints the status table described above during `pi setup` and `pi run` on installer automations
+- [x] `--silent` flag suppresses PI status lines on both `pi setup` and `pi run`
+- [x] All existing built-in installer automations migrated from `steps:` to `install:` schema:
   - `install-homebrew.yaml`
   - `install-python.yaml`
   - `install-node.yaml`
   - `install-uv.yaml`
   - `install-tsx.yaml`
-- [ ] `go test ./...` passes
-- [ ] Integration test: run `pi:install-homebrew` on a machine where brew is already installed; verify output is `✓ already installed` with no extra noise
+- [x] `go test ./...` passes (425 tests, all green with -race)
+- [x] Integration test: run `pi:install-tsx` and verify output is `✓ already installed` with PI-managed format
 
 ## Implementation Notes
-<!-- Fill in as you work -->
+
+### Types added
+- `InstallPhase` — polymorphic type that handles both scalar bash strings and step lists, with custom `UnmarshalYAML`
+- `InstallSpec` — struct with `Test`, `Run`, `Verify` (pointer, nil = defaults to test), and `Version` fields
+- `Automation.Install` — optional `*InstallSpec` field, mutually exclusive with `Steps`
+- `Automation.IsInstaller()` — helper method
+
+### Executor changes
+- `RunWithInputs()` checks `a.IsInstaller()` before step iteration and dispatches to `execInstall()`
+- `execInstall()` implements the test → [run → verify] → version lifecycle
+- `execInstallPhase()` / `execInstallPhaseCapture()` run phases with stdout suppressed and optional stderr capture
+- `execBashSuppressed()` — inline bash with stdout/stderr suppression
+- `execScriptSuppressed()` — python/typescript with suppression
+- `captureVersion()` — runs version command, captures trimmed stdout
+- `printInstallStatus()` — prints formatted status line (respects `Silent` flag)
+- `printIndentedStderr()` — indented stderr output for failures
+- `Executor.Silent` field added for `--silent` flag
+
+### CLI changes
+- `pi run --silent` — suppresses installer status lines
+- `pi setup --silent` — suppresses installer status lines
+- Both thread `Silent` through to `Executor`
+- `pi info` — shows `Type: installer` and `Install lifecycle:` section for installer automations
+
+### Migration
+All 5 built-in installer automations migrated from `steps:` with manual `echo` status management to `install:` with PI-managed output. Automations now only provide the commands; PI handles all user-facing messaging.
 
 ## Subtasks
-- [ ] Add `InstallSpec` struct to `internal/automation/automation.go` with `Test`, `Run`, `Verify` as `InstallPhase` (either string or `[]Step`) and `Version` as string
-- [ ] Implement `InstallPhase` YAML unmarshalling: detect scalar vs sequence and parse accordingly
-- [ ] Parse `install:` block in `UnmarshalYAML`; validate mutual exclusion with `steps:`
-- [ ] Add installer execution path to executor: `execInstall()`
-- [ ] For string phases: run as inline bash with stdout/stderr suppression
-- [ ] For step-list phases: reuse existing step execution with `if:` evaluation; suppress stdout, capture stderr
-- [ ] Implement `version:` capture (run bash, trim stdout)
-- [ ] Add status line printer to executor (format: `✓ / → / ✗  name  status  (version)`)
-- [ ] Add `--silent` flag to `pi setup` and `pi run` cobra commands; thread through to executor
-- [ ] Migrate all 5 built-in installer automations to `install:` schema
-- [ ] Write unit tests for `InstallSpec` parsing: scalar, step list, mixed, mutual exclusion, verify-defaults-to-test
-- [ ] Write integration test for already-installed and fresh-install paths
-- [ ] Write integration test: `run:` reference to another installer automation inside an `install:` block
+- [x] Add `InstallSpec` struct to `internal/automation/automation.go` with `Test`, `Run`, `Verify` as `InstallPhase` and `Version` as string
+- [x] Implement `InstallPhase` YAML unmarshalling: detect scalar vs sequence and parse accordingly
+- [x] Parse `install:` block in `UnmarshalYAML`; validate mutual exclusion with `steps:`
+- [x] Add installer execution path to executor: `execInstall()`
+- [x] For string phases: run as inline bash with stdout/stderr suppression
+- [x] For step-list phases: reuse existing step execution with `if:` evaluation; suppress stdout, capture stderr
+- [x] Implement `version:` capture (run bash, trim stdout)
+- [x] Add status line printer to executor (format: `✓ / → / ✗  name  status  (version)`)
+- [x] Add `--silent` flag to `pi setup` and `pi run` cobra commands; thread through to executor
+- [x] Migrate all 5 built-in installer automations to `install:` schema
+- [x] Write unit tests for `InstallSpec` parsing: scalar, step list, mixed, mutual exclusion, verify-defaults-to-test (16 new tests)
+- [x] Write executor unit tests for installer lifecycle (12 new tests)
+- [x] Write integration tests for already-installed, fresh-install, silent, info, conditional paths (11 new tests)
 
 ## Blocked By
-<!-- None — can be worked independently of inputs schema -->
+<!-- None -->

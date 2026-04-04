@@ -175,10 +175,10 @@ description: No steps
 
 	_, err := Load(path)
 	if err == nil {
-		t.Fatal("expected error for no steps")
+		t.Fatal("expected error for no steps or install")
 	}
-	if !strings.Contains(err.Error(), "at least one step") {
-		t.Errorf("error should mention 'at least one step', got: %v", err)
+	if !strings.Contains(err.Error(), "must have") {
+		t.Errorf("error should mention missing steps/install, got: %v", err)
 	}
 }
 
@@ -844,5 +844,414 @@ steps:
 	}
 	if a.Steps[1].If != "" {
 		t.Errorf("step[1] If = %q, want empty", a.Steps[1].If)
+	}
+}
+
+// --- Install block tests ---
+
+func TestLoad_InstallScalar(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-brew
+description: Install Homebrew
+
+install:
+  test: command -v brew >/dev/null 2>&1
+  run: /bin/bash -c "$(curl -fsSL https://example.com/install.sh)"
+  version: brew --version | head -1
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	if len(a.Steps) != 0 {
+		t.Errorf("expected no steps, got %d", len(a.Steps))
+	}
+
+	inst := a.Install
+	if !inst.Test.IsScalar {
+		t.Error("expected scalar test phase")
+	}
+	if inst.Test.Scalar != "command -v brew >/dev/null 2>&1" {
+		t.Errorf("test scalar = %q", inst.Test.Scalar)
+	}
+	if !inst.Run.IsScalar {
+		t.Error("expected scalar run phase")
+	}
+	if inst.HasVerify() {
+		t.Error("expected no explicit verify phase")
+	}
+	if inst.Version != "brew --version | head -1" {
+		t.Errorf("version = %q", inst.Version)
+	}
+}
+
+func TestLoad_InstallStepList(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-python
+description: Install Python
+
+install:
+  test:
+    - bash: python3 --version 2>&1 | grep -q "Python 3.13"
+  run:
+    - bash: mise install python@3.13
+      if: command.mise
+    - bash: brew install python@3.13
+      if: not command.mise
+  verify:
+    - bash: python3 --version 2>&1 | grep -q "Python 3.13"
+  version: python3 --version | awk '{print $2}'
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+
+	inst := a.Install
+	if inst.Test.IsScalar {
+		t.Error("expected step list for test phase")
+	}
+	if len(inst.Test.Steps) != 1 {
+		t.Fatalf("expected 1 test step, got %d", len(inst.Test.Steps))
+	}
+	if inst.Test.Steps[0].Type != StepTypeBash {
+		t.Errorf("test step type = %q, want bash", inst.Test.Steps[0].Type)
+	}
+
+	if inst.Run.IsScalar {
+		t.Error("expected step list for run phase")
+	}
+	if len(inst.Run.Steps) != 2 {
+		t.Fatalf("expected 2 run steps, got %d", len(inst.Run.Steps))
+	}
+	if inst.Run.Steps[0].If != "command.mise" {
+		t.Errorf("run step[0] If = %q", inst.Run.Steps[0].If)
+	}
+	if inst.Run.Steps[1].If != "not command.mise" {
+		t.Errorf("run step[1] If = %q", inst.Run.Steps[1].If)
+	}
+
+	if !inst.HasVerify() {
+		t.Error("expected explicit verify phase")
+	}
+	if len(inst.Verify.Steps) != 1 {
+		t.Fatalf("expected 1 verify step, got %d", len(inst.Verify.Steps))
+	}
+}
+
+func TestLoad_InstallMixed(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-node
+description: Install Node
+
+install:
+  test: command -v node >/dev/null 2>&1
+  run:
+    - bash: brew install node
+      if: os.macos
+    - bash: apt-get install -y nodejs
+      if: os.linux
+  version: node --version
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	inst := a.Install
+	if !inst.Test.IsScalar {
+		t.Error("expected scalar test phase")
+	}
+	if inst.Run.IsScalar {
+		t.Error("expected step list for run phase")
+	}
+	if len(inst.Run.Steps) != 2 {
+		t.Fatalf("expected 2 run steps, got %d", len(inst.Run.Steps))
+	}
+	if inst.HasVerify() {
+		t.Error("expected no explicit verify (should default to test)")
+	}
+}
+
+func TestLoad_InstallAndStepsMutualExclusion(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: both
+description: Has both
+
+steps:
+  - bash: echo hello
+
+install:
+  test: command -v foo
+  run: install foo
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for both steps and install")
+	}
+	if !strings.Contains(err.Error(), "cannot have both") {
+		t.Errorf("error should mention mutual exclusion, got: %v", err)
+	}
+}
+
+func TestLoad_InstallEmptyTest(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: bad
+description: Empty test
+
+install:
+  test: ""
+  run: install foo
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for empty test")
+	}
+	if !strings.Contains(err.Error(), "install.test must have content") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallEmptyRun(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: bad
+description: Empty run
+
+install:
+  test: command -v foo
+  run: ""
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for empty run")
+	}
+	if !strings.Contains(err.Error(), "install.run must have content") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallVerifyDefaultsToTest(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-brew
+description: Install Homebrew
+
+install:
+  test: command -v brew >/dev/null 2>&1
+  run: curl install.sh | sh
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Install.HasVerify() {
+		t.Error("expected verify to be nil (defaults to test)")
+	}
+}
+
+func TestLoad_InstallWithExplicitVerify(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-python
+description: Install Python
+
+install:
+  test: python3 --version | grep -q "3.13"
+  run: mise install python@3.13
+  verify: python3 --version | grep -q "3.13"
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.Install.HasVerify() {
+		t.Error("expected explicit verify phase")
+	}
+	if !a.Install.Verify.IsScalar {
+		t.Error("expected scalar verify phase")
+	}
+}
+
+func TestLoad_InstallWithIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-brew
+description: Install Homebrew
+if: os.macos
+
+install:
+  test: command -v brew
+  run: curl install.sh | sh
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "os.macos" {
+		t.Errorf("If = %q, want %q", a.If, "os.macos")
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+}
+
+func TestLoad_InstallWithInputs(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-python
+description: Install Python
+
+inputs:
+  version:
+    type: string
+    required: true
+
+install:
+  test: python3 --version | grep -q "Python $PI_INPUT_VERSION"
+  run: mise install "python@$PI_INPUT_VERSION"
+  version: python3 --version | awk '{print $2}'
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	if len(a.Inputs) != 1 {
+		t.Errorf("expected 1 input, got %d", len(a.Inputs))
+	}
+	spec, ok := a.Inputs["version"]
+	if !ok {
+		t.Fatal("expected 'version' input")
+	}
+	if !spec.IsRequired() {
+		t.Error("expected 'version' to be required")
+	}
+}
+
+func TestLoad_InstallStepWithInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: bad
+description: Bad if
+
+install:
+  test: command -v foo
+  run:
+    - bash: install foo
+      if: "!invalid"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid if in install step")
+	}
+	if !strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "if") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallRunStepWithRunRef(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-node
+description: Install Node
+
+install:
+  test: command -v node
+  run:
+    - run: pi:install-homebrew
+      if: os.macos and not command.brew
+    - bash: brew install node
+      if: os.macos
+  version: node --version
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+
+	steps := a.Install.Run.Steps
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 run steps, got %d", len(steps))
+	}
+	if steps[0].Type != StepTypeRun {
+		t.Errorf("expected run step type, got %q", steps[0].Type)
+	}
+	if steps[0].Value != "pi:install-homebrew" {
+		t.Errorf("expected run step value 'pi:install-homebrew', got %q", steps[0].Value)
+	}
+}
+
+func TestLoad_InstallNoVersionField(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "inst.yaml", `
+name: install-tool
+description: Install some tool
+
+install:
+  test: command -v tool
+  run: install-tool.sh
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Install.Version != "" {
+		t.Errorf("expected empty version, got %q", a.Install.Version)
+	}
+}
+
+func TestLoadFromBytes_InstallBlock(t *testing.T) {
+	yaml := []byte(`
+name: install-brew
+description: Install Homebrew
+
+install:
+  test: command -v brew
+  run: curl install.sh | sh
+  version: brew --version
+`)
+
+	a, err := LoadFromBytes(yaml, "builtin://install-brew")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	if !a.Install.Test.IsScalar {
+		t.Error("expected scalar test")
+	}
+	if a.Install.Version != "brew --version" {
+		t.Errorf("version = %q", a.Install.Version)
 	}
 }

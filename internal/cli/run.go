@@ -14,6 +14,7 @@ import (
 func newRunCmd() *cobra.Command {
 	var repoFlag string
 	var withFlags []string
+	var silent bool
 
 	cmd := &cobra.Command{
 		Use:   "run <automation> [args...]",
@@ -23,7 +24,8 @@ in the current project. PI walks up from the current directory to find pi.yaml,
 so this works from any subdirectory of the project.
 
 Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).
-Use --with key=value to pass named inputs (repeatable).`,
+Use --with key=value to pass named inputs (repeatable).
+Use --silent to suppress PI status lines for installer automations.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			startDir := repoFlag
@@ -40,12 +42,13 @@ Use --with key=value to pass named inputs (repeatable).`,
 				return err
 			}
 
-			return runAutomation(startDir, args[0], args[1:], withArgs, os.Stdout, os.Stderr)
+			return runAutomation(startDir, args[0], args[1:], withArgs, silent, os.Stdout, os.Stderr)
 		},
 	}
 
 	cmd.Flags().StringVar(&repoFlag, "repo", "", "project root path (used by anywhere shortcuts)")
 	cmd.Flags().StringArrayVar(&withFlags, "with", nil, "pass named input as key=value (repeatable)")
+	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")
 
 	return cmd
 }
@@ -67,7 +70,7 @@ func parseWithFlags(flags []string) (map[string]string, error) {
 }
 
 // runAutomation resolves and executes an automation. Extracted for testability.
-func runAutomation(startDir, name string, args []string, withArgs map[string]string, stdout, stderr io.Writer) error {
+func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent bool, stdout, stderr io.Writer) error {
 	root, err := project.FindRoot(startDir)
 	if err != nil {
 		return err
@@ -88,6 +91,7 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		Discovery: result,
 		Stdout:    stdout,
 		Stderr:    stderr,
+		Silent:    silent,
 	}
 
 	return exec.RunWithInputs(a, args, withArgs)

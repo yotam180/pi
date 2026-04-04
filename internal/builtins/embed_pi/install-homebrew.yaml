@@ -2,12 +2,7 @@ name: install-homebrew
 description: Install Homebrew (macOS only)
 if: os.macos
 
-steps:
-  - bash: |
-      if command -v brew >/dev/null 2>&1; then
-        echo "[already installed] Homebrew $(brew --version | head -1 | awk '{print $2}')"
-        exit 0
-      fi
-      echo "Installing Homebrew..."
-      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-      echo "[installed] Homebrew"
+install:
+  test: command -v brew >/dev/null 2>&1
+  run: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  version: brew --version | head -1 | awk '{print $2}'

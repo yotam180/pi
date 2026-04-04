@@ -1,0 +1,13 @@
+name: install-marker
+description: Install a marker file (for testing fresh install path)
+
+inputs:
+  path:
+    type: string
+    required: true
+    description: Path to the marker file
+
+install:
+  test: test -f "$PI_INPUT_PATH"
+  run: touch "$PI_INPUT_PATH"
+  version: echo "1.0.0"

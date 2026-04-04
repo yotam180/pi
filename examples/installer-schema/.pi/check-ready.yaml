@@ -1,0 +1,7 @@
+name: check-ready
+description: Check if bash is installed (always passes)
+
+install:
+  test: command -v bash >/dev/null 2>&1
+  run: echo "should not reach here"
+  version: bash --version | head -1 | awk '{print $4}'

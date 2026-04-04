@@ -63,9 +63,13 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 		fmt.Fprintf(out, "Condition:    %s\n", a.If)
 	}
 
-	fmt.Fprintf(out, "Steps:        %d\n", len(a.Steps))
-
-	printStepsDetail(a.Steps, out)
+	if a.IsInstaller() {
+		fmt.Fprintf(out, "Type:         installer\n")
+		printInstallDetail(a.Install, out)
+	} else {
+		fmt.Fprintf(out, "Steps:        %d\n", len(a.Steps))
+		printStepsDetail(a.Steps, out)
+	}
 
 	if len(a.InputKeys) == 0 {
 		fmt.Fprintf(out, "\nNo inputs.\n")
@@ -76,6 +80,28 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 	for _, key := range a.InputKeys {
 		spec := a.Inputs[key]
 		printInputSpec(key, spec, out)
+	}
+}
+
+func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
+	printPhaseInfo := func(name string, phase *automation.InstallPhase) {
+		if phase.IsScalar {
+			fmt.Fprintf(out, "  %s: %s\n", name, truncateValue(phase.Scalar, 60))
+		} else {
+			fmt.Fprintf(out, "  %s: %d step(s)\n", name, len(phase.Steps))
+		}
+	}
+
+	fmt.Fprintf(out, "\nInstall lifecycle:\n")
+	printPhaseInfo("test", &inst.Test)
+	printPhaseInfo("run", &inst.Run)
+	if inst.HasVerify() {
+		printPhaseInfo("verify", inst.Verify)
+	} else {
+		fmt.Fprintf(out, "  verify: (re-runs test)\n")
+	}
+	if inst.Version != "" {
+		fmt.Fprintf(out, "  version: %s\n", truncateValue(inst.Version, 60))
 	}
 }
 

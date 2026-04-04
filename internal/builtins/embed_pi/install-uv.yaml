@@ -1,13 +1,7 @@
 name: install-uv
 description: Install the uv Python package manager
 
-steps:
-  - bash: |
-      if command -v uv >/dev/null 2>&1; then
-        CURRENT=$(uv --version 2>&1 | awk '{print $2}')
-        echo "[already installed] uv ${CURRENT}"
-        exit 0
-      fi
-      echo "Installing uv..."
-      curl -LsSf https://astral.sh/uv/install.sh | sh
-      echo "[installed] uv"
+install:
+  test: command -v uv >/dev/null 2>&1
+  run: curl -LsSf https://astral.sh/uv/install.sh | sh
+  version: uv --version 2>&1 | awk '{print $2}'

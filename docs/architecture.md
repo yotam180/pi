@@ -31,17 +31,17 @@ internal/
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
     discover.go                    discoverAll() — discovers local + built-in automations and merges
-    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
+    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag
     list.go                        pi list — discovers and prints automations with [built-in] markers
-    info.go                        pi info — shows automation name, description, input docs, and if: conditions
-    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware)
+    info.go                        pi info — shows automation name, description, input docs, if: conditions, and install lifecycle for installer automations
+    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
-    run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
+    run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
-    info_test.go                   pi info tests (13 tests — includes if: condition display)
-    setup_test.go                  pi setup tests (6 tests)
+    info_test.go                   pi info tests (13 tests — includes if: condition display and installer type)
+    setup_test.go                  pi setup tests (6 tests — includes --silent)
     shell_test.go                  pi shell tests (3 tests)
   conditions/                      Boolean expression parser/evaluator for if: fields
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
@@ -50,15 +50,15 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field) + Load()
     config_test.go                 11 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If field), Step (with If field), StepType, InputSpec + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
-    automation_test.go             45 tests
+    automation.go                  Automation (with If and Install fields), Step (with If field), StepType, InputSpec, InstallSpec, InstallPhase + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             61 tests
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor (with RuntimeEnv field), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution
+    executor.go                    Executor (with RuntimeEnv and Silent fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle
     predicates.go                  RuntimeEnv, DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
-    executor_test.go               75 tests (55 base + 13 step-conditional + 7 automation-conditional)
+    executor_test.go               87 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
@@ -192,6 +192,19 @@ pi setup
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
 
+### Installer automation lifecycle (`install:` block)
+- Automations can use `install:` instead of `steps:` — the two are mutually exclusive
+- `InstallSpec` has four fields: `Test`, `Run`, `Verify` (optional), `Version` (optional)
+- `InstallPhase` is polymorphic: either a scalar bash string or a list of steps (same step schema as `steps:`)
+- When `verify:` is absent, the `test:` phase is re-run as verification after `run:` completes
+- Executor runs `execInstall()`: test → [run → verify] → version
+- All phase stdout is suppressed; stderr is captured from `run:` and shown only on failure
+- `version:` command stdout is trimmed and displayed in the status line
+- PI prints one formatted status line per installer: `✓ / → / ✗  name  status  (version)`
+- `--silent` flag on `pi run` and `pi setup` suppresses PI status lines (stderr from failures always shown)
+- Step lists in install phases support `if:` conditions, all step types (bash, python, typescript), and `run:` references
+- A `run:` step inside an `install:` phase that references another installer automation runs that automation's own `install:` lifecycle
+
 ### Pipe support (`pipe_to: next`)
 - When a step declares `pipe_to: next`, its stdout is captured to a `bytes.Buffer` instead of printed to terminal
 - The captured buffer is fed as stdin to the next step
@@ -263,10 +276,13 @@ pi setup
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
 - Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
-- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) are idempotent check-then-install scripts:
-  - Each checks `command -v` first and prints `[already installed]` with version info; installs and prints `[installed]` otherwise
+- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) use the structured `install:` block:
+  - Each defines `test:`, `run:`, and optional `verify:` and `version:` fields
+  - PI manages all user-facing output — automations only provide commands
+  - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
+  - `test` exits non-zero → `→  <name>  installing...` → `run` executes → `verify` (or re-run `test`) → `✓  <name>  installed  (<version>)` or `✗  <name>  failed`
   - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
-  - `install-python` and `install-node` accept a `version` input; try `mise` first, fall back to `brew`
+  - `install-python` and `install-node` accept a `version` input; use step lists with `if:` conditions to try `mise` first, fall back to `brew`
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
   - `install-tsx` uses `npm install -g tsx`
 - Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) handle common team setup tasks:
@@ -352,7 +368,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 390 (41 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 86 executor + 4 project + 14 shell + 94 integration)
+Total tests: 425 (61 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 98 executor + 4 project + 14 shell + 97 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -365,5 +381,6 @@ Total tests: 390 (41 automation + 38 builtins + 48 CLI + 30 conditions + 11 conf
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
 - Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
-- Installer built-in tests: all 5 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently, `pi list` shows INPUTS column for versioned installers
+- Installer built-in tests: all 5 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
+- Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names

@@ -1,0 +1,4 @@
+project: installer-schema-test
+
+setup:
+  - run: check-ready

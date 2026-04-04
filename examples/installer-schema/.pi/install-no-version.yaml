@@ -1,0 +1,6 @@
+name: install-no-version
+description: Installer without version field
+
+install:
+  test: "true"
+  run: "true"

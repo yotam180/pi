@@ -27,24 +27,27 @@ var ciEnvVars = []string{
 
 func newSetupCmd() *cobra.Command {
 	var noShell bool
+	var silent bool
 
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Run all setup automations",
 		Long: `Run all automations listed in the setup section of pi.yaml sequentially.
 After setup completes, pi shell is run automatically to install shortcuts
-(skipped in CI environments or with --no-shell).`,
+(skipped in CI environments or with --no-shell).
+Use --silent to suppress PI status lines for installer automations.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSetup(cmd.OutOrStdout(), cmd.ErrOrStderr(), noShell)
+			return runSetup(cmd.OutOrStdout(), cmd.ErrOrStderr(), noShell, silent)
 		},
 	}
 
 	cmd.Flags().BoolVar(&noShell, "no-shell", false, "skip shell shortcut installation")
+	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")
 
 	return cmd
 }
 
-func runSetup(stdout, stderr io.Writer, noShell bool) error {
+func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting working directory: %w", err)
@@ -76,6 +79,7 @@ func runSetup(stdout, stderr io.Writer, noShell bool) error {
 			Discovery: result,
 			Stdout:    stdout,
 			Stderr:    stderr,
+			Silent:    silent,
 		}
 
 		for i, entry := range cfg.Setup {

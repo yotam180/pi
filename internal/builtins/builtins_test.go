@@ -241,8 +241,8 @@ func TestDiscover_InstallerAutomationsExist(t *testing.T) {
 				t.Errorf("expected description %q, got %q", tc.description, a.Description)
 			}
 
-			if len(a.Steps) == 0 {
-				t.Error("expected at least one step")
+			if !a.IsInstaller() {
+				t.Error("expected automation to use install: block")
 			}
 		})
 	}
@@ -268,7 +268,7 @@ func TestDiscover_InstallerAutomationsAreResolvable(t *testing.T) {
 	}
 }
 
-func TestDiscover_InstallerAutomationsUseBashSteps(t *testing.T) {
+func TestDiscover_InstallerAutomationsHaveInstallBlock(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
 		t.Fatalf("Discover() returned error: %v", err)
@@ -278,35 +278,45 @@ func TestDiscover_InstallerAutomationsUseBashSteps(t *testing.T) {
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			a := result.Automations[name]
-			if len(a.Steps) != 1 {
-				t.Fatalf("expected 1 step, got %d", len(a.Steps))
+			if !a.IsInstaller() {
+				t.Fatal("expected automation to use install: block")
 			}
-			if a.Steps[0].Type != automation.StepTypeBash {
-				t.Errorf("expected bash step, got %q", a.Steps[0].Type)
+			inst := a.Install
+			if inst.Test.IsScalar && inst.Test.Scalar == "" {
+				t.Error("expected non-empty test phase")
+			}
+			if !inst.Test.IsScalar && len(inst.Test.Steps) == 0 {
+				t.Error("expected non-empty test phase steps")
+			}
+			if inst.Run.IsScalar && inst.Run.Scalar == "" {
+				t.Error("expected non-empty run phase")
+			}
+			if !inst.Run.IsScalar && len(inst.Run.Steps) == 0 {
+				t.Error("expected non-empty run phase steps")
 			}
 		})
 	}
 }
 
-func TestDiscover_InstallerAutomationsAreIdempotent(t *testing.T) {
+func TestDiscover_InstallerAutomationsHaveTestPhase(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	names := []string{"install-homebrew", "install-python", "install-node", "install-uv", "install-tsx"}
-	for _, name := range names {
+	scalarInstallers := map[string]string{
+		"install-homebrew": "command -v brew",
+		"install-uv":       "command -v uv",
+		"install-tsx":      "command -v tsx",
+	}
+	for name, expectedContent := range scalarInstallers {
 		t.Run(name, func(t *testing.T) {
 			a := result.Automations[name]
-			script := a.Steps[0].Value
-			if !strings.Contains(script, "command -v") && !strings.Contains(script, "which") {
-				t.Error("expected script to check if tool is already installed (command -v or which)")
+			if !a.Install.Test.IsScalar {
+				t.Fatal("expected scalar test phase")
 			}
-			if !strings.Contains(script, "[already installed]") {
-				t.Error("expected script to print '[already installed]' when tool exists")
-			}
-			if !strings.Contains(script, "[installed]") {
-				t.Error("expected script to print '[installed]' after installing")
+			if !strings.Contains(a.Install.Test.Scalar, expectedContent) {
+				t.Errorf("expected test to contain %q, got %q", expectedContent, a.Install.Test.Scalar)
 			}
 		})
 	}
@@ -345,9 +355,25 @@ func TestDiscover_InstallPythonAcceptsVersionInput(t *testing.T) {
 		t.Error("expected 'version' input to have a description")
 	}
 
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "PI_INPUT_VERSION") {
-		t.Error("expected script to use PI_INPUT_VERSION env var")
+	if !a.IsInstaller() {
+		t.Fatal("expected install-python to be an installer")
+	}
+	testPhase := a.Install.Test
+	if testPhase.IsScalar {
+		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
+			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		}
+	} else if len(testPhase.Steps) > 0 {
+		found := false
+		for _, s := range testPhase.Steps {
+			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+		}
 	}
 }
 
@@ -372,9 +398,25 @@ func TestDiscover_InstallNodeAcceptsVersionInput(t *testing.T) {
 		t.Error("expected 'version' input to have a description")
 	}
 
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "PI_INPUT_VERSION") {
-		t.Error("expected script to use PI_INPUT_VERSION env var")
+	if !a.IsInstaller() {
+		t.Fatal("expected install-node to be an installer")
+	}
+	testPhase := a.Install.Test
+	if testPhase.IsScalar {
+		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
+			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		}
+	} else if len(testPhase.Steps) > 0 {
+		found := false
+		for _, s := range testPhase.Steps {
+			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+		}
 	}
 }
 
@@ -385,9 +427,14 @@ func TestDiscover_InstallUvUsesOfficialInstaller(t *testing.T) {
 	}
 
 	a := result.Automations["install-uv"]
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "astral.sh/uv/install.sh") {
-		t.Error("expected install-uv to use the official astral.sh installer")
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		if !strings.Contains(run.Scalar, "astral.sh/uv/install.sh") {
+			t.Error("expected install-uv run phase to use the official astral.sh installer")
+		}
 	}
 }
 
@@ -398,9 +445,14 @@ func TestDiscover_InstallTsxUsesNpm(t *testing.T) {
 	}
 
 	a := result.Automations["install-tsx"]
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "npm install -g tsx") {
-		t.Error("expected install-tsx to use 'npm install -g tsx'")
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		if !strings.Contains(run.Scalar, "npm install -g tsx") {
+			t.Error("expected install-tsx run phase to use 'npm install -g tsx'")
+		}
 	}
 }
 
@@ -411,11 +463,26 @@ func TestDiscover_InstallPythonUsesMiseAndBrew(t *testing.T) {
 	}
 
 	a := result.Automations["install-python"]
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "mise") {
-		t.Error("expected install-python to try mise first")
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
 	}
-	if !strings.Contains(script, "brew") {
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-python run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range run.Steps {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-python to try mise")
+	}
+	if !foundBrew {
 		t.Error("expected install-python to fall back to brew")
 	}
 }
@@ -427,11 +494,26 @@ func TestDiscover_InstallNodeUsesMiseAndBrew(t *testing.T) {
 	}
 
 	a := result.Automations["install-node"]
-	script := a.Steps[0].Value
-	if !strings.Contains(script, "mise") {
-		t.Error("expected install-node to try mise first")
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
 	}
-	if !strings.Contains(script, "brew") {
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-node run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range run.Steps {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-node to try mise")
+	}
+	if !foundBrew {
 		t.Error("expected install-node to fall back to brew")
 	}
 }
