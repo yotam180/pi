@@ -1,0 +1,10 @@
+name: docker/logs
+description: Show recent container logs
+steps:
+  - bash: |
+      service="${1:-all}"
+      echo "Showing logs for: ${service}"
+      echo "[api]      2024-01-15 10:00:01 Server started on :8080"
+      echo "[api]      2024-01-15 10:00:02 Connected to database"
+      echo "[postgres] 2024-01-15 10:00:00 Database ready"
+      echo "[redis]    2024-01-15 10:00:00 Ready to accept connections"

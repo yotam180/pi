@@ -1,0 +1,9 @@
+name: docker/down
+description: Stop and remove all containers
+steps:
+  - bash: |
+      echo "Stopping containers..."
+      echo "  [-] api"
+      echo "  [-] postgres"
+      echo "  [-] redis"
+      echo "All containers stopped."

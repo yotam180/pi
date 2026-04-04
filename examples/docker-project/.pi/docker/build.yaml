@@ -1,0 +1,10 @@
+name: docker/build
+description: Build all container images
+steps:
+  - bash: |
+      echo "Building images..."
+      echo "  [1/2] Building api image..."
+      sleep 0.1
+      echo "  [2/2] Building worker image..."
+      sleep 0.1
+      echo "All images built."

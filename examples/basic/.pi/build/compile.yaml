@@ -1,0 +1,4 @@
+name: build/compile
+description: Simulate a build step using a script file
+steps:
+  - bash: compile.sh

@@ -1,0 +1,5 @@
+name: docker/build-and-up
+description: Build images then start containers
+steps:
+  - run: docker/build
+  - run: docker/up

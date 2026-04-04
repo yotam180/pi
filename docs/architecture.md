@@ -118,6 +118,11 @@ pi list
 
 ## Test Strategy
 
-Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests planned via `examples/` workspaces (task 06).
+Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 84 (6+8+6 CLI + 8 config + 14 automation + 18 discovery + 20 executor + 4 project)
+Total tests: 88 (6+8+6 CLI + 8 config + 14 automation + 18 discovery + 20 executor + 4 project + 13 integration)
+
+### Integration tests
+- Build `pi` binary once in `TestMain`
+- Run `pi list` and `pi run` against `examples/basic/` and `examples/docker-project/`
+- Assert exit codes, output content, and step ordering

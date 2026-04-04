@@ -1,0 +1,7 @@
+project: docker-project
+
+shortcuts:
+  dup: docker/up
+  ddown: docker/down
+  dlogs: docker/logs
+  dbuild: docker/build-and-up

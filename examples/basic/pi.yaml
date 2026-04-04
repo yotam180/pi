@@ -1,0 +1,6 @@
+project: basic-example
+
+shortcuts:
+  greet: greet
+  build: build/compile
+  deploy: deploy

@@ -1,0 +1,9 @@
+name: deploy
+description: Build then deploy (demonstrates run step chaining)
+steps:
+  - run: build/compile
+  - bash: |
+      echo "Deploying to staging..."
+      echo "  Uploading dist/ to s3://staging-bucket/"
+      sleep 0.1
+      echo "Deploy complete."
