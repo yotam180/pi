@@ -217,7 +217,7 @@ steps:
 	}
 }
 
-func TestLoad_UnsupportedStepType_Python(t *testing.T) {
+func TestLoad_PythonStep_Accepted(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "py.yaml", `
 name: test
@@ -225,12 +225,18 @@ steps:
   - python: script.py
 `)
 
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for unimplemented step type")
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("error should mention 'not yet implemented', got: %v", err)
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypePython {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypePython)
+	}
+	if a.Steps[0].Value != "script.py" {
+		t.Errorf("step value = %q, want %q", a.Steps[0].Value, "script.py")
 	}
 }
 
@@ -291,7 +297,7 @@ func TestStepType_IsImplemented(t *testing.T) {
 	}{
 		{StepTypeBash, true},
 		{StepTypeRun, true},
-		{StepTypePython, false},
+		{StepTypePython, true},
 		{StepTypeTypeScript, false},
 	}
 	for _, tt := range tests {

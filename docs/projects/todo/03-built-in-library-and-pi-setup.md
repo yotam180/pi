@@ -33,7 +33,7 @@ Bundling automations with the binary avoids the chicken-and-egg problem of needi
   - `pi:cursor/install-extensions` — install Cursor extensions from a list file or inline list
   - `pi:git/install-hooks` — copy hooks from a source directory to `.git/hooks/`
   - `pi:docker/up`, `pi:docker/down`, `pi:docker/logs` — basic Docker Compose ops
-- `with:` parameter passing to built-in automations
+- `with:` parameter passing to built-in automations (design and schema in task `07-automation-inputs-schema`)
 - Setup output: clear per-step status (`[+] installed`, `[*] already installed`, `[-] failed`)
 
 ### Out of scope
@@ -49,6 +49,9 @@ Bundling automations with the binary avoids the chicken-and-egg problem of needi
 - [ ] Replace `setup_environment.sh` in the PI repo itself with `pi.yaml` + `pi setup` as the dogfood integration test
 - [ ] `with:` parameters work: `run: pi:install-python` with `version: "3.13"` installs Python 3.13
 - [ ] `go test ./...` passes; integration test runs `pi setup` in a clean temp environment
+
+## Dependencies
+- Task `07-automation-inputs-schema` must be completed before any built-in automation that uses `with:` is implemented. The `inputs:` schema is intentionally uniform across local, built-in, and marketplace automations — do not implement `with:` as a built-in-only shortcut.
 
 ## Notes
 - Built-in automations are embedded into the binary at build time (Go `//go:embed`). They should be readable in source at `.pi/` in the PI repo itself — this is the dogfood and the documentation at the same time.

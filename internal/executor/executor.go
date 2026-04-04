@@ -59,6 +59,8 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 	switch step.Type {
 	case automation.StepTypeBash:
 		return e.execBash(a, step, args)
+	case automation.StepTypePython:
+		return e.execPython(a, step, args)
 	case automation.StepTypeRun:
 		return e.execRun(step, args)
 	default:
@@ -94,6 +96,54 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	return nil
 }
 
+func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string) error {
+	pythonBin := e.resolvePythonBin()
+
+	var cmdArgs []string
+	if isFilePath(step.Value) {
+		resolved := resolveScriptPath(a.Dir(), step.Value)
+		if _, err := os.Stat(resolved); err != nil {
+			return fmt.Errorf("python script file not found: %s (resolved from %q relative to %s)", resolved, step.Value, a.Dir())
+		}
+		cmdArgs = append([]string{resolved}, args...)
+	} else {
+		// python3 -c "script" arg1 arg2 → sys.argv = ['-c', 'arg1', 'arg2']
+		cmdArgs = append([]string{"-c", step.Value}, args...)
+	}
+
+	cmd := exec.Command(pythonBin, cmdArgs...)
+	cmd.Dir = e.RepoRoot
+	cmd.Stdout = e.stdout()
+	cmd.Stderr = e.stderr()
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
+		if isCommandNotFound(err) {
+			return fmt.Errorf("python3 not found in PATH — install Python 3 or activate a virtualenv")
+		}
+		return fmt.Errorf("running python step: %w", err)
+	}
+	return nil
+}
+
+// resolvePythonBin returns the python binary to use. If VIRTUAL_ENV is set,
+// uses $VIRTUAL_ENV/bin/python; otherwise falls back to python3.
+func (e *Executor) resolvePythonBin() string {
+	if venv := os.Getenv("VIRTUAL_ENV"); venv != "" {
+		return filepath.Join(venv, "bin", "python")
+	}
+	return "python3"
+}
+
+// isCommandNotFound checks if an exec error indicates the binary wasn't found.
+func isCommandNotFound(err error) bool {
+	return strings.Contains(err.Error(), "executable file not found") ||
+		strings.Contains(err.Error(), "no such file or directory")
+}
+
 func (e *Executor) execRun(step automation.Step, args []string) error {
 	target, err := e.Discovery.Find(step.Value)
 	if err != nil {
@@ -121,9 +171,12 @@ func (e *Executor) popCall() {
 }
 
 // isFilePath returns true if the value looks like a file path rather than inline script.
-// A file path ends in .sh, contains no newlines, and contains no spaces.
+// A file path ends in a known script extension, contains no newlines, and contains no spaces.
 func isFilePath(value string) bool {
-	return strings.HasSuffix(value, ".sh") &&
+	hasKnownExt := strings.HasSuffix(value, ".sh") ||
+		strings.HasSuffix(value, ".py") ||
+		strings.HasSuffix(value, ".ts")
+	return hasKnownExt &&
 		!strings.Contains(value, "\n") &&
 		!strings.Contains(value, " ")
 }

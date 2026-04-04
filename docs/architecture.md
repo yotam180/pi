@@ -27,8 +27,8 @@ internal/
     discovery.go                   Discover(), Result, Find()
     discovery_test.go              18 tests
   executor/                        Step execution engine
-    executor.go                    Executor, ExitError, Run(), execBash(), execRun()
-    executor_test.go               20 tests
+    executor.go                    Executor, ExitError, Run(), execBash(), execPython(), execRun()
+    executor_test.go               29 tests
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
@@ -94,6 +94,9 @@ pi list
 - All steps run with the repo root (directory containing `pi.yaml`) as their working directory
 - Bash inline steps: `bash -c "<script>" -- [args...]` — args available as `$1`, `$2`, etc.
 - Bash file steps: `bash <resolved_path> [args...]` — file path resolved relative to the automation YAML file's directory
+- Python inline steps: `python3 -c "<script>" [args...]` — args available as `sys.argv[1:]`
+- Python file steps: `python3 <resolved_path> [args...]` — file path resolved relative to the automation YAML file's directory
+- Python uses `$VIRTUAL_ENV/bin/python` when a virtualenv is active, otherwise `python3`
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
 
@@ -120,7 +123,7 @@ pi list
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 88 (6+8+6 CLI + 8 config + 14 automation + 18 discovery + 20 executor + 4 project + 13 integration)
+Total tests: 106 (14 automation + 20 CLI + 8 config + 18 discovery + 29 executor + 4 project + 13 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
