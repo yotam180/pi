@@ -1,0 +1,5 @@
+name: no-requires
+description: Automation with no requirements
+
+steps:
+  - bash: echo "no requirements needed"

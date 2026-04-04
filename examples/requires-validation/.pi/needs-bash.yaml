@@ -1,0 +1,8 @@
+name: needs-bash
+description: Automation that requires bash (always available)
+
+requires:
+  - command: bash
+
+steps:
+  - bash: echo "bash is available"

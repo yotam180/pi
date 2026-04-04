@@ -57,8 +57,10 @@ internal/
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
     executor.go                    Executor (with RuntimeEnv and Silent fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle
-    predicates.go                  RuntimeEnv, DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
+    validate.go                    ValidateRequirements(), checkRequirement(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), CheckResult, ValidationError, installHints; pre-execution requirement validation
+    predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               87 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer)
+    validate_test.go               24 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
@@ -252,6 +254,19 @@ pi setup
 - `pi setup` runs `pi shell` as its final step, skipping in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
 - `pi setup --no-shell` explicitly skips the shell step
 
+### Pre-execution requirement validation
+- Before executing any steps, `RunWithInputs()` calls `ValidateRequirements()` on the automation
+- If any requirement is not satisfied, execution stops immediately with a formatted error table and exit code 1
+- `checkRequirement()` handles a single requirement: PATH lookup via `LookPath()`, then optional version check
+- Runtime requirements map names to commands: `python` → `python3`, `node` → `node`
+- Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`
+- Handles all common version output formats: `Python 3.13.0`, `v20.11.0`, `jq-1.7.1`, `docker version 24.0.5`
+- Version comparison: splits on `.`, compares numeric components pairwise; missing trailing components are treated as 0
+- Install hints: built-in map of common tool names → install instructions (python, node, docker, jq, kubectl, etc.)
+- Formatted error output shows automation name, missing requirements with version info, and install hints
+- Testability: `RuntimeEnv.ExecOutput` field allows mocking `--version` calls without real command execution
+- Validation happens after input resolution but before step/install execution
+
 ### Requirement declarations (`requires:`)
 - Automations can declare a `requires:` block listing tools/runtimes needed before execution
 - `Requirement` struct has `Name`, `Kind` (RequirementRuntime or RequirementCommand), `MinVersion` (optional)
@@ -383,7 +398,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 439 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 98 executor + 4 project + 14 shell + 97 integration)
+Total tests: 470 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 122 executor + 4 project + 14 shell + 104 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -399,3 +414,4 @@ Total tests: 439 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 conf
 - Installer built-in tests: all 5 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
 - Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
+- Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints

@@ -94,6 +94,14 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		args = nil
 	}
 
+	if err := e.ValidateRequirements(a); err != nil {
+		if ve, ok := err.(*ValidationError); ok {
+			fmt.Fprint(e.stderr(), FormatValidationError(ve))
+			return &ExitError{Code: 1}
+		}
+		return err
+	}
+
 	if a.IsInstaller() {
 		return e.execInstall(a, inputEnv)
 	}

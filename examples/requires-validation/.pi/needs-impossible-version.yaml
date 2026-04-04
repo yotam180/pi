@@ -1,0 +1,8 @@
+name: needs-impossible-version
+description: Automation that requires an impossible Python version
+
+requires:
+  - python >= 99.0
+
+steps:
+  - bash: echo "this should never run"

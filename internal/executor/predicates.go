@@ -18,6 +18,11 @@ type RuntimeEnv struct {
 	Getenv func(string) string
 	LookPath func(string) (string, error)
 	Stat   func(string) (os.FileInfo, error)
+
+	// ExecOutput is an optional function for testing that returns the output
+	// of running a command with given args. Used by requirement validation
+	// to mock `<cmd> --version` calls. If nil, the real command is executed.
+	ExecOutput func(cmd string, args ...string) string
 }
 
 // DefaultRuntimeEnv returns a RuntimeEnv backed by the real OS.

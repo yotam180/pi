@@ -1,0 +1,527 @@
+package executor
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/discovery"
+)
+
+func TestExtractVersion(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"Python 3.13.0", "3.13.0"},
+		{"Python 3.9.7", "3.9.7"},
+		{"v20.11.0", "20.11.0"},
+		{"node v22.0.0", "22.0.0"},
+		{"jq-1.7.1", "1.7.1"},
+		{"docker version 24.0.5, build ced0996", "24.0.5"},
+		{"kubectl v1.28.3", "1.28.3"},
+		{"Go 1.22.0", "1.22.0"},
+		{"tsx v4.19.0", "4.19.0"},
+		{"no version here", ""},
+		{"", ""},
+		{"just 42", ""},          // single number without dot isn't matched
+		{"version 3.13", "3.13"}, // two components
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := extractVersion(tt.input)
+			if got != tt.want {
+				t.Errorf("extractVersion(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		a    string
+		b    string
+		want int
+	}{
+		{"3.13.0", "3.11", 1},
+		{"3.9.7", "3.11", -1},
+		{"3.11.0", "3.11", 0},
+		{"3.11", "3.11.0", 0},
+		{"20.11.0", "20.11.0", 0},
+		{"1.0.0", "2.0.0", -1},
+		{"2.0.0", "1.0.0", 1},
+		{"1.28.3", "1.28", 1},
+		{"1.28", "1.28.3", -1},
+		{"22.0.0", "20.0.0", 1},
+		{"3.10", "3.9", 1},
+		{"3.9", "3.10", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {
+			got, err := compareVersions(tt.a, tt.b)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCompareVersions_Invalid(t *testing.T) {
+	_, err := compareVersions("abc", "1.0")
+	if err == nil {
+		t.Fatal("expected error for non-numeric version")
+	}
+
+	_, err = compareVersions("1.0", "abc")
+	if err == nil {
+		t.Fatal("expected error for non-numeric version")
+	}
+}
+
+func TestRuntimeCommand(t *testing.T) {
+	if got := runtimeCommand("python"); got != "python3" {
+		t.Errorf("runtimeCommand(python) = %q, want python3", got)
+	}
+	if got := runtimeCommand("node"); got != "node" {
+		t.Errorf("runtimeCommand(node) = %q, want node", got)
+	}
+}
+
+func mockEnv(lookPath map[string]bool, versionOutput map[string]string) *RuntimeEnv {
+	return &RuntimeEnv{
+		GOOS:   "darwin",
+		GOARCH: "arm64",
+		Getenv: func(s string) string { return "" },
+		LookPath: func(name string) (string, error) {
+			if lookPath[name] {
+				return "/usr/bin/" + name, nil
+			}
+			return "", fmt.Errorf("not found: %s", name)
+		},
+		Stat: func(name string) (os.FileInfo, error) {
+			return nil, fmt.Errorf("not found")
+		},
+		ExecOutput: func(cmd string, args ...string) string {
+			if out, ok := versionOutput[cmd]; ok {
+				return out
+			}
+			return ""
+		},
+	}
+}
+
+func TestCheckRequirement_CommandFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"docker": true},
+		nil,
+	)
+	req := automation.Requirement{Name: "docker", Kind: automation.RequirementCommand}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_CommandNotFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{},
+		nil,
+	)
+	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied for missing command")
+	}
+	if result.Error != "not found" {
+		t.Errorf("unexpected error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_RuntimeFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"python3": true},
+		nil,
+	)
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_RuntimeNotFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{},
+		nil,
+	)
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied for missing runtime")
+	}
+	if result.Error != "not found" {
+		t.Errorf("unexpected error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_VersionSatisfied(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"python3": true},
+		map[string]string{"python3": "Python 3.13.0"},
+	)
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+	if result.DetectedVersion != "3.13.0" {
+		t.Errorf("expected detected version 3.13.0, got %q", result.DetectedVersion)
+	}
+}
+
+func TestCheckRequirement_VersionTooLow(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"python3": true},
+		map[string]string{"python3": "Python 3.9.7"},
+	)
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied for version too low")
+	}
+	if !strings.Contains(result.Error, "3.9.7") || !strings.Contains(result.Error, "3.11") {
+		t.Errorf("error should mention both versions, got: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_CommandWithVersion(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"kubectl": true},
+		map[string]string{"kubectl": "kubectl v1.28.3"},
+	)
+	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand, MinVersion: "1.28"}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_CommandVersionTooLow(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"kubectl": true},
+		map[string]string{"kubectl": "kubectl v1.27.0"},
+	)
+	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand, MinVersion: "1.28"}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied for version too low")
+	}
+}
+
+func TestCheckRequirement_VersionUndetectable(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"sometool": true},
+		map[string]string{"sometool": "no version info here"},
+	)
+	req := automation.Requirement{Name: "sometool", Kind: automation.RequirementCommand, MinVersion: "1.0"}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied when version is undetectable")
+	}
+	if !strings.Contains(result.Error, "unable to detect version") {
+		t.Errorf("expected 'unable to detect version' error, got: %s", result.Error)
+	}
+}
+
+func TestValidateRequirements_AllSatisfied(t *testing.T) {
+	dir := t.TempDir()
+	env := mockEnv(
+		map[string]bool{"python3": true, "docker": true},
+		map[string]string{"python3": "Python 3.13.0"},
+	)
+
+	a := &automation.Automation{
+		Name:     "test-automation",
+		FilePath: "/fake/path/automation.yaml",
+		Steps:    []automation.Step{bashStep("echo ok")},
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"},
+			{Name: "docker", Kind: automation.RequirementCommand},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:   dir,
+		Discovery:  newDiscovery(nil),
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &bytes.Buffer{},
+		RuntimeEnv: env,
+	}
+
+	err := exec.ValidateRequirements(a)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRequirements_SomeMissing(t *testing.T) {
+	dir := t.TempDir()
+	env := mockEnv(
+		map[string]bool{"python3": true},
+		map[string]string{"python3": "Python 3.9.7"},
+	)
+
+	a := &automation.Automation{
+		Name:     "format-logs",
+		FilePath: "/fake/path/automation.yaml",
+		Steps:    []automation.Step{bashStep("echo ok")},
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"},
+			{Name: "jq", Kind: automation.RequirementCommand},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:   dir,
+		Discovery:  newDiscovery(nil),
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &bytes.Buffer{},
+		RuntimeEnv: env,
+	}
+
+	err := exec.ValidateRequirements(a)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	ve, ok := err.(*ValidationError)
+	if !ok {
+		t.Fatalf("expected *ValidationError, got %T", err)
+	}
+
+	if len(ve.Results) != 2 {
+		t.Fatalf("expected 2 failed results, got %d", len(ve.Results))
+	}
+
+	if ve.Results[0].Requirement.Name != "python" {
+		t.Errorf("first result should be python, got %s", ve.Results[0].Requirement.Name)
+	}
+	if ve.Results[1].Requirement.Name != "jq" {
+		t.Errorf("second result should be jq, got %s", ve.Results[1].Requirement.Name)
+	}
+}
+
+func TestValidateRequirements_NoRequirements(t *testing.T) {
+	dir := t.TempDir()
+	a := &automation.Automation{
+		Name:     "test",
+		FilePath: "/fake/path/automation.yaml",
+		Steps:    []automation.Step{bashStep("echo ok")},
+	}
+
+	exec := &Executor{
+		RepoRoot:  dir,
+		Discovery: newDiscovery(nil),
+		Stdout:    &bytes.Buffer{},
+		Stderr:    &bytes.Buffer{},
+	}
+
+	err := exec.ValidateRequirements(a)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFormatValidationError(t *testing.T) {
+	ve := &ValidationError{
+		AutomationName: "format-logs",
+		Results: []CheckResult{
+			{
+				Requirement:     automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"},
+				Satisfied:       false,
+				DetectedVersion: "3.9.7",
+				Error:           "found 3.9.7 but need >= 3.11",
+			},
+			{
+				Requirement: automation.Requirement{Name: "jq", Kind: automation.RequirementCommand},
+				Satisfied:   false,
+				Error:       "not found",
+			},
+		},
+	}
+
+	output := FormatValidationError(ve)
+
+	if !strings.Contains(output, "✗ pi run format-logs") {
+		t.Errorf("output should contain automation name, got:\n%s", output)
+	}
+	if !strings.Contains(output, "Missing requirements:") {
+		t.Errorf("output should contain 'Missing requirements:', got:\n%s", output)
+	}
+	if !strings.Contains(output, "python >= 3.11") {
+		t.Errorf("output should contain 'python >= 3.11', got:\n%s", output)
+	}
+	if !strings.Contains(output, "found 3.9.7 but need >= 3.11") {
+		t.Errorf("output should contain version comparison, got:\n%s", output)
+	}
+	if !strings.Contains(output, "command: jq") {
+		t.Errorf("output should contain 'command: jq', got:\n%s", output)
+	}
+	if !strings.Contains(output, "brew install jq") {
+		t.Errorf("output should contain install hint for jq, got:\n%s", output)
+	}
+	if !strings.Contains(output, "brew install python3") {
+		t.Errorf("output should contain install hint for python, got:\n%s", output)
+	}
+}
+
+func TestInstallHint(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"python", "brew install python3"},
+		{"node", "brew install node"},
+		{"docker", "brew install --cask docker"},
+		{"jq", "brew install jq"},
+		{"unknown-tool", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := automation.Requirement{Name: tt.name}
+			got := installHint(req)
+			if tt.want != "" && !strings.Contains(got, tt.want) {
+				t.Errorf("installHint(%q) = %q, want to contain %q", tt.name, got, tt.want)
+			}
+			if tt.want == "" && got != "" {
+				t.Errorf("installHint(%q) = %q, want empty", tt.name, got)
+			}
+		})
+	}
+}
+
+func TestRunWithInputs_FailsOnMissingRequirement(t *testing.T) {
+	dir := t.TempDir()
+	env := mockEnv(map[string]bool{}, nil)
+
+	a := &automation.Automation{
+		Name:     "needs-python",
+		FilePath: "/fake/path/automation.yaml",
+		Steps:    []automation.Step{bashStep("echo ok")},
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime},
+		},
+	}
+
+	var stderr bytes.Buffer
+	exec := &Executor{
+		RepoRoot:   dir,
+		Discovery:  &discovery.Result{Automations: map[string]*automation.Automation{"needs-python": a}},
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &stderr,
+		RuntimeEnv: env,
+	}
+
+	err := exec.RunWithInputs(a, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for missing requirement")
+	}
+
+	exitErr, ok := err.(*ExitError)
+	if !ok {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != 1 {
+		t.Errorf("expected exit code 1, got %d", exitErr.Code)
+	}
+
+	if !strings.Contains(stderr.String(), "Missing requirements:") {
+		t.Errorf("stderr should contain 'Missing requirements:', got:\n%s", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "python") {
+		t.Errorf("stderr should mention python, got:\n%s", stderr.String())
+	}
+}
+
+func TestRunWithInputs_PassesOnSatisfiedRequirement(t *testing.T) {
+	dir := t.TempDir()
+	env := mockEnv(
+		map[string]bool{"python3": true},
+		nil,
+	)
+
+	a := &automation.Automation{
+		Name:     "has-python",
+		FilePath: "/fake/path/automation.yaml",
+		Steps:    []automation.Step{bashStep("true")},
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:   dir,
+		Discovery:  &discovery.Result{Automations: map[string]*automation.Automation{"has-python": a}},
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &bytes.Buffer{},
+		RuntimeEnv: env,
+	}
+
+	err := exec.RunWithInputs(a, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunWithInputs_InstallerWithMissingRequirement(t *testing.T) {
+	dir := t.TempDir()
+	env := mockEnv(map[string]bool{}, nil)
+
+	a := &automation.Automation{
+		Name:     "install-tool",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test: automation.InstallPhase{IsScalar: true, Scalar: "command -v tool"},
+			Run:  automation.InstallPhase{IsScalar: true, Scalar: "echo installing"},
+		},
+		Requires: []automation.Requirement{
+			{Name: "docker", Kind: automation.RequirementCommand},
+		},
+	}
+
+	var stderr bytes.Buffer
+	exec := &Executor{
+		RepoRoot:   dir,
+		Discovery:  &discovery.Result{Automations: map[string]*automation.Automation{"install-tool": a}},
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &stderr,
+		RuntimeEnv: env,
+	}
+
+	err := exec.RunWithInputs(a, nil, nil)
+	if err == nil {
+		t.Fatal("expected error for missing requirement on installer")
+	}
+
+	if !strings.Contains(stderr.String(), "Missing requirements:") {
+		t.Errorf("stderr should contain validation error, got:\n%s", stderr.String())
+	}
+}
