@@ -4,6 +4,8 @@ A developer automation platform for teams managing complex repositories. PI repl
 
 ## Install
 
+Download a pre-built binary from [GitHub Releases](https://github.com/yotam180/pi/releases), or install with Go:
+
 ```bash
 go install github.com/vyper-tooling/pi/cmd/pi@latest
 ```
@@ -26,7 +28,8 @@ See `docs/README.md` for the full product definition.
 ## Development
 
 ```bash
-make build    # compile
-make test     # run tests with race detector
-make clean    # remove build artifacts
+make build      # compile (dev build)
+make test       # run tests with race detector
+make snapshot   # local GoReleaser snapshot build (all platforms)
+make clean      # remove build artifacts
 ```

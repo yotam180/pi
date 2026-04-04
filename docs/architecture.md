@@ -202,6 +202,22 @@ pi setup
 - Python 3 pre-installed on both runners
 - Steps: `go vet ./...` → `go build ./...` → `go test ./... -race -count=1`
 
+### Release workflow (`.github/workflows/release.yml`)
+- Triggers on tag push matching `v*`
+- Runs full test suite before releasing as a safety gate
+- Uses `goreleaser/goreleaser-action@v6` with GoReleaser v2
+- Produces cross-compiled binaries for: darwin/amd64, darwin/arm64, linux/amd64, linux/arm64
+- Each binary archived as `.tar.gz` with `README.md`
+- `checksums.txt` included in every release
+- Version injected via ldflags (`cli.version`) — same variable as the Makefile
+- Uses default `GITHUB_TOKEN` for GitHub Release creation (no extra secrets)
+
+### GoReleaser (`.goreleaser.yaml`)
+- Config version 2
+- CGO disabled, binaries stripped (`-s -w`)
+- Changelog auto-generated, excludes docs/test/chore commits
+- `make snapshot` runs a local snapshot build for testing
+
 ## Dependencies
 
 - `github.com/spf13/cobra` — CLI framework

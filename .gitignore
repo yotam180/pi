@@ -1,6 +1,7 @@
 # Build artifacts
 /pi
 bin/
+dist/
 *.exe
 *.exe~
 *.dll

@@ -1,0 +1,46 @@
+version: 2
+
+project_name: pi
+
+builds:
+  - id: pi
+    main: ./cmd/pi
+    binary: pi
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/vyper-tooling/pi/internal/cli.version={{ .Version }}
+
+archives:
+  - id: pi
+    ids: [pi]
+    formats: [tar.gz]
+    name_template: "pi_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: yotam180
+    name: pi
+  name_template: "v{{ .Version }}"
+  draft: false
+  prerelease: auto
