@@ -1,0 +1,13 @@
+name: docker/logs
+description: Stream Docker Compose service logs
+
+steps:
+  - bash: |
+      if docker compose version >/dev/null 2>&1; then
+        docker compose logs -f --tail 200 "$@"
+      elif command -v docker-compose >/dev/null 2>&1; then
+        docker-compose logs -f --tail 200 "$@"
+      else
+        echo "Error: neither 'docker compose' nor 'docker-compose' found" >&2
+        exit 1
+      fi

@@ -946,6 +946,87 @@ func TestBuiltins_PiPrefixNotFound(t *testing.T) {
 	}
 }
 
+// --- Built-in Docker automations ---
+
+func TestBuiltins_DockerAutomationsInList(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"docker/up", "docker/down", "docker/logs"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("expected %q in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestBuiltins_DockerAutomationsMarkedBuiltIn(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"docker/up", "docker/down", "docker/logs"} {
+		found := false
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, name) && strings.Contains(line, "[built-in]") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestBuiltins_DockerInfoShowsDetails(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	for _, name := range []string{"pi:docker/up", "pi:docker/down", "pi:docker/logs"} {
+		t.Run(name, func(t *testing.T) {
+			out, code := runPi(t, dir, "info", name)
+			if code != 0 {
+				t.Fatalf("expected exit 0, got %d: %s", code, out)
+			}
+			if !strings.Contains(out, "Name:") {
+				t.Errorf("expected Name: in info output, got:\n%s", out)
+			}
+			if !strings.Contains(out, "Description:") {
+				t.Errorf("expected Description: in info output, got:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestBuiltins_DockerRunStepResolvesBuiltin(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "docker-builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "call-docker-up") {
+		t.Errorf("expected call-docker-up in list output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "docker/up") {
+		t.Errorf("expected docker/up built-in in list output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_DockerRunStepInfoResolvesBuiltin(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "docker-builtins")
+	out, code := runPi(t, dir, "info", "pi:docker/up")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "docker/up") {
+		t.Errorf("expected docker/up in info output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Docker Compose") {
+		t.Errorf("expected description mentioning Docker Compose, got:\n%s", out)
+	}
+}
+
 // --- Conditional: list shows all conditional automations ---
 
 func TestConditional_List_AllAutomations(t *testing.T) {

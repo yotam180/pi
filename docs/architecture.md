@@ -11,9 +11,13 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               3 tests
+    builtins_test.go               10 tests (3 base + 7 docker)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
+      docker/
+        up.yaml                    pi:docker/up — docker compose up -d with v1 fallback
+        down.yaml                  pi:docker/down — docker compose down with v1 fallback
+        logs.yaml                  pi:docker/logs — docker compose logs with v1 fallback
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
     discover.go                    discoverAll() — discovers local + built-in automations and merges
@@ -248,6 +252,7 @@ pi setup
 - `run:` steps can reference `pi:hello` to explicitly call built-in automations
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
+- Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
 
 ### Error philosophy
 - Parse errors include file path and field name
@@ -328,7 +333,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 382 (45 automation + 3 builtins + 54 CLI + 30 conditions + 11 config + 24 discovery + 120 executor + 4 project + 14 shell + 77 integration)
+Total tests: 409 (45 automation + 22 builtins + 54 CLI + 30 conditions + 11 config + 24 discovery + 120 executor + 4 project + 14 shell + 85 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -340,3 +345,4 @@ Total tests: 382 (45 automation + 3 builtins + 54 CLI + 30 conditions + 11 confi
 - Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
+- Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
