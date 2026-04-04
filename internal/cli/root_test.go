@@ -81,12 +81,37 @@ func TestShellHelp(t *testing.T) {
 	}
 }
 
-func TestVersion(t *testing.T) {
+func TestVersionFlag(t *testing.T) {
 	out, err := executeCmd("--version")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "dev") {
-		t.Errorf("expected version to contain 'dev', got: %s", out)
+	expected := "pi dev\n"
+	if out != expected {
+		t.Errorf("expected %q, got %q", expected, out)
+	}
+}
+
+func TestVersionSubcommand(t *testing.T) {
+	out, err := executeCmd("version")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := "pi dev\n"
+	if out != expected {
+		t.Errorf("expected %q, got %q", expected, out)
+	}
+}
+
+func TestVersionNonEmpty(t *testing.T) {
+	out, err := executeCmd("--version")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Error("expected non-empty version output")
+	}
+	if !strings.HasPrefix(out, "pi ") {
+		t.Errorf("expected version to start with 'pi ', got: %s", out)
 	}
 }

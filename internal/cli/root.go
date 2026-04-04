@@ -22,10 +22,13 @@ and shareable automation model.`,
 		SilenceErrors: true,
 	}
 
+	root.SetVersionTemplate("pi {{.Version}}\n")
+
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newSetupCmd())
 	root.AddCommand(newShellCmd())
+	root.AddCommand(newVersionCmd())
 
 	return root
 }

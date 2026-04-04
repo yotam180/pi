@@ -15,7 +15,8 @@ internal/
     list.go                        pi list — discovers and prints automations
     setup.go                       pi setup — runs setup entries, then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
-    root_test.go                   CLI tests (7 tests)
+    version.go                     pi version — prints version string
+    root_test.go                   CLI tests (9 tests)
     run_test.go                    pi run tests (8 tests)
     list_test.go                   pi list tests (6 tests)
     setup_test.go                  pi setup tests (4 tests)
@@ -187,7 +188,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 163 (14 automation + 28 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 33 integration)
+Total tests: 168 (14 automation + 30 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 36 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
