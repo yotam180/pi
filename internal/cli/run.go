@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
+	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
 func newRunCmd() *cobra.Command {
@@ -92,6 +94,11 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Silent:    silent,
+	}
+
+	cfg, cfgErr := config.Load(root)
+	if cfgErr == nil && cfg.EffectiveProvisionMode() != config.ProvisionNever {
+		exec.Provisioner = runtimes.NewProvisioner(cfg, stderr)
 	}
 
 	return exec.RunWithInputs(a, args, withArgs)

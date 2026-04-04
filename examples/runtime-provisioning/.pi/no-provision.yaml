@@ -1,0 +1,5 @@
+name: no-provision
+description: Automation without runtime requirements (no provisioning needed)
+
+steps:
+  - bash: echo "no runtimes needed"

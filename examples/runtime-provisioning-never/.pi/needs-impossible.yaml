@@ -1,0 +1,7 @@
+name: needs-impossible
+description: Requires an impossible command (provisioning disabled)
+requires:
+  - command: absolutely-impossible-command-xyz
+
+steps:
+  - bash: echo "should not reach here"

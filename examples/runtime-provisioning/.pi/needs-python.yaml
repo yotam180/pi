@@ -1,0 +1,7 @@
+name: needs-python
+description: Automation that requires python (tests provisioning)
+requires:
+  - python
+
+steps:
+  - bash: echo "python is available"

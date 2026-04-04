@@ -11,11 +11,35 @@ import (
 
 const FileName = "pi.yaml"
 
+// ProvisionMode controls whether PI auto-provisions missing runtimes.
+type ProvisionMode string
+
+const (
+	ProvisionNever ProvisionMode = "never"
+	ProvisionAsk   ProvisionMode = "ask"
+	ProvisionAuto  ProvisionMode = "auto"
+)
+
+// RuntimeManager selects which backend provisions runtimes.
+type RuntimeManager string
+
+const (
+	RuntimeManagerMise   RuntimeManager = "mise"
+	RuntimeManagerDirect RuntimeManager = "direct"
+)
+
+// RuntimesConfig holds the runtimes: block from pi.yaml.
+type RuntimesConfig struct {
+	Provision ProvisionMode  `yaml:"provision"`
+	Manager   RuntimeManager `yaml:"manager"`
+}
+
 // ProjectConfig represents the top-level pi.yaml file.
 type ProjectConfig struct {
 	Project   string                `yaml:"project"`
 	Shortcuts map[string]Shortcut   `yaml:"shortcuts"`
 	Setup     []SetupEntry          `yaml:"setup"`
+	Runtimes  *RuntimesConfig       `yaml:"runtimes"`
 }
 
 // Shortcut can be either a simple string (automation name) or an object with
@@ -103,5 +127,43 @@ func (c *ProjectConfig) validate(path string) error {
 		}
 	}
 
+	if c.Runtimes != nil {
+		if err := c.Runtimes.validate(path); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (r *RuntimesConfig) validate(path string) error {
+	switch r.Provision {
+	case "", ProvisionNever, ProvisionAsk, ProvisionAuto:
+	default:
+		return fmt.Errorf("%s: runtimes.provision must be one of: never, ask, auto (got %q)", path, r.Provision)
+	}
+
+	switch r.Manager {
+	case "", RuntimeManagerMise, RuntimeManagerDirect:
+	default:
+		return fmt.Errorf("%s: runtimes.manager must be one of: mise, direct (got %q)", path, r.Manager)
+	}
+
+	return nil
+}
+
+// EffectiveProvisionMode returns the provision mode, defaulting to "never".
+func (c *ProjectConfig) EffectiveProvisionMode() ProvisionMode {
+	if c.Runtimes == nil || c.Runtimes.Provision == "" {
+		return ProvisionNever
+	}
+	return c.Runtimes.Provision
+}
+
+// EffectiveRuntimeManager returns the runtime manager, defaulting to "mise".
+func (c *ProjectConfig) EffectiveRuntimeManager() RuntimeManager {
+	if c.Runtimes == nil || c.Runtimes.Manager == "" {
+		return RuntimeManagerMise
+	}
+	return c.Runtimes.Manager
 }

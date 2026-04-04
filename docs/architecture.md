@@ -31,7 +31,7 @@ internal/
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
     discover.go                    discoverAll() — discovers local + built-in automations and merges
-    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag
+    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, if: conditions, and install lifecycle for installer automations
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag
@@ -49,8 +49,8 @@ internal/
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
   config/                          pi.yaml parsing
-    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field) + Load()
-    config_test.go                 11 tests
+    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
+    config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation (with If, Install, and Requires fields), Step (with If field), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
     automation_test.go             75 tests
@@ -58,15 +58,18 @@ internal/
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor (with RuntimeEnv and Silent fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle
-    validate.go                    ValidateRequirements(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
+    executor.go                    Executor (with RuntimeEnv, Silent, and Provisioner fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(), buildEnv(), prependPathInEnv(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle; provisioned runtime PATH injection
+    validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               87 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer)
-    validate_test.go               29 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor)
+    validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv, prependPathInEnv)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
+  runtimes/                        Sandboxed runtime provisioning
+    runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
+    runtimes_test.go               17 tests
   shell/                           Shell shortcut file generation and management
     shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(); with: shortcut codegen
     shell_test.go                  14 tests
@@ -350,6 +353,19 @@ pi doctor
   - `cursor/install-extensions` accepts an `extensions` input (comma or newline-separated IDs), checks `cursor --list-extensions`, installs missing ones via `cursor --install-extension`
   - `git/install-hooks` accepts a `source` input (directory path relative to repo root), copies hook files to `.git/hooks/`, makes them executable; uses `cmp` for idempotency
 
+### Sandboxed runtime provisioning (`internal/runtimes`)
+- Opt-in via `runtimes:` block in `pi.yaml` — `provision: never` (default), `ask`, or `auto`
+- `manager: mise` (default, falls back to direct if mise not installed) or `manager: direct`
+- Provisioned runtimes are installed into `~/.pi/runtimes/<name>/<version>/bin/`
+- Only `python` and `node` are known runtimes — `command:` requirements are never provisioned
+- Integration point: `Executor.Provisioner` field — when set, `ValidateRequirements()` calls `tryProvision()` for failed runtime requirements
+- PATH scoping: `buildEnv()` prepends provisioned bin directories to PATH for all step executions via `prependPathInEnv()`
+- `appendInputEnv()` is preserved for backward compatibility but step execution now uses `buildEnv()` which handles both input env vars and runtime paths
+- Mise backend: calls `mise install <runtime>@<version>`, then `mise where` to find the install path, symlinks binaries into the managed directory
+- Direct backend: downloads from official CDN (nodejs.org for node, python-build-standalone for python), extracts tar.gz, places binaries
+- `Provisioner.PromptFunc` controls interactive "ask" mode — nil means non-interactive (skip provisioning)
+- Already-provisioned runtimes are detected by checking for the binary at the expected path — no re-download
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -429,7 +445,7 @@ pi doctor
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 494 (75 automation + 38 builtins + 57 CLI + 30 conditions + 11 config + 24 discovery + 123 executor + 4 project + 14 shell + 118 integration)
+Total tests: 531 (75 automation + 38 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 131 executor + 4 project + 16 runtimes + 14 shell + 125 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -447,3 +463,4 @@ Total tests: 494 (75 automation + 38 builtins + 57 CLI + 30 conditions + 11 conf
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
 - Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints
 - Doctor tests: `pi doctor` on `requires-validation` workspace showing ✓ for satisfied, ✗ for missing, version mismatch, skipping no-requires automations, detected version display, install hints; healthy workspace with all-satisfied exit code 0
+- Runtime provisioning tests: `runtime-provisioning` and `runtime-provisioning-never` example workspaces; list automations, no-requirements runs normally, python already installed (no provisioning needed), never-mode errors, config parsing with auto/ask/direct modes

@@ -9,6 +9,7 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/discovery"
+	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
 func TestExtractVersion(t *testing.T) {
@@ -596,5 +597,215 @@ func TestInstallHintFor_UnknownTool(t *testing.T) {
 	hint := InstallHintFor(req)
 	if hint != "" {
 		t.Errorf("expected empty hint for unknown tool, got %q", hint)
+	}
+}
+
+func TestValidateRequirements_WithProvisioner_RuntimeProvisioned(t *testing.T) {
+	base := t.TempDir()
+	binDir := fmt.Sprintf("%s/python/3.11/bin", base)
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(fmt.Sprintf("%s/python3", binDir), []byte("#!/bin/sh"), 0755)
+
+	prov := &runtimes.Provisioner{
+		Mode:    "auto",
+		Manager: "direct",
+		BaseDir: base,
+		Stderr:  &bytes.Buffer{},
+	}
+
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
+	}
+
+	a := &automation.Automation{
+		Name: "test",
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:    t.TempDir(),
+		Discovery:   discovery.NewResult(nil, nil),
+		Stdout:      &bytes.Buffer{},
+		Stderr:      &bytes.Buffer{},
+		RuntimeEnv:  env,
+		Provisioner: prov,
+	}
+
+	// Python not in PATH, but already provisioned locally
+	err := exec.ValidateRequirements(a)
+	if err != nil {
+		t.Fatalf("expected provisioned runtime to satisfy requirement, got: %v", err)
+	}
+
+	if len(exec.runtimePaths) != 1 {
+		t.Fatalf("expected 1 runtime path, got %d", len(exec.runtimePaths))
+	}
+	if exec.runtimePaths[0] != binDir {
+		t.Errorf("runtime path = %q, want %q", exec.runtimePaths[0], binDir)
+	}
+}
+
+func TestValidateRequirements_WithProvisioner_CommandNotProvisioned(t *testing.T) {
+	prov := &runtimes.Provisioner{
+		Mode:    "auto",
+		Manager: "direct",
+		BaseDir: t.TempDir(),
+		Stderr:  &bytes.Buffer{},
+	}
+
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
+	}
+
+	a := &automation.Automation{
+		Name: "test",
+		Requires: []automation.Requirement{
+			{Name: "docker", Kind: automation.RequirementCommand},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:    t.TempDir(),
+		Discovery:   discovery.NewResult(nil, nil),
+		Stdout:      &bytes.Buffer{},
+		Stderr:      &bytes.Buffer{},
+		RuntimeEnv:  env,
+		Provisioner: prov,
+	}
+
+	err := exec.ValidateRequirements(a)
+	if err == nil {
+		t.Fatal("expected error for missing command requirement (commands are not provisioned)")
+	}
+}
+
+func TestValidateRequirements_NoProvisioner_FallsThrough(t *testing.T) {
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
+	}
+
+	a := &automation.Automation{
+		Name: "test",
+		Requires: []automation.Requirement{
+			{Name: "python", Kind: automation.RequirementRuntime},
+		},
+	}
+
+	exec := &Executor{
+		RepoRoot:   t.TempDir(),
+		Discovery:  discovery.NewResult(nil, nil),
+		Stdout:     &bytes.Buffer{},
+		Stderr:     &bytes.Buffer{},
+		RuntimeEnv: env,
+	}
+
+	err := exec.ValidateRequirements(a)
+	if err == nil {
+		t.Fatal("expected error when no provisioner and runtime not found")
+	}
+}
+
+func TestBuildEnv_NoRuntimePaths(t *testing.T) {
+	exec := &Executor{
+		RepoRoot: t.TempDir(),
+	}
+
+	env := exec.buildEnv(nil)
+	if env != nil {
+		t.Error("expected nil env when no input vars and no runtime paths")
+	}
+}
+
+func TestBuildEnv_WithRuntimePaths(t *testing.T) {
+	exec := &Executor{
+		RepoRoot:     t.TempDir(),
+		runtimePaths: []string{"/provisioned/python/bin"},
+	}
+
+	env := exec.buildEnv(nil)
+	if env == nil {
+		t.Fatal("expected non-nil env when runtime paths are set")
+	}
+
+	var pathEntry string
+	for _, e := range env {
+		if strings.HasPrefix(e, "PATH=") {
+			pathEntry = e
+			break
+		}
+	}
+	if pathEntry == "" {
+		t.Fatal("expected PATH entry in env")
+	}
+	if !strings.Contains(pathEntry, "/provisioned/python/bin") {
+		t.Errorf("PATH should contain provisioned bin dir, got: %s", pathEntry)
+	}
+}
+
+func TestBuildEnv_WithInputsAndRuntimePaths(t *testing.T) {
+	exec := &Executor{
+		RepoRoot:     t.TempDir(),
+		runtimePaths: []string{"/provisioned/node/bin"},
+	}
+
+	inputEnv := []string{"PI_INPUT_VERSION=3.13"}
+	env := exec.buildEnv(inputEnv)
+	if env == nil {
+		t.Fatal("expected non-nil env")
+	}
+
+	hasInput := false
+	hasPath := false
+	for _, e := range env {
+		if e == "PI_INPUT_VERSION=3.13" {
+			hasInput = true
+		}
+		if strings.HasPrefix(e, "PATH=") && strings.Contains(e, "/provisioned/node/bin") {
+			hasPath = true
+		}
+	}
+	if !hasInput {
+		t.Error("expected PI_INPUT_VERSION in env")
+	}
+	if !hasPath {
+		t.Error("expected provisioned PATH in env")
+	}
+}
+
+func TestPrependPathInEnv(t *testing.T) {
+	env := []string{"HOME=/home/user", "PATH=/usr/bin:/bin", "SHELL=/bin/zsh"}
+	result := prependPathInEnv(env, []string{"/foo/bin", "/bar/bin"})
+
+	var pathEntry string
+	for _, e := range result {
+		if strings.HasPrefix(e, "PATH=") {
+			pathEntry = e
+			break
+		}
+	}
+
+	expected := "PATH=/foo/bin" + string(os.PathListSeparator) + "/bar/bin" + string(os.PathListSeparator) + "/usr/bin:/bin"
+	if pathEntry != expected {
+		t.Errorf("PATH = %q, want %q", pathEntry, expected)
+	}
+}
+
+func TestPrependPathInEnv_NoPATH(t *testing.T) {
+	env := []string{"HOME=/home/user", "SHELL=/bin/zsh"}
+	result := prependPathInEnv(env, []string{"/foo/bin"})
+
+	var found bool
+	for _, e := range result {
+		if strings.HasPrefix(e, "PATH=") {
+			found = true
+			if e != "PATH=/foo/bin" {
+				t.Errorf("PATH = %q, want %q", e, "PATH=/foo/bin")
+			}
+		}
+	}
+	if !found {
+		t.Error("expected PATH entry to be added")
 	}
 }

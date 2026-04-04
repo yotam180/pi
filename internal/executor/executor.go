@@ -12,6 +12,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
+	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
 // Executor runs automation steps within a project.
@@ -46,6 +47,14 @@ type Executor struct {
 	// RuntimeEnv overrides the default runtime environment for predicate resolution.
 	// If nil, DefaultRuntimeEnv() is used.
 	RuntimeEnv *RuntimeEnv
+
+	// Provisioner handles sandboxed runtime provisioning. If nil, no provisioning
+	// is attempted — missing requirements produce errors as before.
+	Provisioner *runtimes.Provisioner
+
+	// runtimePaths accumulates provisioned bin directories to prepend to PATH
+	// for all step executions within the current automation.
+	runtimePaths []string
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -256,7 +265,7 @@ func (e *Executor) execBashSuppressed(a *automation.Automation, script string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = io.Discard
 	cmd.Stdin = nil
-	cmd.Env = appendInputEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv)
 
 	if stderrCapture != nil {
 		cmd.Stderr = stderrCapture
@@ -315,7 +324,7 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
-	cmd.Env = appendInputEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		return ""
@@ -387,7 +396,7 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = appendInputEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -417,7 +426,7 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = appendInputEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -478,7 +487,7 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = appendInputEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -555,6 +564,35 @@ func appendInputEnv(inputEnv []string) []string {
 	}
 	env := os.Environ()
 	return append(env, inputEnv...)
+}
+
+// buildEnv constructs the environment for step execution, including
+// PI_INPUT_* vars and provisioned runtime PATH prepends.
+func (e *Executor) buildEnv(inputEnv []string) []string {
+	if len(inputEnv) == 0 && len(e.runtimePaths) == 0 {
+		return nil
+	}
+	env := os.Environ()
+	if len(e.runtimePaths) > 0 {
+		env = prependPathInEnv(env, e.runtimePaths)
+	}
+	if len(inputEnv) > 0 {
+		env = append(env, inputEnv...)
+	}
+	return env
+}
+
+// prependPathInEnv finds the PATH entry in env and prepends the given dirs.
+func prependPathInEnv(env []string, dirs []string) []string {
+	prefix := strings.Join(dirs, string(os.PathListSeparator))
+	for i, entry := range env {
+		if strings.HasPrefix(entry, "PATH=") {
+			env[i] = "PATH=" + prefix + string(os.PathListSeparator) + entry[5:]
+			return env
+		}
+	}
+	env = append(env, "PATH="+prefix)
+	return env
 }
 
 // evaluateCondition resolves and evaluates an if: expression.

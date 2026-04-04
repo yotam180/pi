@@ -1,0 +1,5 @@
+project: runtime-provisioning
+
+runtimes:
+  provision: auto
+  manager: direct

@@ -1,0 +1,4 @@
+project: runtime-provisioning-never
+
+runtimes:
+  provision: never

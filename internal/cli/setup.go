@@ -10,6 +10,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
+	"github.com/vyper-tooling/pi/internal/runtimes"
 	"github.com/vyper-tooling/pi/internal/shell"
 )
 
@@ -80,6 +81,10 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 			Stdout:    stdout,
 			Stderr:    stderr,
 			Silent:    silent,
+		}
+
+		if cfg.EffectiveProvisionMode() != config.ProvisionNever {
+			exec.Provisioner = runtimes.NewProvisioner(cfg, stderr)
 		}
 
 		for i, entry := range cfg.Setup {

@@ -114,14 +114,14 @@ A `make test-matrix` target builds each image, runs `go test ./...` + integratio
 - Provisioning for `command:` requirements (only runtimes — node, python, etc.)
 
 ## Success Criteria
-- [ ] `requires:` block is parsed and validated in automation YAML
-- [ ] Pre-execution validation runs before any step and produces the formatted error table above
-- [ ] `pi doctor` scans all automations and prints per-automation requirement status
-- [ ] `provision: auto` mode silently provisions node and python via `mise` (or direct download as fallback) and runs the step successfully
-- [ ] Provisioned runtimes are isolated to `~/.pi/runtimes/` — nothing written to system PATH
+- [x] `requires:` block is parsed and validated in automation YAML
+- [x] Pre-execution validation runs before any step and produces the formatted error table above
+- [x] `pi doctor` scans all automations and prints per-automation requirement status
+- [x] `provision: auto` mode silently provisions node and python via `mise` (or direct download as fallback) and runs the step successfully
+- [x] Provisioned runtimes are isolated to `~/.pi/runtimes/` — nothing written to system PATH
 - [ ] `tests/docker/ubuntu-fresh/` image has a passing integration test that runs a TypeScript automation from scratch via `provision: auto`
 - [ ] All 4 Docker environments pass `go test ./...`
-- [ ] `go test ./...` passes on the host as well
+- [x] `go test ./...` passes on the host as well
 
 ## Notes
 - `requires:` validation intentionally runs before `if:` conditions are evaluated — a step that's skipped by `if:` doesn't need its requirements checked. Implementation should evaluate `if:` first, then check `requires:` only for steps that will actually run.

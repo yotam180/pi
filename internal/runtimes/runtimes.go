@@ -1,0 +1,418 @@
+package runtimes
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+
+	"github.com/vyper-tooling/pi/internal/config"
+)
+
+// BaseDir is the default root for provisioned runtimes.
+var BaseDir = filepath.Join(homeDir(), ".pi", "runtimes")
+
+func homeDir() string {
+	if h, err := os.UserHomeDir(); err == nil {
+		return h
+	}
+	return os.TempDir()
+}
+
+// KnownRuntimes are the runtimes PI can provision.
+var KnownRuntimes = map[string]bool{
+	"python": true,
+	"node":   true,
+}
+
+// Provisioner manages runtime provisioning using a pluggable backend.
+type Provisioner struct {
+	Mode    config.ProvisionMode
+	Manager config.RuntimeManager
+	BaseDir string
+	Stderr  io.Writer
+
+	// PromptFunc is called when Mode is "ask". It should return true if the user
+	// confirms provisioning. If nil and mode is "ask", provisioning is skipped
+	// (non-interactive / CI mode).
+	PromptFunc func(msg string) bool
+
+	// LookPath can be overridden for testing. Defaults to exec.LookPath.
+	LookPath func(string) (string, error)
+}
+
+// NewProvisioner creates a Provisioner from project config.
+func NewProvisioner(cfg *config.ProjectConfig, stderr io.Writer) *Provisioner {
+	return &Provisioner{
+		Mode:    cfg.EffectiveProvisionMode(),
+		Manager: cfg.EffectiveRuntimeManager(),
+		BaseDir: BaseDir,
+		Stderr:  stderr,
+	}
+}
+
+// ProvisionResult holds the result of a provisioning attempt.
+type ProvisionResult struct {
+	Provisioned bool
+	BinDir      string // directory to prepend to PATH for step execution
+	Version     string
+}
+
+// Provision ensures a runtime is available at the requested version.
+// Returns the bin directory to prepend to PATH for step execution.
+// If the runtime is already provisioned or provisioning is disabled, returns
+// appropriate zero values.
+func (p *Provisioner) Provision(runtimeName, minVersion string) (*ProvisionResult, error) {
+	if !KnownRuntimes[runtimeName] {
+		return nil, fmt.Errorf("unknown runtime %q: PI can only provision python and node", runtimeName)
+	}
+
+	if p.Mode == config.ProvisionNever {
+		return &ProvisionResult{}, nil
+	}
+
+	// Check if already provisioned locally
+	binDir := p.binDir(runtimeName, minVersion)
+	if p.isProvisioned(runtimeName, binDir) {
+		return &ProvisionResult{
+			Provisioned: true,
+			BinDir:      binDir,
+		}, nil
+	}
+
+	if p.Mode == config.ProvisionAsk {
+		if p.PromptFunc == nil {
+			return &ProvisionResult{}, nil
+		}
+		msg := fmt.Sprintf("Runtime %q is not installed. Provision it into %s?", runtimeName, p.BaseDir)
+		if minVersion != "" {
+			msg = fmt.Sprintf("Runtime %s >= %s is not installed. Provision it into %s?", runtimeName, minVersion, p.BaseDir)
+		}
+		if !p.PromptFunc(msg) {
+			return &ProvisionResult{}, nil
+		}
+	}
+
+	version := minVersion
+	if version == "" {
+		version = defaultVersion(runtimeName)
+	}
+
+	var err error
+	switch p.Manager {
+	case config.RuntimeManagerMise, "":
+		err = p.provisionWithMise(runtimeName, version)
+	case config.RuntimeManagerDirect:
+		err = p.provisionDirect(runtimeName, version)
+	default:
+		return nil, fmt.Errorf("unknown runtime manager %q", p.Manager)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("provisioning %s %s: %w", runtimeName, version, err)
+	}
+
+	binDir = p.binDir(runtimeName, version)
+	fmt.Fprintf(p.stderr(), "[provisioned] %s %s → %s\n", runtimeName, version, binDir)
+
+	return &ProvisionResult{
+		Provisioned: true,
+		BinDir:      binDir,
+		Version:     version,
+	}, nil
+}
+
+// BinDirFor returns the bin directory for an already-provisioned runtime,
+// or empty string if not provisioned.
+func (p *Provisioner) BinDirFor(runtimeName, version string) string {
+	if version == "" {
+		version = defaultVersion(runtimeName)
+	}
+	binDir := p.binDir(runtimeName, version)
+	if p.isProvisioned(runtimeName, binDir) {
+		return binDir
+	}
+	return ""
+}
+
+func (p *Provisioner) binDir(runtimeName, version string) string {
+	if version == "" {
+		version = defaultVersion(runtimeName)
+	}
+	return filepath.Join(p.BaseDir, runtimeName, version, "bin")
+}
+
+func (p *Provisioner) isProvisioned(runtimeName, binDir string) bool {
+	cmdName := runtimeBinary(runtimeName)
+	binPath := filepath.Join(binDir, cmdName)
+	info, err := os.Stat(binPath)
+	return err == nil && !info.IsDir()
+}
+
+func defaultVersion(runtimeName string) string {
+	switch runtimeName {
+	case "python":
+		return "3.13"
+	case "node":
+		return "20"
+	default:
+		return "latest"
+	}
+}
+
+func runtimeBinary(name string) string {
+	switch name {
+	case "python":
+		return "python3"
+	case "node":
+		return "node"
+	default:
+		return name
+	}
+}
+
+func (p *Provisioner) stderr() io.Writer {
+	if p.Stderr != nil {
+		return p.Stderr
+	}
+	return os.Stderr
+}
+
+// provisionWithMise uses mise to install a runtime version into the PI runtimes directory.
+func (p *Provisioner) provisionWithMise(runtimeName, version string) error {
+	lookPath := p.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+
+	misePath, err := lookPath("mise")
+	if err != nil {
+		return p.provisionDirect(runtimeName, version)
+	}
+
+	installDir := filepath.Join(p.BaseDir, runtimeName, version)
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		return fmt.Errorf("creating runtime directory: %w", err)
+	}
+
+	spec := fmt.Sprintf("%s@%s", runtimeName, version)
+	cmd := exec.Command(misePath, "install", spec)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = p.stderr()
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("mise install %s: %w", spec, err)
+	}
+
+	// Get the install path from mise
+	cmd = exec.Command(misePath, "where", spec)
+	var out strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = io.Discard
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("mise where %s: %w", spec, err)
+	}
+
+	miseBinDir := filepath.Join(strings.TrimSpace(out.String()), "bin")
+
+	// Symlink mise-installed binaries into our managed directory
+	binDir := filepath.Join(installDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("creating bin directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(miseBinDir)
+	if err != nil {
+		return fmt.Errorf("reading mise bin directory %s: %w", miseBinDir, err)
+	}
+
+	for _, entry := range entries {
+		src := filepath.Join(miseBinDir, entry.Name())
+		dst := filepath.Join(binDir, entry.Name())
+		os.Remove(dst) // remove existing symlink if any
+		if err := os.Symlink(src, dst); err != nil {
+			return fmt.Errorf("symlinking %s → %s: %w", src, dst, err)
+		}
+	}
+
+	return nil
+}
+
+// provisionDirect downloads a runtime binary directly from official CDNs.
+func (p *Provisioner) provisionDirect(runtimeName, version string) error {
+	switch runtimeName {
+	case "node":
+		return p.provisionNodeDirect(version)
+	case "python":
+		return p.provisionPythonDirect(version)
+	default:
+		return fmt.Errorf("direct provisioning not supported for %q — install mise first: curl https://mise.run | sh", runtimeName)
+	}
+}
+
+func (p *Provisioner) provisionNodeDirect(version string) error {
+	installDir := filepath.Join(p.BaseDir, "node", version)
+	binDir := filepath.Join(installDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	var platform, arch string
+	switch goos {
+	case "darwin":
+		platform = "darwin"
+	case "linux":
+		platform = "linux"
+	default:
+		return fmt.Errorf("direct node provisioning not supported on %s", goos)
+	}
+	switch goarch {
+	case "amd64":
+		arch = "x64"
+	case "arm64":
+		arch = "arm64"
+	default:
+		return fmt.Errorf("direct node provisioning not supported on %s", goarch)
+	}
+
+	// Node.js version needs "v" prefix for the URL
+	versionTag := version
+	if !strings.HasPrefix(version, "v") {
+		versionTag = "v" + version
+	}
+
+	url := fmt.Sprintf("https://nodejs.org/dist/%s/node-%s-%s-%s.tar.gz", versionTag, versionTag, platform, arch)
+	extractDir := filepath.Join(installDir, "extract")
+
+	script := fmt.Sprintf(`set -e
+mkdir -p %q
+curl -fsSL %q | tar xz -C %q --strip-components=1
+if [ -d %q ]; then
+  rm -rf %q
+  mv %q %q
+fi
+`, extractDir, url, extractDir,
+		filepath.Join(extractDir, "bin"),
+		binDir,
+		filepath.Join(extractDir, "bin"), binDir,
+	)
+
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = p.stderr()
+	if err := cmd.Run(); err != nil {
+		os.RemoveAll(extractDir)
+		return fmt.Errorf("downloading node %s from %s: %w", version, url, err)
+	}
+
+	// Also copy lib dir for node modules
+	libSrc := filepath.Join(extractDir, "lib")
+	libDst := filepath.Join(installDir, "lib")
+	if info, err := os.Stat(libSrc); err == nil && info.IsDir() {
+		os.RemoveAll(libDst)
+		exec.Command("cp", "-a", libSrc, libDst).Run()
+	}
+
+	os.RemoveAll(extractDir)
+	return nil
+}
+
+func (p *Provisioner) provisionPythonDirect(version string) error {
+	installDir := filepath.Join(p.BaseDir, "python", version)
+	binDir := filepath.Join(installDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	// For Python, use python-build-standalone releases from Gregory Szorc's project
+	// which provides self-contained Python builds.
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	var platform, arch string
+	switch goos {
+	case "darwin":
+		platform = "apple-darwin"
+	case "linux":
+		platform = "unknown-linux-gnu"
+	default:
+		return fmt.Errorf("direct python provisioning not supported on %s", goos)
+	}
+	switch goarch {
+	case "amd64":
+		arch = "x86_64"
+	case "arm64":
+		arch = "aarch64"
+	default:
+		return fmt.Errorf("direct python provisioning not supported on %s", goarch)
+	}
+
+	// python-build-standalone uses a specific naming scheme
+	tag := fmt.Sprintf("cpython-%s+*-%s-%s-install_only_stripped.tar.gz", version, arch, platform)
+	extractDir := filepath.Join(installDir, "extract")
+
+	// Use the indygreg/python-build-standalone releases API to find the exact URL
+	script := fmt.Sprintf(`set -e
+mkdir -p %q
+
+# Try to find exact release from GitHub API
+RELEASE_TAG=$(curl -fsSL "https://api.github.com/repos/astral-sh/python-build-standalone/releases" | \
+  python3 -c "
+import sys, json
+releases = json.load(sys.stdin)
+version = '%s'
+for release in releases:
+    for asset in release.get('assets', []):
+        name = asset['name']
+        if 'cpython-' + version in name and '%s' in name and '%s' in name and 'install_only' in name and name.endswith('.tar.gz'):
+            print(asset['browser_download_url'])
+            sys.exit(0)
+sys.exit(1)
+" 2>/dev/null) || {
+  echo "Could not find Python %s for %s-%s" >&2
+  exit 1
+}
+
+curl -fsSL "$RELEASE_TAG" | tar xz -C %q --strip-components=0
+
+# The archive extracts to python/
+if [ -d %q/python/bin ]; then
+  rm -rf %q
+  mv %q/python/bin %q
+  # Keep lib for shared objects
+  if [ -d %q/python/lib ]; then
+    rm -rf %q
+    mv %q/python/lib %q
+  fi
+fi
+rm -rf %q
+`, extractDir, version, arch, platform, version, arch, platform,
+		extractDir,
+		extractDir, binDir, extractDir, binDir,
+		extractDir, filepath.Join(installDir, "lib"), extractDir, filepath.Join(installDir, "lib"),
+		extractDir,
+	)
+
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = p.stderr()
+	if err := cmd.Run(); err != nil {
+		os.RemoveAll(extractDir)
+		_ = tag // used in error context
+		return fmt.Errorf("downloading python %s: %w — try installing mise first: curl https://mise.run | sh", version, err)
+	}
+
+	return nil
+}
+
+// PrependToPath returns a modified PATH with binDir prepended.
+func PrependToPath(binDir string) string {
+	return binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+}

@@ -248,6 +248,122 @@ setup:
 	}
 }
 
+func TestLoad_RuntimesConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+runtimes:
+  provision: auto
+  manager: mise
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Runtimes == nil {
+		t.Fatal("runtimes should not be nil")
+	}
+	if cfg.Runtimes.Provision != ProvisionAuto {
+		t.Errorf("provision = %q, want %q", cfg.Runtimes.Provision, ProvisionAuto)
+	}
+	if cfg.Runtimes.Manager != RuntimeManagerMise {
+		t.Errorf("manager = %q, want %q", cfg.Runtimes.Manager, RuntimeManagerMise)
+	}
+}
+
+func TestLoad_RuntimesConfigDefaults(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Runtimes != nil {
+		t.Error("runtimes should be nil when not specified")
+	}
+	if cfg.EffectiveProvisionMode() != ProvisionNever {
+		t.Errorf("default provision = %q, want %q", cfg.EffectiveProvisionMode(), ProvisionNever)
+	}
+	if cfg.EffectiveRuntimeManager() != RuntimeManagerMise {
+		t.Errorf("default manager = %q, want %q", cfg.EffectiveRuntimeManager(), RuntimeManagerMise)
+	}
+}
+
+func TestLoad_RuntimesInvalidProvision(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+runtimes:
+  provision: invalid
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid provision mode")
+	}
+	if !strings.Contains(err.Error(), "provision") {
+		t.Errorf("error should mention 'provision', got: %v", err)
+	}
+}
+
+func TestLoad_RuntimesInvalidManager(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+runtimes:
+  manager: invalid
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid manager")
+	}
+	if !strings.Contains(err.Error(), "manager") {
+		t.Errorf("error should mention 'manager', got: %v", err)
+	}
+}
+
+func TestLoad_RuntimesAllModes(t *testing.T) {
+	for _, mode := range []ProvisionMode{ProvisionNever, ProvisionAsk, ProvisionAuto} {
+		dir := t.TempDir()
+		writeFile(t, dir, "pi.yaml", `
+project: test
+runtimes:
+  provision: `+string(mode)+`
+`)
+
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatalf("unexpected error for mode %q: %v", mode, err)
+		}
+		if cfg.Runtimes.Provision != mode {
+			t.Errorf("provision = %q, want %q", cfg.Runtimes.Provision, mode)
+		}
+	}
+}
+
+func TestLoad_RuntimesDirectManager(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+runtimes:
+  provision: auto
+  manager: direct
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Runtimes.Manager != RuntimeManagerDirect {
+		t.Errorf("manager = %q, want %q", cfg.Runtimes.Manager, RuntimeManagerDirect)
+	}
+}
+
 func TestLoad_ShortcutWithMapping(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "pi.yaml", `
