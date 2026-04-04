@@ -192,6 +192,16 @@ pi setup
 - Empty project (no automations) shows a friendly message, not an error
 - `pi run` with unknown automation lists available automations in the error
 
+## CI/CD
+
+### GitHub Actions CI (`.github/workflows/ci.yml`)
+- Triggers on push to `main` and pull requests targeting `main`
+- OS matrix: `ubuntu-latest`, `macos-latest`
+- Go version from `go.mod` via `actions/setup-go@v5` (includes module caching)
+- Node.js 22 + `tsx` installed for TypeScript step runner tests
+- Python 3 pre-installed on both runners
+- Steps: `go vet ./...` → `go build ./...` → `go test ./... -race -count=1`
+
 ## Dependencies
 
 - `github.com/spf13/cobra` — CLI framework
