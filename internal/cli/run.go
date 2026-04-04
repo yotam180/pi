@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
 )
@@ -75,10 +73,9 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		return err
 	}
 
-	piDir := filepath.Join(root, discovery.PiDir)
-	result, err := discovery.Discover(piDir)
+	result, err := discoverAll(root)
 	if err != nil {
-		return fmt.Errorf("discovering automations: %w", err)
+		return err
 	}
 
 	a, err := result.Find(name)

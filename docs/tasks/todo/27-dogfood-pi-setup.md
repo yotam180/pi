@@ -39,6 +39,7 @@ And shortcuts for common development tasks like:
 - [ ] Create `.pi/build.yaml` and `.pi/test.yaml` local automations
 - [ ] Test `pi setup` end-to-end
 - [ ] Update README with `pi setup` instructions
+- [ ] Get rid of makefile
 
 ## Blocked By
 25-builtin-installer-automations

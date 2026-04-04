@@ -16,10 +16,14 @@ const (
 	yamlExt            = ".yaml"
 )
 
+const BuiltinPrefix = "pi:"
+
 // Result holds all discovered automations and provides lookup.
 type Result struct {
 	Automations map[string]*automation.Automation
-	names       []string // sorted for display
+	Builtins    map[string]*automation.Automation // keyed without "pi:" prefix
+	names       []string                          // sorted local names
+	builtinSet  map[string]bool                   // tracks which names came from builtins
 }
 
 // Discover walks the given .pi/ directory, finds all automation YAML files,
@@ -32,7 +36,10 @@ func Discover(piDir string) (*Result, error) {
 	info, err := os.Stat(piDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Result{Automations: make(map[string]*automation.Automation)}, nil
+			return &Result{
+				Automations: make(map[string]*automation.Automation),
+				builtinSet:  make(map[string]bool),
+			}, nil
 		}
 		return nil, fmt.Errorf("accessing %s: %w", piDir, err)
 	}
@@ -87,7 +94,38 @@ func Discover(piDir string) (*Result, error) {
 	return &Result{
 		Automations: automations,
 		names:       names,
+		builtinSet:  make(map[string]bool),
 	}, nil
+}
+
+// NewResult creates a Result from a pre-built map and sorted name list.
+func NewResult(automations map[string]*automation.Automation, names []string) *Result {
+	return &Result{
+		Automations: automations,
+		names:       names,
+		builtinSet:  make(map[string]bool),
+	}
+}
+
+// MergeBuiltins incorporates built-in automations into this result.
+// Built-ins are stored separately: Find("pi:hello") always resolves to the
+// built-in, while Find("hello") resolves to local first, falling back to built-in.
+// pi list shows built-ins that don't collide with local names.
+func (r *Result) MergeBuiltins(builtinResult *Result) {
+	if builtinResult == nil {
+		return
+	}
+
+	r.Builtins = builtinResult.Automations
+
+	for name, a := range builtinResult.Automations {
+		if _, exists := r.Automations[name]; !exists {
+			r.Automations[name] = a
+			r.builtinSet[name] = true
+		}
+	}
+
+	r.rebuildNames()
 }
 
 // deriveName converts a file path within the .pi/ directory into an automation name.
@@ -126,9 +164,20 @@ func normalizeName(name string) string {
 	return filepath.ToSlash(name)
 }
 
-// Find looks up an automation by name. Returns a clear error with available
-// names if the automation is not found.
+// Find looks up an automation by name. If the name starts with "pi:", it
+// resolves exclusively from built-ins. Otherwise, it checks local automations
+// first, then falls back to built-ins.
 func (r *Result) Find(name string) (*automation.Automation, error) {
+	if strings.HasPrefix(name, BuiltinPrefix) {
+		stripped := normalizeName(strings.TrimPrefix(name, BuiltinPrefix))
+		if r.Builtins != nil {
+			if a, ok := r.Builtins[stripped]; ok {
+				return a, nil
+			}
+		}
+		return nil, fmt.Errorf("built-in automation %q not found", name)
+	}
+
 	name = normalizeName(name)
 
 	if a, ok := r.Automations[name]; ok {
@@ -142,11 +191,25 @@ func (r *Result) Find(name string) (*automation.Automation, error) {
 	return nil, fmt.Errorf("automation %q not found\n\nAvailable automations:\n%s", name, r.formatAvailable())
 }
 
-// Names returns a sorted list of all discovered automation names.
+// Names returns a sorted list of all automation names (local + built-in).
 func (r *Result) Names() []string {
 	out := make([]string, len(r.names))
 	copy(out, r.names)
 	return out
+}
+
+// IsBuiltin returns true if the given name was provided by a built-in automation
+// (and not shadowed by a local automation).
+func (r *Result) IsBuiltin(name string) bool {
+	return r.builtinSet[name]
+}
+
+func (r *Result) rebuildNames() {
+	r.names = make([]string, 0, len(r.Automations))
+	for n := range r.Automations {
+		r.names = append(r.names, n)
+	}
+	sort.Strings(r.names)
 }
 
 func (r *Result) formatAvailable() string {

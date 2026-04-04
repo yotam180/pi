@@ -9,17 +9,23 @@ PI is a single Go binary (`pi`) that reads a project's `.pi/` folder and `pi.yam
 ```
 cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
+  builtins/                        Embedded built-in automations
+    builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
+    builtins_test.go               3 tests
+    embed_pi/                      Built-in automation YAML files (embedded at build time)
+      hello.yaml                   Test built-in automation
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
+    discover.go                    discoverAll() — discovers local + built-in automations and merges
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
-    list.go                        pi list — discovers and prints automations
+    list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, and if: conditions
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
     run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
-    list_test.go                   pi list tests (7 tests — includes INPUTS column test)
+    list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
     info_test.go                   pi info tests (13 tests — includes if: condition display)
     setup_test.go                  pi setup tests (6 tests)
     shell_test.go                  pi shell tests (3 tests)
@@ -30,11 +36,11 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field) + Load()
     config_test.go                 11 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If field), Step (with If field), StepType, InputSpec + Load(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
-    automation_test.go             42 tests
+    automation.go                  Automation (with If field), Step (with If field), StepType, InputSpec + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
+    automation_test.go             45 tests
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover(), Result, Find()
-    discovery_test.go              18 tests
+    discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
+    discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
     executor.go                    Executor (with RuntimeEnv field), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution
     predicates.go                  RuntimeEnv, DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
@@ -59,9 +65,10 @@ pi run docker/up
   ├─ Project (internal/project)
   │    Walks up from CWD to find pi.yaml → repo root path
   │
-  ├─ Discovery (internal/discovery)
-  │    Walks .pi/ → map[name]*Automation
-  │    Find("docker/up") → *Automation
+  ├─ Discovery (internal/discovery + internal/builtins)
+  │    discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
+  │    Find("docker/up") → local first, then built-in fallback
+  │    Find("pi:docker/up") → always built-in
   │
   └─ Executor (internal/executor)
        Runs steps in order: bash (inline/file), run: (recursive)
@@ -77,9 +84,9 @@ pi list
   ├─ Project (internal/project)
   │    Walks up from CWD to find pi.yaml → repo root path
   │
-  └─ Discovery (internal/discovery)
-       Walks .pi/ → map[name]*Automation
-       Names() → sorted list → formatted table output
+  └─ Discovery (internal/discovery + internal/builtins)
+       discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
+       Names() → sorted list → formatted table with [built-in] markers
 ```
 
 ```
@@ -232,6 +239,16 @@ pi setup
 - Shell codegen detects `with:` on shortcuts and emits `--with key="$N"` flags instead of `"$@"` passthrough
 - `pi list` shows an INPUTS column with required inputs as `name` and optional as `name?`
 
+### Built-in automations (`pi:` prefix)
+- Built-in automation YAML files live in `internal/builtins/embed_pi/` and are embedded into the binary at build time via `//go:embed`
+- `internal/builtins.Discover()` walks the embedded FS, parses YAML files with `automation.LoadFromBytes()`, and returns a `*discovery.Result`
+- `cli.discoverAll()` discovers local automations, then calls `result.MergeBuiltins()` to incorporate built-ins
+- Precedence: local automations shadow built-ins with the same name. `Find("hello")` returns local if it exists, otherwise built-in. `Find("pi:hello")` always returns the built-in regardless of local shadowing
+- `pi list` marks built-in automations (not shadowed) with `[built-in]` in the DESCRIPTION column
+- `run:` steps can reference `pi:hello` to explicitly call built-in automations
+- `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
+- Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -311,7 +328,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 320 (41 automation + 48 CLI + 30 conditions + 11 config + 18 discovery + 86 executor + 4 project + 14 shell + 68 integration)
+Total tests: 382 (45 automation + 3 builtins + 54 CLI + 30 conditions + 11 config + 24 discovery + 120 executor + 4 project + 14 shell + 77 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`

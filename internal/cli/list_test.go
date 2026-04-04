@@ -82,7 +82,7 @@ func TestListAutomations_NoDescription(t *testing.T) {
 	}
 }
 
-func TestListAutomations_Empty(t *testing.T) {
+func TestListAutomations_NoLocalShowsBuiltins(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
 
@@ -91,8 +91,9 @@ func TestListAutomations_Empty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(buf.String(), "No automations found") {
-		t.Errorf("expected friendly message, got: %s", buf.String())
+	out := buf.String()
+	if !strings.Contains(out, "[built-in]") {
+		t.Errorf("expected built-in automations to appear, got: %s", out)
 	}
 }
 

@@ -1,0 +1,8 @@
+project: builtins-test
+
+setup:
+  - run: pi:hello
+  - run: local-hello
+
+shortcuts:
+  btest: local-hello

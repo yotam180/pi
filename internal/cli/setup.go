@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
-	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
 	"github.com/vyper-tooling/pi/internal/shell"
@@ -68,10 +66,9 @@ func runSetup(stdout, stderr io.Writer, noShell bool) error {
 	}
 
 	if len(cfg.Setup) > 0 {
-		piDir := filepath.Join(root, discovery.PiDir)
-		result, err := discovery.Discover(piDir)
+		result, err := discoverAll(root)
 		if err != nil {
-			return fmt.Errorf("discovering automations: %w", err)
+			return err
 		}
 
 		exec := &executor.Executor{

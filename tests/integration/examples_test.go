@@ -836,6 +836,116 @@ func TestConditional_Info_NoCondition(t *testing.T) {
 	}
 }
 
+// --- Built-in automation tests ---
+
+func TestBuiltins_List_ShowsBuiltinMarker(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "basic")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "[built-in]") {
+		t.Errorf("expected [built-in] marker in list output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_RunWithPiPrefix(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "pi:hello")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "hello from built-in") {
+		t.Errorf("expected built-in output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_LocalShadowsBuiltin(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "hello")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "hello from local override") {
+		t.Errorf("expected local override, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_PiPrefixAlwaysGetsBuiltin(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "pi:hello")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "hello from built-in") {
+		t.Errorf("expected built-in despite local shadow, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_RunStepCallsBuiltin(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "call-builtin")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "hello from built-in") {
+		t.Errorf("expected run step to resolve pi:hello to built-in, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_InfoWithPiPrefix(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "info", "pi:hello")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "Name:") {
+		t.Errorf("expected info output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "hello") {
+		t.Errorf("expected automation name in info, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_ListShadowed(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	// "hello" exists locally, should NOT be marked [built-in]
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "hello") && strings.Contains(line, "[built-in]") {
+			t.Errorf("expected local 'hello' to NOT have [built-in] marker, got:\n%s", line)
+		}
+	}
+}
+
+func TestBuiltins_SetupWithPiPrefix(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPiWithEnv(t, dir, []string{"CI=true"}, "setup")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "hello from built-in") {
+		t.Errorf("expected setup to run pi:hello built-in, got:\n%s", out)
+	}
+	if !strings.Contains(out, "hello from local") {
+		t.Errorf("expected setup to run local-hello, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_PiPrefixNotFound(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "pi:nonexistent")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit for pi:nonexistent")
+	}
+	if !strings.Contains(out, "built-in automation") {
+		t.Errorf("expected built-in not found error, got:\n%s", out)
+	}
+}
+
 // --- Conditional: list shows all conditional automations ---
 
 func TestConditional_List_AllAutomations(t *testing.T) {

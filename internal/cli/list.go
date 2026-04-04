@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
-	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/project"
 )
 
@@ -38,10 +36,9 @@ func listAutomations(startDir string, out io.Writer) error {
 		return err
 	}
 
-	piDir := filepath.Join(root, discovery.PiDir)
-	result, err := discovery.Discover(piDir)
+	result, err := discoverAll(root)
 	if err != nil {
-		return fmt.Errorf("discovering automations: %w", err)
+		return err
 	}
 
 	names := result.Names()
@@ -57,6 +54,9 @@ func listAutomations(startDir string, out io.Writer) error {
 		desc := a.Description
 		if desc == "" {
 			desc = "-"
+		}
+		if result.IsBuiltin(name) {
+			desc = "[built-in] " + desc
 		}
 		inputs := formatInputsSummary(a)
 		fmt.Fprintf(w, "%s\t%s\t%s\n", name, desc, inputs)

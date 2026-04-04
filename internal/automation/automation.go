@@ -337,6 +337,23 @@ func InputEnvVars(resolved map[string]string) []string {
 	return vars
 }
 
+// LoadFromBytes parses automation YAML from raw bytes, using filePath as the
+// automation's logical file path (for Dir() resolution and error messages).
+func LoadFromBytes(data []byte, filePath string) (*Automation, error) {
+	a := &Automation{}
+	if err := yaml.Unmarshal(data, a); err != nil {
+		return nil, fmt.Errorf("parsing automation %s: %w", filePath, err)
+	}
+
+	a.FilePath = filePath
+
+	if err := a.validate(filePath); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
 // IsImplemented returns true if the step type is currently implemented in the engine.
 func (s StepType) IsImplemented() bool {
 	return implementedStepTypes[s]

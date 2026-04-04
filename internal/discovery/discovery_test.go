@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vyper-tooling/pi/internal/automation"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -371,6 +373,179 @@ func TestDiscover_RootLevelAutomation(t *testing.T) {
 
 	if _, ok := result.Automations["build"]; !ok {
 		t.Error("missing root-level automation 'build'")
+	}
+}
+
+func TestMergeBuiltins_AddsBuiltins(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"),
+		makeAutomation("local", "Local automation"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	builtinAutomations := map[string]*automation.Automation{
+		"builtin-one": {Name: "builtin-one", Description: "Built-in one", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo one"}}},
+		"builtin-two": {Name: "builtin-two", Description: "Built-in two", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo two"}}},
+	}
+	builtinResult := NewResult(builtinAutomations, []string{"builtin-one", "builtin-two"})
+
+	result.MergeBuiltins(builtinResult)
+
+	if len(result.Automations) != 3 {
+		t.Errorf("expected 3 automations after merge, got %d", len(result.Automations))
+	}
+
+	names := result.Names()
+	expected := []string{"builtin-one", "builtin-two", "local"}
+	if len(names) != len(expected) {
+		t.Fatalf("expected names %v, got %v", expected, names)
+	}
+	for i, name := range expected {
+		if names[i] != name {
+			t.Errorf("names[%d]: expected %q, got %q", i, name, names[i])
+		}
+	}
+}
+
+func TestMergeBuiltins_LocalTakesPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "shared.yaml"),
+		makeAutomation("shared", "Local version"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	builtinAutomations := map[string]*automation.Automation{
+		"shared": {Name: "shared", Description: "Built-in version", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo builtin"}}},
+	}
+	builtinResult := NewResult(builtinAutomations, []string{"shared"})
+
+	result.MergeBuiltins(builtinResult)
+
+	a := result.Automations["shared"]
+	if a.Description != "Local version" {
+		t.Errorf("expected local version to take precedence, got description: %q", a.Description)
+	}
+
+	if result.IsBuiltin("shared") {
+		t.Error("expected 'shared' NOT to be marked as built-in (local shadows it)")
+	}
+}
+
+func TestIsBuiltin_CorrectlyMarked(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"),
+		makeAutomation("local", "Local"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	builtinAutomations := map[string]*automation.Automation{
+		"builtin": {Name: "builtin", Description: "Built-in", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo b"}}},
+	}
+	builtinResult := NewResult(builtinAutomations, []string{"builtin"})
+	result.MergeBuiltins(builtinResult)
+
+	if result.IsBuiltin("local") {
+		t.Error("expected 'local' NOT to be marked built-in")
+	}
+	if !result.IsBuiltin("builtin") {
+		t.Error("expected 'builtin' to be marked built-in")
+	}
+}
+
+func TestFind_BuiltinPrefix(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "shared.yaml"),
+		makeAutomation("shared", "Local version"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	builtinAutomations := map[string]*automation.Automation{
+		"shared":       {Name: "shared", Description: "Built-in version", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo builtin"}}},
+		"builtin-only": {Name: "builtin-only", Description: "Only in built-in", Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo only"}}},
+	}
+	builtinResult := NewResult(builtinAutomations, []string{"builtin-only", "shared"})
+	result.MergeBuiltins(builtinResult)
+
+	// Find("shared") → local
+	a, err := result.Find("shared")
+	if err != nil {
+		t.Fatalf("Find('shared') error: %v", err)
+	}
+	if a.Description != "Local version" {
+		t.Errorf("Find('shared') should return local, got: %q", a.Description)
+	}
+
+	// Find("pi:shared") → built-in
+	a, err = result.Find("pi:shared")
+	if err != nil {
+		t.Fatalf("Find('pi:shared') error: %v", err)
+	}
+	if a.Description != "Built-in version" {
+		t.Errorf("Find('pi:shared') should return built-in, got: %q", a.Description)
+	}
+
+	// Find("pi:builtin-only") → built-in
+	a, err = result.Find("pi:builtin-only")
+	if err != nil {
+		t.Fatalf("Find('pi:builtin-only') error: %v", err)
+	}
+	if a.Description != "Only in built-in" {
+		t.Errorf("Find('pi:builtin-only') should return built-in, got: %q", a.Description)
+	}
+}
+
+func TestFind_BuiltinPrefix_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"),
+		makeAutomation("local", "Local"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No builtins merged — pi: prefix should fail
+	_, err = result.Find("pi:nonexistent")
+	if err == nil {
+		t.Fatal("expected error for pi:nonexistent")
+	}
+	if !strings.Contains(err.Error(), "built-in automation") {
+		t.Errorf("expected built-in error message, got: %v", err)
+	}
+}
+
+func TestMergeBuiltins_NilIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"),
+		makeAutomation("local", "Local"))
+
+	result, err := Discover(piDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result.MergeBuiltins(nil)
+
+	if len(result.Automations) != 1 {
+		t.Errorf("expected 1 automation after nil merge, got %d", len(result.Automations))
 	}
 }
 
