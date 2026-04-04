@@ -1,7 +1,7 @@
 # Polyglot Runner & Shell Integration
 
 ## Status
-todo
+in_progress
 
 ## Priority
 high
