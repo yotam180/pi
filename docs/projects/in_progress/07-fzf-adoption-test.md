@@ -1,7 +1,7 @@
 # Real-World Adoption Test: fzf
 
 ## Status
-todo
+in_progress
 
 ## Priority
 medium
@@ -42,8 +42,8 @@ PI's feature set has been built based on hypothetical workflows. Testing against
 - Windows support
 
 ## Success Criteria
-- [ ] fzf cloned and workflows documented
-- [ ] Missing PI features identified and tasks created
+- [x] fzf cloned and workflows documented
+- [x] Missing PI features identified and tasks created
 - [ ] `.pi/` folder created with automations for all fzf developer workflows
 - [ ] `pi.yaml` with shortcuts and setup entries
 - [ ] `pi setup` installs all required tools

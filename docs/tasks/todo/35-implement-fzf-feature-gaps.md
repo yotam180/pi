@@ -15,22 +15,41 @@ medium
 ## Description
 Based on the findings from task 34 (clone-and-examine-fzf), implement any missing PI features or built-in automations needed to support fzf's developer workflows.
 
-This task is a meta-task — the agent should create specific sub-tasks for each feature gap discovered and work through them. Common gaps might include:
-- Missing built-in automations (e.g., `pi:install-ruby`, `pi:install-goreleaser`)
-- Missing step types or execution features
-- Missing pi.yaml configuration options
+Task 34 found that **PI can model 100% of fzf's workflows today** using bash steps. The gaps are quality-of-life improvements, not blockers. The two most impactful gaps are:
 
-If task 34 finds no feature gaps, this task should be marked done with a note.
+### Gap 1: `env:` field on steps (medium priority)
+fzf's Makefile uses environment variable overrides like `TAGS=pprof`, `SHELL=/bin/sh GOOS=`, etc. PI steps can't declare environment variables — the workaround is inlining them in bash (`TAGS=pprof go build ...`). An `env:` field on steps would be cleaner.
+
+### Gap 2: `pi:install-go` built-in (low priority)
+PI has `install-python` and `install-node` but not Go. Since PI itself is a Go tool and targets Go developers, a built-in `install-go` would be useful. Can be modeled as a local `.pi/` automation for now.
+
+### Non-gaps
+- No `pi:install-ruby` built-in — Ruby is niche; local automation is fine
+- No `pi:install-shfmt` built-in — too niche for a built-in
+- No matrix/cross-compile support — goreleaser handles this; not PI's job
+- No `make` step type — bash works fine
+
+### Recommendation
+Since none of the gaps are blocking task 36 (Transform fzf to Use PI), this task can be done in parallel or after task 36. The `env:` feature is the only one worth implementing before task 36 for a cleaner result.
 
 ## Acceptance Criteria
-- [ ] All feature gaps from task 34 have corresponding tasks created
-- [ ] All created tasks are completed or documented as out-of-scope
+- [ ] Decide on which gaps to implement vs skip
+- [ ] If implementing `env:` on steps: parse, validate, inject env vars, test
+- [ ] If implementing `pi:install-go`: add built-in automation YAML, tests
 - [ ] `go test ./...` passes after all changes
 - [ ] Documentation updated for any new features
 
 ## Implementation Notes
 
+### Findings from task 34
+- PI can model all 14 fzf Makefile targets as automations
+- All gaps have bash workarounds
+- The `env:` gap is the most impactful for clean automation YAML
+
 ## Subtasks
+- [ ] Implement `env:` field on steps (if decided)
+- [ ] Implement `pi:install-go` built-in (if decided)
+- [ ] Update architecture.md and README.md
 
 ## Blocked By
-34-clone-and-examine-fzf
+34-clone-and-examine-fzf (completed)
