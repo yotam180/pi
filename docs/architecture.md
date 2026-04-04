@@ -187,11 +187,12 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 152 (14 automation + 28 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 23 integration)
+Total tests: 163 (14 automation + 28 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 33 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
 - Run `pi list` and `pi run` against `examples/basic/`, `examples/docker-project/`, and `examples/pipe/`
 - Assert exit codes, output content, and step ordering
 - Pipe tests verify cross-language piping (bash→python→bash) end-to-end
+- Polyglot tests cover Python (inline/file), TypeScript (inline/file), multi-step pipe chains (bash→Python→TypeScript), and `run:` step piping
 - Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`

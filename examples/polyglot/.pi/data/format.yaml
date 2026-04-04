@@ -1,0 +1,8 @@
+name: data/format
+description: Pipe JSON data through a TypeScript formatter file
+
+steps:
+  - run: data/generate
+    pipe_to: next
+
+  - typescript: format.ts

@@ -1,0 +1,30 @@
+name: pipeline/etl
+description: Three-step ETL pipeline — bash generates CSV, Python transforms, TypeScript formats
+
+steps:
+  - bash: |
+      echo "name,score"
+      echo "alice,95"
+      echo "bob,87"
+      echo "charlie,92"
+    pipe_to: next
+
+  - python: |
+      import sys, json
+      lines = sys.stdin.read().strip().split("\n")
+      header = lines[0].split(",")
+      records = []
+      for line in lines[1:]:
+          values = line.split(",")
+          records.append(dict(zip(header, values)))
+      print(json.dumps(records))
+    pipe_to: next
+
+  - typescript: |
+      const input = require("fs").readFileSync("/dev/stdin", "utf-8");
+      const records: { name: string; score: string }[] = JSON.parse(input);
+      console.log("ETL Complete:");
+      records.forEach(r => {
+        console.log(`  ${r.name}: ${r.score}`);
+      });
+      console.log(`Total: ${records.length} records`);

@@ -1,0 +1,9 @@
+project: polyglot-example
+
+shortcuts:
+  reverse: text/reverse
+  transform: text/transform
+  generate: data/generate
+  fmt-data: data/format
+  etl: pipeline/etl
+  wc: pipeline/wordcount

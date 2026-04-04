@@ -1,0 +1,8 @@
+name: text/transform
+description: Read stdin and format it into a numbered box using a Python script file
+
+steps:
+  - bash: printf "alpha\nbeta\ngamma\ndelta"
+    pipe_to: next
+
+  - python: transform.py

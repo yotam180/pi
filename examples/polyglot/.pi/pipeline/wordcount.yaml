@@ -1,0 +1,14 @@
+name: pipeline/wordcount
+description: Generate text in bash, count words in Python
+
+steps:
+  - bash: |
+      echo "the quick brown fox"
+      echo "jumps over the lazy dog"
+    pipe_to: next
+
+  - python: |
+      import sys
+      text = sys.stdin.read()
+      words = text.split()
+      print(f"words: {len(words)}")
