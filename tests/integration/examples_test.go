@@ -550,3 +550,69 @@ func TestConditional_PipePassesThroughSkipped(t *testing.T) {
 		t.Errorf("output = %q, want %q (pipe should pass through skipped step)", trimmed, "hello world")
 	}
 }
+
+// --- Automation-level if: tests ---
+
+func TestConditional_AutomationLevelIf_List(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"macos-only", "impossible", "call-conditional"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("expected %q in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestConditional_AutomationLevelIf_Impossible(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "impossible")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "[skipped] impossible") {
+		t.Errorf("expected skip message, got:\n%s", out)
+	}
+	if strings.Contains(out, "This should never run") {
+		t.Errorf("impossible automation should not have executed")
+	}
+}
+
+func TestConditional_AutomationLevelIf_MacOSOnly(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "macos-only")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if runtime.GOOS == "darwin" {
+		if !strings.Contains(out, "macOS automation executed") {
+			t.Errorf("on macOS, expected 'macOS automation executed', got:\n%s", out)
+		}
+	} else {
+		if !strings.Contains(out, "[skipped] macos-only") {
+			t.Errorf("on non-macOS, expected skip message, got:\n%s", out)
+		}
+	}
+}
+
+func TestConditional_AutomationLevelIf_RunStepCallsSkipped(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "call-conditional")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "before") {
+		t.Errorf("expected 'before' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "after") {
+		t.Errorf("expected 'after' in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[skipped] impossible") {
+		t.Errorf("expected skip message for impossible, got:\n%s", out)
+	}
+	if strings.Contains(out, "This should never run") {
+		t.Errorf("impossible automation should not have executed")
+	}
+}

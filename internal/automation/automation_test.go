@@ -727,3 +727,122 @@ steps:
 		t.Errorf("step.If = %q, want %q", a.Steps[0].If, `file.exists(".env")`)
 	}
 }
+
+func TestLoad_AutomationWithIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "cond-auto.yaml", `
+name: macos-only
+description: Only runs on macOS
+if: os.macos
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "os.macos" {
+		t.Errorf("If = %q, want %q", a.If, "os.macos")
+	}
+	if a.Name != "macos-only" {
+		t.Errorf("Name = %q, want %q", a.Name, "macos-only")
+	}
+}
+
+func TestLoad_AutomationWithoutIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-cond-auto.yaml", `
+name: always-run
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "" {
+		t.Errorf("If = %q, want empty string", a.If)
+	}
+}
+
+func TestLoad_AutomationWithComplexIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "complex-auto.yaml", `
+name: complex-cond
+if: os.macos and not command.brew
+steps:
+  - bash: echo installing
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "os.macos and not command.brew" {
+		t.Errorf("If = %q, want %q", a.If, "os.macos and not command.brew")
+	}
+}
+
+func TestLoad_AutomationWithInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad-auto.yaml", `
+name: bad-if
+if: "and and and"
+steps:
+  - bash: echo hello
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid if expression")
+	}
+	if !strings.Contains(err.Error(), "invalid if expression") {
+		t.Errorf("error should mention 'invalid if expression', got: %v", err)
+	}
+}
+
+func TestLoad_AutomationWithFuncCallIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "func-auto.yaml", `
+name: env-check
+if: file.exists(".env")
+steps:
+  - bash: source .env && echo loaded
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != `file.exists(".env")` {
+		t.Errorf("If = %q, want %q", a.If, `file.exists(".env")`)
+	}
+}
+
+func TestLoad_AutomationIfWithStepIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "both-if.yaml", `
+name: both-cond
+if: os.macos
+steps:
+  - bash: brew install jq
+    if: not command.jq
+  - bash: echo done
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "os.macos" {
+		t.Errorf("automation If = %q, want %q", a.If, "os.macos")
+	}
+	if a.Steps[0].If != "not command.jq" {
+		t.Errorf("step[0] If = %q, want %q", a.Steps[0].If, "not command.jq")
+	}
+	if a.Steps[1].If != "" {
+		t.Errorf("step[1] If = %q, want empty", a.Steps[1].If)
+	}
+}

@@ -66,6 +66,10 @@ type Automation struct {
 	Description string `yaml:"description"`
 	Steps       []Step `yaml:"steps"`
 
+	// If contains a boolean condition expression. When present, the entire
+	// automation is skipped if the expression evaluates to false.
+	If string `yaml:"-"`
+
 	// Inputs declares the parameters this automation accepts.
 	// Keys are ordered by insertion (YAML parse order) for positional mapping.
 	Inputs    map[string]InputSpec `yaml:"-"`
@@ -119,6 +123,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		Description string     `yaml:"description"`
 		Steps       []stepRaw  `yaml:"steps"`
 		Inputs      *inputsRaw `yaml:"inputs"`
+		If          string     `yaml:"if"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -127,6 +132,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 
 	a.Name = raw.Name
 	a.Description = raw.Description
+	a.If = raw.If
 
 	if raw.Inputs != nil {
 		a.Inputs = raw.Inputs.Specs
@@ -238,6 +244,12 @@ func (a *Automation) validate(path string) error {
 
 	if len(a.Steps) == 0 {
 		return fmt.Errorf("%s: automation must have at least one step", path)
+	}
+
+	if a.If != "" {
+		if _, err := conditions.Predicates(a.If); err != nil {
+			return fmt.Errorf("%s: invalid if expression: %w", path, err)
+		}
 	}
 
 	for i, step := range a.Steps {

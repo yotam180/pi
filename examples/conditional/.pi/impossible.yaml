@@ -1,0 +1,6 @@
+name: impossible
+description: Automation with impossible condition (always skipped)
+if: os.windows and os.linux
+
+steps:
+  - bash: echo "This should never run"

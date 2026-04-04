@@ -64,6 +64,17 @@ func (e *Executor) Run(a *automation.Automation, args []string) error {
 // RunWithInputs executes all steps with explicit --with input values.
 // Only one of args (positional) or withArgs may be non-empty.
 func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withArgs map[string]string) error {
+	if a.If != "" {
+		skip, err := e.evaluateCondition(a.If)
+		if err != nil {
+			return fmt.Errorf("automation %q if: %w", a.Name, err)
+		}
+		if skip {
+			fmt.Fprintf(e.stderr(), "[skipped] %s (condition: %s)\n", a.Name, a.If)
+			return nil
+		}
+	}
+
 	if err := e.pushCall(a.Name); err != nil {
 		return err
 	}

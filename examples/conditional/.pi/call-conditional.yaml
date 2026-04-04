@@ -1,0 +1,7 @@
+name: call-conditional
+description: Calls a conditionally-skipped automation via run step
+
+steps:
+  - bash: echo "before"
+  - run: impossible
+  - bash: echo "after"

@@ -1,0 +1,6 @@
+name: macos-only
+description: Automation that only runs on macOS
+if: os.macos
+
+steps:
+  - bash: echo "macOS automation executed"
