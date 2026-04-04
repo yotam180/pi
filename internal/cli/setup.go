@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/executor"
@@ -81,6 +82,16 @@ func runSetup(stdout, stderr io.Writer, noShell bool) error {
 		}
 
 		for i, entry := range cfg.Setup {
+			if entry.If != "" {
+				skip, err := evaluateSetupCondition(entry.If, root)
+				if err != nil {
+					return fmt.Errorf("setup[%d] if: %w", i, err)
+				}
+				if skip {
+					fmt.Fprintf(stdout, "==> setup[%d]: %s [skipped] (condition: %s)\n", i, entry.Run, entry.If)
+					continue
+				}
+			}
 			fmt.Fprintf(stdout, "==> setup[%d]: %s\n", i, entry.Run)
 			a, err := result.Find(entry.Run)
 			if err != nil {
@@ -117,6 +128,27 @@ func runSetup(stdout, stderr io.Writer, noShell bool) error {
 
 	fmt.Fprintln(stdout, "Setup complete.")
 	return nil
+}
+
+// evaluateSetupCondition resolves and evaluates an if: expression for a setup entry.
+// Returns true if the entry should be skipped (condition evaluates to false).
+func evaluateSetupCondition(expr string, repoRoot string) (bool, error) {
+	predNames, err := conditions.Predicates(expr)
+	if err != nil {
+		return false, err
+	}
+
+	resolved, err := executor.ResolvePredicates(predNames, repoRoot)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := conditions.Eval(expr, resolved)
+	if err != nil {
+		return false, err
+	}
+
+	return !result, nil
 }
 
 func isCI() bool {

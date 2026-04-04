@@ -1,1 +1,8 @@
 project: conditional-demo
+
+setup:
+  - run: setup-always
+  - run: setup-never
+    if: os.windows and os.linux
+  - run: setup-platform
+    if: os.macos or os.linux

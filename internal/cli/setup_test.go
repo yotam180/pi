@@ -107,6 +107,90 @@ func TestSetup_InstallsShortcuts(t *testing.T) {
 	}
 }
 
+func TestSetup_SkipsEntryWithFalseCondition(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte(`project: testproj
+setup:
+  - run: greet
+    if: os.windows
+  - run: greet2
+`), 0o644)
+
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "greet.yaml"), []byte(`name: greet
+description: Say hello
+steps:
+  - bash: echo "SKIPPED_ENTRY_OUTPUT"
+`), 0o644)
+	os.WriteFile(filepath.Join(piDir, "greet2.yaml"), []byte(`name: greet2
+description: Second greeting
+steps:
+  - bash: echo "EXECUTED_ENTRY_OUTPUT"
+`), 0o644)
+
+	t.Chdir(root)
+
+	var stdout, stderr bytes.Buffer
+	err := runSetup(&stdout, &stderr, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "[skipped]") {
+		t.Errorf("expected [skipped] in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "os.windows") {
+		t.Errorf("expected condition in skip message, got:\n%s", out)
+	}
+	if strings.Contains(out, "SKIPPED_ENTRY_OUTPUT") {
+		t.Errorf("greet should have been skipped, got:\n%s", out)
+	}
+	if !strings.Contains(out, "EXECUTED_ENTRY_OUTPUT") {
+		t.Errorf("greet2 should have run, got:\n%s", out)
+	}
+}
+
+func TestSetup_RunsEntryWithTrueCondition(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte(`project: testproj
+setup:
+  - run: greet
+    if: command.bash
+`), 0o644)
+
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "greet.yaml"), []byte(`name: greet
+description: Say hello
+steps:
+  - bash: echo "Hello from setup"
+`), 0o644)
+
+	t.Chdir(root)
+
+	var stdout, stderr bytes.Buffer
+	err := runSetup(&stdout, &stderr, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := stdout.String()
+	if strings.Contains(out, "[skipped]") {
+		t.Errorf("entry should not be skipped, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Hello from setup") {
+		t.Errorf("expected setup output, got:\n%s", out)
+	}
+}
+
 func TestSetup_Empty(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: empty\n"), 0o644)

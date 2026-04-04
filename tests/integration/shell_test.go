@@ -185,3 +185,45 @@ func TestSetup_WithNoShell(t *testing.T) {
 		t.Error("shell file should not be created with --no-shell")
 	}
 }
+
+func TestSetup_ConditionalEntries(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	tmpHome := t.TempDir()
+
+	out, code := runPiWithHome(t, dir, tmpHome, "setup", "--no-shell")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	// setup-always (no if:) should always run
+	if !strings.Contains(out, "setup-always executed") {
+		t.Errorf("setup-always should run, got:\n%s", out)
+	}
+
+	// setup-never (if: os.windows and os.linux) should be skipped
+	if strings.Contains(out, "setup-never executed") {
+		t.Errorf("setup-never should be skipped, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[skipped]") {
+		t.Errorf("expected [skipped] marker, got:\n%s", out)
+	}
+
+	// setup-platform (if: os.macos or os.linux) runs on CI (ubuntu) and dev (macOS)
+	if !strings.Contains(out, "setup-platform executed") {
+		t.Errorf("setup-platform should run on macOS/Linux, got:\n%s", out)
+	}
+}
+
+func TestSetup_ConditionalSkipShowsCondition(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	tmpHome := t.TempDir()
+
+	out, code := runPiWithHome(t, dir, tmpHome, "setup", "--no-shell")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	if !strings.Contains(out, "os.windows and os.linux") {
+		t.Errorf("expected condition expression in skip message, got:\n%s", out)
+	}
+}

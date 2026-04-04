@@ -1,0 +1,4 @@
+name: setup-never
+description: Never runs (impossible condition)
+steps:
+  - bash: echo "setup-never executed"

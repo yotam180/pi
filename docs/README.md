@@ -63,7 +63,10 @@ shortcuts:
     anywhere: true    # default is repo-root; this flag lets it run from anywhere
 
 setup:
+  - run: setup/install-brew
+    if: os.macos
   - run: setup/install-uv
+    if: not command.uv
   - run: setup/install-cursor-extensions
   - run: pi:install-python          # built-in PI automation
     with:
@@ -158,6 +161,8 @@ function sk_deploy() {
 ## Environment Setup
 
 `pi setup` runs all automations listed in `pi.yaml → setup:` sequentially. Setup automations are expected to be idempotent — check first, act only if needed.
+
+Setup entries support the same `if:` conditions as automation steps. When a condition evaluates to false, the entry is skipped with a message. Entries without `if:` always run.
 
 ```yaml
 # .pi/setup/install-uv.yaml

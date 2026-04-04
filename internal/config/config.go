@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"gopkg.in/yaml.v3"
 )
 
@@ -29,6 +30,7 @@ type Shortcut struct {
 type SetupEntry struct {
 	Run  string            `yaml:"run"`
 	With map[string]string `yaml:"with"`
+	If   string            `yaml:"if"`
 }
 
 // UnmarshalYAML implements custom unmarshalling for Shortcut so it can accept
@@ -93,6 +95,11 @@ func (c *ProjectConfig) validate(path string) error {
 	for i, entry := range c.Setup {
 		if entry.Run == "" {
 			return fmt.Errorf("%s: setup[%d] has empty \"run\" field", path, i)
+		}
+		if entry.If != "" {
+			if _, err := conditions.Predicates(entry.If); err != nil {
+				return fmt.Errorf("%s: setup[%d] invalid if expression: %w", path, i, err)
+			}
 		}
 	}
 

@@ -196,6 +196,58 @@ shortcuts:
 	}
 }
 
+func TestLoad_SetupEntryWithIf(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - run: setup/install-brew
+    if: os.macos
+  - run: setup/install-uv
+    if: not command.uv
+  - run: setup/install-node
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Setup) != 3 {
+		t.Fatalf("setup count = %d, want 3", len(cfg.Setup))
+	}
+	if cfg.Setup[0].If != "os.macos" {
+		t.Errorf("setup[0].If = %q, want %q", cfg.Setup[0].If, "os.macos")
+	}
+	if cfg.Setup[1].If != "not command.uv" {
+		t.Errorf("setup[1].If = %q, want %q", cfg.Setup[1].If, "not command.uv")
+	}
+	if cfg.Setup[2].If != "" {
+		t.Errorf("setup[2].If = %q, want empty", cfg.Setup[2].If)
+	}
+}
+
+func TestLoad_SetupEntryWithInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - run: setup/install-brew
+    if: "and and"
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for invalid if expression")
+	}
+	if !strings.Contains(err.Error(), "setup[0]") {
+		t.Errorf("error should reference setup[0], got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "invalid if expression") {
+		t.Errorf("error should mention invalid if expression, got: %v", err)
+	}
+}
+
 func TestLoad_ShortcutWithMapping(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "pi.yaml", `

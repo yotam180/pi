@@ -14,21 +14,21 @@ internal/
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
     list.go                        pi list — discovers and prints automations
     info.go                        pi info — shows automation name, description, and input docs
-    setup.go                       pi setup — runs setup entries, then pi shell (CI-aware)
+    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
     run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column test)
     info_test.go                   pi info tests (9 tests)
-    setup_test.go                  pi setup tests (4 tests)
+    setup_test.go                  pi setup tests (6 tests)
     shell_test.go                  pi shell tests (3 tests)
   conditions/                      Boolean expression parser/evaluator for if: fields
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
   config/                          pi.yaml parsing
-    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry + Load()
-    config_test.go                 9 tests
+    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field) + Load()
+    config_test.go                 11 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation (with If field), Step (with If field), StepType, InputSpec + Load(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
     automation_test.go             42 tests
@@ -196,6 +196,14 @@ pi setup
 - `run:` steps calling a conditionally-skipped automation succeed without error (the parent step continues normally)
 - Invalid `if:` expressions are caught at YAML load time, not at runtime
 
+### Conditional setup entries (`if:` on setup)
+- Setup entries in `pi.yaml` can declare an `if:` field containing a boolean condition expression
+- Before running each setup entry, `pi setup` evaluates the `if:` condition using `conditions.Predicates()` + `executor.ResolvePredicates()` + `conditions.Eval()`
+- If the condition evaluates to false, the entry is skipped with a message: `==> setup[N]: <name> [skipped] (condition: <expr>)`
+- Entries without `if:` always run (backward compatible)
+- Invalid `if:` expressions are caught at config load time, not at runtime
+- The same predicate system used by step-level and automation-level `if:` is reused (os.*, command.*, env.*, file.exists(), etc.)
+
 ### Shell shortcuts (`pi shell`)
 - Shortcuts are defined in `pi.yaml → shortcuts:` as either a string (`"docker/up"`) or an object (`{run: ..., anywhere: true}`)
 - `pi shell` writes shell functions to `~/.pi/shell/<project>.sh` — one file per project
@@ -291,7 +299,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 301 (42 automation + 42 CLI + 30 conditions + 9 config + 18 discovery + 86 executor + 4 project + 14 shell + 56 integration)
+Total tests: 306 (41 automation + 44 CLI + 30 conditions + 11 config + 18 discovery + 86 executor + 4 project + 14 shell + 58 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -299,7 +307,7 @@ Total tests: 301 (42 automation + 42 CLI + 30 conditions + 9 config + 18 discove
 - Assert exit codes, output content, and step ordering
 - Pipe tests verify cross-language piping (bash→python→bash) end-to-end
 - Polyglot tests cover Python (inline/file), TypeScript (inline/file), multi-step pipe chains (bash→Python→TypeScript), and `run:` step piping
-- Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`
+- Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`, setup with conditional entries (skip/run), conditional skip shows condition
 - Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation

@@ -1,0 +1,4 @@
+name: setup-always
+description: Always runs (no if condition)
+steps:
+  - bash: echo "setup-always executed"

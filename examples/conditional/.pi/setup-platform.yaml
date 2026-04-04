@@ -1,0 +1,4 @@
+name: setup-platform
+description: Runs on macOS or Linux
+steps:
+  - bash: echo "setup-platform executed"
