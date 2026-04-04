@@ -436,6 +436,280 @@ func TestDiscover_InstallNodeUsesMiseAndBrew(t *testing.T) {
 	}
 }
 
+func TestDiscover_CursorInstallExtensionsExists(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, ok := result.Automations["cursor/install-extensions"]
+	if !ok {
+		t.Fatal("expected to find built-in 'cursor/install-extensions' automation")
+	}
+
+	if a.Name != "cursor/install-extensions" {
+		t.Errorf("expected name 'cursor/install-extensions', got %q", a.Name)
+	}
+
+	if a.Description != "Install missing Cursor extensions from a list" {
+		t.Errorf("expected description 'Install missing Cursor extensions from a list', got %q", a.Description)
+	}
+
+	if len(a.Steps) == 0 {
+		t.Error("expected at least one step")
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsIsResolvable(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, err := result.Find("cursor/install-extensions")
+	if err != nil {
+		t.Fatalf("Find('cursor/install-extensions') returned error: %v", err)
+	}
+	if a.Name != "cursor/install-extensions" {
+		t.Errorf("expected name 'cursor/install-extensions', got %q", a.Name)
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsUsesBash(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["cursor/install-extensions"]
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Type != automation.StepTypeBash {
+		t.Errorf("expected bash step, got %q", a.Steps[0].Type)
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsAcceptsExtensionsInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["cursor/install-extensions"]
+	if len(a.Inputs) == 0 {
+		t.Fatal("expected cursor/install-extensions to have inputs")
+	}
+	spec, ok := a.Inputs["extensions"]
+	if !ok {
+		t.Fatal("expected cursor/install-extensions to have an 'extensions' input")
+	}
+	if !spec.IsRequired() {
+		t.Error("expected 'extensions' input to be required")
+	}
+	if spec.Description == "" {
+		t.Error("expected 'extensions' input to have a description")
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsUsesInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["cursor/install-extensions"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "PI_INPUT_EXTENSIONS") {
+		t.Error("expected script to use PI_INPUT_EXTENSIONS env var")
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsIsIdempotent(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["cursor/install-extensions"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "cursor --list-extensions") {
+		t.Error("expected script to check existing extensions via cursor --list-extensions")
+	}
+	if !strings.Contains(script, "[already installed]") {
+		t.Error("expected script to print '[already installed]' when all extensions present")
+	}
+	if !strings.Contains(script, "[installed]") {
+		t.Error("expected script to print '[installed]' after installing new extensions")
+	}
+}
+
+func TestDiscover_CursorInstallExtensionsUsesCursorCLI(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["cursor/install-extensions"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "cursor --install-extension") {
+		t.Error("expected script to install extensions via 'cursor --install-extension'")
+	}
+}
+
+func TestDiscover_GitInstallHooksExists(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, ok := result.Automations["git/install-hooks"]
+	if !ok {
+		t.Fatal("expected to find built-in 'git/install-hooks' automation")
+	}
+
+	if a.Name != "git/install-hooks" {
+		t.Errorf("expected name 'git/install-hooks', got %q", a.Name)
+	}
+
+	if a.Description != "Install git hooks from a source directory" {
+		t.Errorf("expected description 'Install git hooks from a source directory', got %q", a.Description)
+	}
+
+	if len(a.Steps) == 0 {
+		t.Error("expected at least one step")
+	}
+}
+
+func TestDiscover_GitInstallHooksIsResolvable(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, err := result.Find("git/install-hooks")
+	if err != nil {
+		t.Fatalf("Find('git/install-hooks') returned error: %v", err)
+	}
+	if a.Name != "git/install-hooks" {
+		t.Errorf("expected name 'git/install-hooks', got %q", a.Name)
+	}
+}
+
+func TestDiscover_GitInstallHooksUsesBash(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Type != automation.StepTypeBash {
+		t.Errorf("expected bash step, got %q", a.Steps[0].Type)
+	}
+}
+
+func TestDiscover_GitInstallHooksAcceptsSourceInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	if len(a.Inputs) == 0 {
+		t.Fatal("expected git/install-hooks to have inputs")
+	}
+	spec, ok := a.Inputs["source"]
+	if !ok {
+		t.Fatal("expected git/install-hooks to have a 'source' input")
+	}
+	if !spec.IsRequired() {
+		t.Error("expected 'source' input to be required")
+	}
+	if spec.Description == "" {
+		t.Error("expected 'source' input to have a description")
+	}
+}
+
+func TestDiscover_GitInstallHooksUsesInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "PI_INPUT_SOURCE") {
+		t.Error("expected script to use PI_INPUT_SOURCE env var")
+	}
+}
+
+func TestDiscover_GitInstallHooksIsIdempotent(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "cmp") {
+		t.Error("expected script to compare files for idempotency (cmp)")
+	}
+	if !strings.Contains(script, "[already installed]") {
+		t.Error("expected script to print '[already installed]' when hooks are up to date")
+	}
+	if !strings.Contains(script, "[installed]") {
+		t.Error("expected script to print '[installed]' after installing hooks")
+	}
+}
+
+func TestDiscover_GitInstallHooksMakesExecutable(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "chmod +x") {
+		t.Error("expected script to make hooks executable via chmod +x")
+	}
+}
+
+func TestDiscover_GitInstallHooksCopiesToGitHooksDir(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["git/install-hooks"]
+	script := a.Steps[0].Value
+	if !strings.Contains(script, ".git/hooks") {
+		t.Error("expected script to reference .git/hooks directory")
+	}
+}
+
+func TestDiscover_DevToolAutomationsNoInputs(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	// cursor/install-extensions requires 'extensions' input
+	a := result.Automations["cursor/install-extensions"]
+	if len(a.Inputs) != 1 {
+		t.Errorf("expected cursor/install-extensions to have 1 input, got %d", len(a.Inputs))
+	}
+
+	// git/install-hooks requires 'source' input
+	a = result.Automations["git/install-hooks"]
+	if len(a.Inputs) != 1 {
+		t.Errorf("expected git/install-hooks to have 1 input, got %d", len(a.Inputs))
+	}
+}
+
 func TestDiscover_InstallerAutomationsNoInputs(t *testing.T) {
 	result, err := Discover()
 	if err != nil {

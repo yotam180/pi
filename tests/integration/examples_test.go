@@ -1130,6 +1130,117 @@ func TestBuiltins_InstallerListShowsInputsColumn(t *testing.T) {
 	}
 }
 
+// --- Dev tool built-in automations ---
+
+func TestBuiltins_DevToolAutomationsInList(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"cursor/install-extensions", "git/install-hooks"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("expected %q in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestBuiltins_DevToolAutomationsMarkedBuiltIn(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"cursor/install-extensions", "git/install-hooks"} {
+		found := false
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, name) && strings.Contains(line, "[built-in]") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestBuiltins_DevToolInfoShowsDetails(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	tests := []struct {
+		name        string
+		description string
+	}{
+		{"pi:cursor/install-extensions", "Install missing Cursor extensions"},
+		{"pi:git/install-hooks", "Install git hooks from a source directory"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runPi(t, dir, "info", tc.name)
+			if code != 0 {
+				t.Fatalf("expected exit 0, got %d: %s", code, out)
+			}
+			if !strings.Contains(out, "Name:") {
+				t.Errorf("expected Name: in info output, got:\n%s", out)
+			}
+			if !strings.Contains(out, "Description:") {
+				t.Errorf("expected Description: in info output, got:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestBuiltins_DevToolInfoShowsInputs(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"pi:cursor/install-extensions", "extensions"},
+		{"pi:git/install-hooks", "source"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runPi(t, dir, "info", tc.name)
+			if code != 0 {
+				t.Fatalf("expected exit 0, got %d: %s", code, out)
+			}
+			if !strings.Contains(out, tc.input) {
+				t.Errorf("expected %q input in info output, got:\n%s", tc.input, out)
+			}
+		})
+	}
+}
+
+func TestBuiltins_DevToolListShowsInputsColumn(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"cursor/install-extensions", "extensions"},
+		{"git/install-hooks", "source"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(line, tc.name) && strings.Contains(line, "[built-in]") {
+					if !strings.Contains(line, tc.input) {
+						t.Errorf("expected %s list line to show %q input, got:\n%s", tc.name, tc.input, line)
+					}
+					return
+				}
+			}
+			t.Errorf("did not find %s in list output:\n%s", tc.name, out)
+		})
+	}
+}
+
 // --- Conditional: list shows all conditional automations ---
 
 func TestConditional_List_AllAutomations(t *testing.T) {

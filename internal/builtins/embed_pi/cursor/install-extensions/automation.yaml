@@ -1,0 +1,35 @@
+name: cursor/install-extensions
+description: Install missing Cursor extensions from a list
+
+inputs:
+  extensions:
+    type: string
+    description: Extension IDs to install (newline-separated or comma-separated)
+
+steps:
+  - bash: |
+      EXTENSIONS="$PI_INPUT_EXTENSIONS"
+      if [ -z "$EXTENSIONS" ]; then
+        echo "Error: extensions input is required" >&2
+        exit 1
+      fi
+
+      NORMALIZED=$(printf '%s\n' "$EXTENSIONS" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+      INSTALLED=$(cursor --list-extensions 2>/dev/null || true)
+      NEW_COUNT=0
+      SKIP_COUNT=0
+
+      for ext in $NORMALIZED; do
+        if echo "$INSTALLED" | grep -qx "$ext"; then
+          SKIP_COUNT=$((SKIP_COUNT + 1))
+        else
+          cursor --install-extension "$ext" --force
+          NEW_COUNT=$((NEW_COUNT + 1))
+        fi
+      done
+
+      if [ "$NEW_COUNT" -eq 0 ]; then
+        echo "[already installed] all ${SKIP_COUNT} extension(s) present"
+      else
+        echo "[installed] ${NEW_COUNT} new extension(s), ${SKIP_COUNT} already present"
+      fi

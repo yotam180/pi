@@ -191,8 +191,10 @@ PI ships with a standard collection of automations for common tasks:
 - `pi:install-node` — check/install Node.js
 - `pi:install-uv` — check/install uv
 - `pi:install-homebrew` — check/install Homebrew
+- `pi:install-tsx` — check/install tsx globally via npm
 - `pi:docker/up`, `pi:docker/down`, `pi:docker/logs` — standard Docker Compose ops
-- `pi:git/hooks` — install git hooks from a directory
+- `pi:cursor/install-extensions` — install missing Cursor extensions from a list
+- `pi:git/install-hooks` — install git hooks from a source directory
 
 These are defined in the PI repository's own `.pi/` folder and compiled into the binary.
 
