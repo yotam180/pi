@@ -254,6 +254,7 @@ PI ships with a standard collection of automations for common tasks:
 - `pi:install-python` — check/install Python at a specific version
 - `pi:install-node` — check/install Node.js
 - `pi:install-go` — check/install Go at a specific version
+- `pi:install-ruby` — check/install Ruby at a specific version
 - `pi:install-uv` — check/install uv
 - `pi:install-homebrew` — check/install Homebrew
 - `pi:install-tsx` — check/install tsx globally via npm

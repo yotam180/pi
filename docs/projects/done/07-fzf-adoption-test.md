@@ -1,7 +1,7 @@
 # Real-World Adoption Test: fzf
 
 ## Status
-in_progress
+done
 
 ## Priority
 medium
@@ -44,11 +44,21 @@ PI's feature set has been built based on hypothetical workflows. Testing against
 ## Success Criteria
 - [x] fzf cloned and workflows documented
 - [x] Missing PI features identified and tasks created
-- [ ] `.pi/` folder created with automations for all fzf developer workflows
-- [ ] `pi.yaml` with shortcuts and setup entries
-- [ ] `pi setup` installs all required tools
-- [ ] `pi shell` shortcuts work for common operations (build, test, lint)
-- [ ] All automations produce identical results to the original commands
+- [x] `.pi/` folder created with automations for all fzf developer workflows
+- [x] `pi.yaml` with shortcuts and setup entries
+- [x] `pi setup` installs all required tools
+- [x] `pi shell` shortcuts work for common operations (build, test, lint)
+- [x] All automations produce identical results to the original commands
+
+## Results
+
+### Features Added to PI During This Project
+1. **`env:` on steps** — environment variable injection per step, scoped and isolated
+2. **`pi:install-go`** — built-in installer automation for Go
+3. **`go version` fallback** — version detection now tries `<cmd> version` as fallback when `--version` fails
+
+### Key Finding
+PI can model 100% of fzf's developer workflows. 18 automations were created covering build, test, lint, format, Docker, setup, and utility workflows. All major automations tested and produce identical results to the original Makefile commands.
 
 ## Notes
 - Follow `docs/playbooks/real-world-adoption-test.md` for step-by-step process

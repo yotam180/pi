@@ -180,24 +180,41 @@ func runtimeCommand(name string) string {
 }
 
 // detectVersion runs `<cmd> --version` and extracts a semver-like version string.
+// Falls back to `<cmd> version` if `--version` produces no version.
 func detectVersion(cmd string, env *RuntimeEnv) string {
 	if env.ExecOutput == nil {
 		return detectVersionExec(cmd)
 	}
 	raw := env.ExecOutput(cmd, "--version")
+	if v := extractVersion(raw); v != "" {
+		return v
+	}
+	raw = env.ExecOutput(cmd, "version")
 	return extractVersion(raw)
 }
 
 // detectVersionExec is the real implementation that runs the command.
+// Tries `<cmd> --version` first, then falls back to `<cmd> version`
+// (e.g. `go version` outputs "go version go1.23.0 darwin/arm64").
 func detectVersionExec(cmdName string) string {
 	cmd := exec.Command(cmdName, "--version")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return ""
+	if err := cmd.Run(); err == nil {
+		if v := extractVersion(out.String()); v != "" {
+			return v
+		}
 	}
-	return extractVersion(out.String())
+
+	out.Reset()
+	cmd = exec.Command(cmdName, "version")
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err == nil {
+		return extractVersion(out.String())
+	}
+	return ""
 }
 
 // versionRegex matches dot-separated numeric version strings (e.g. 3.13.0, 20.11.0, 1.7.1).

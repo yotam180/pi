@@ -300,7 +300,7 @@ Makefile                               build, vet, test, test-matrix targets
 - If any requirement is not satisfied, execution stops immediately with a formatted error table and exit code 1
 - `checkRequirement()` handles a single requirement: PATH lookup via `LookPath()`, then optional version check
 - Runtime requirements map names to commands: `python` → `python3`, `node` → `node`
-- Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`
+- Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`; falls back to `<cmd> version` (no `--`) when `--version` fails or produces no version string (needed for `go version` etc.)
 - Handles all common version output formats: `Python 3.13.0`, `v20.11.0`, `jq-1.7.1`, `docker version 24.0.5`
 - Version comparison: splits on `.`, compares numeric components pairwise; missing trailing components are treated as 0
 - Install hints: built-in map of common tool names → install instructions (python, node, docker, jq, kubectl, etc.)
