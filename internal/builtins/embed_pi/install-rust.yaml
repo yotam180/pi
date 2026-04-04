@@ -1,0 +1,25 @@
+name: install-rust
+description: Install Rust at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Rust version to install (e.g. "1.88")
+
+install:
+  test:
+    - bash: |
+        CURRENT=$(rustc --version 2>/dev/null | awk '{print $2}')
+        MAJOR_MINOR=$(echo "$CURRENT" | cut -d. -f1,2)
+        [ "$MAJOR_MINOR" = "$PI_INPUT_VERSION" ]
+
+  run:
+    - bash: |
+        if command -v rustup >/dev/null 2>&1; then
+          rustup install "$PI_INPUT_VERSION" && rustup default "$PI_INPUT_VERSION"
+        else
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$PI_INPUT_VERSION"
+          . "$HOME/.cargo/env"
+        fi
+
+  version: rustc --version 2>&1 | awk '{print $2}'

@@ -11,13 +11,14 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               40 tests (3 base + 7 docker + 14 installer + 16 devtool)
+    builtins_test.go               42 tests (3 base + 7 docker + 16 installer + 16 devtool)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
       install-python.yaml          pi:install-python — installs Python via mise/brew (version input)
       install-node.yaml            pi:install-node — installs Node.js via mise/brew (version input)
       install-go.yaml              pi:install-go — installs Go via mise/brew (version input)
+      install-rust.yaml            pi:install-rust — installs Rust via rustup (version input)
       install-uv.yaml              pi:install-uv — installs uv via official installer
       install-tsx.yaml             pi:install-tsx — installs tsx via npm
       cursor/
@@ -303,7 +304,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`; falls back to `<cmd> version` (no `--`) when `--version` fails or produces no version string (needed for `go version` etc.)
 - Handles all common version output formats: `Python 3.13.0`, `v20.11.0`, `jq-1.7.1`, `docker version 24.0.5`
 - Version comparison: splits on `.`, compares numeric components pairwise; missing trailing components are treated as 0
-- Install hints: built-in map of common tool names → install instructions (python, node, docker, jq, kubectl, etc.)
+- Install hints: built-in map of common tool names → install instructions (python, node, docker, jq, kubectl, rustc, cargo, etc.)
 - Formatted error output shows automation name, missing requirements with version info, and install hints
 - Testability: `RuntimeEnv.ExecOutput` field allows mocking `--version` calls without real command execution
 - Validation happens after input resolution but before step/install execution
@@ -357,13 +358,14 @@ Makefile                               build, vet, test, test-matrix targets
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
 - Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
-- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-uv`, `install-tsx`) use the structured `install:` block:
+- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`) use the structured `install:` block:
   - Each defines `test:`, `run:`, and optional `verify:` and `version:` fields
   - PI manages all user-facing output — automations only provide commands
   - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
   - `test` exits non-zero → `→  <name>  installing...` → `run` executes → `verify` (or re-run `test`) → `✓  <name>  installed  (<version>)` or `✗  <name>  failed`
   - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
   - `install-python`, `install-node`, and `install-go` accept a `version` input; use step lists with `if:` conditions to try `mise` first, fall back to `brew`
+  - `install-rust` accepts a `version` input; uses `rustup` if available, otherwise installs via the official `rustup.rs` installer script
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
   - `install-tsx` uses `npm install -g tsx`
 - Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) handle common team setup tasks:
@@ -462,7 +464,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 548 (78 automation + 40 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 139 executor + 4 project + 16 runtimes + 14 shell + 130 integration)
+Total tests: 550 (78 automation + 42 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 139 executor + 4 project + 16 runtimes + 14 shell + 130 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -496,7 +498,7 @@ tests/docker/
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
 - Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
-- Installer built-in tests: all 6 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
+- Installer built-in tests: all 7 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
 - Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
 - Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints

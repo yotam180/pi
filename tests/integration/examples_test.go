@@ -1036,7 +1036,7 @@ func TestBuiltins_InstallerAutomationsMarkedBuiltIn(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
-	for _, name := range []string{"install-homebrew", "install-python", "install-node", "install-go", "install-uv", "install-tsx"} {
+	for _, name := range []string{"install-homebrew", "install-python", "install-node", "install-go", "install-rust", "install-uv", "install-tsx"} {
 		found := false
 		for _, line := range strings.Split(out, "\n") {
 			if strings.Contains(line, name) && strings.Contains(line, "[built-in]") {
@@ -1059,6 +1059,7 @@ func TestBuiltins_InstallerInfoShowsDetails(t *testing.T) {
 		{"pi:install-homebrew", "Homebrew"},
 		{"pi:install-python", "Python"},
 		{"pi:install-node", "Node.js"},
+		{"pi:install-rust", "Rust"},
 		{"pi:install-uv", "uv"},
 		{"pi:install-tsx", "tsx"},
 	}
@@ -1080,7 +1081,7 @@ func TestBuiltins_InstallerInfoShowsDetails(t *testing.T) {
 
 func TestBuiltins_InstallerInfoShowsInputs(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	for _, name := range []string{"pi:install-python", "pi:install-node"} {
+	for _, name := range []string{"pi:install-python", "pi:install-node", "pi:install-rust"} {
 		t.Run(name, func(t *testing.T) {
 			out, code := runPi(t, dir, "info", name)
 			if code != 0 {
