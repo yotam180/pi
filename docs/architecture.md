@@ -283,13 +283,23 @@ pi setup
 - Each binary archived as `.tar.gz` with `README.md`
 - `checksums.txt` included in every release
 - Version injected via ldflags (`cli.version`) — same variable as the Makefile
-- Uses default `GITHUB_TOKEN` for GitHub Release creation (no extra secrets)
+- Uses default `GITHUB_TOKEN` for GitHub Release creation
+- Passes `HOMEBREW_TAP_TOKEN` secret to GoReleaser for Homebrew tap updates
 
 ### GoReleaser (`.goreleaser.yaml`)
 - Config version 2
 - CGO disabled, binaries stripped (`-s -w`)
 - Changelog auto-generated, excludes docs/test/chore commits
 - `make snapshot` runs a local snapshot build for testing
+- `homebrew_casks:` section auto-publishes a Homebrew Cask to `yotam180/homebrew-pi` on each non-prerelease tag
+- Cask includes xattr quarantine removal postflight hook for unsigned macOS binaries
+
+### Homebrew distribution
+- Tap repo: `github.com/yotam180/homebrew-pi`
+- Install: `brew install yotam180/pi/pi`
+- GoReleaser generates `Casks/pi.rb` and pushes it to the tap on each release
+- Uses `HOMEBREW_TAP_TOKEN` (fine-grained PAT with write access to `homebrew-pi`)
+- `skip_upload: auto` prevents pre-release tags from updating the tap
 
 ## Dependencies
 

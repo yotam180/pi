@@ -37,6 +37,27 @@ changelog:
       - "^test:"
       - "^chore:"
 
+homebrew_casks:
+  - name: pi
+    binaries:
+      - pi
+    directory: Casks
+    homepage: "https://github.com/yotam180/pi"
+    description: "Developer automation platform — structured, polyglot, shareable automations"
+    commit_msg_template: "Update pi to {{ .Tag }}"
+    skip_upload: auto
+    repository:
+      owner: yotam180
+      name: homebrew-pi
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/pi"]
+          end
+
 release:
   github:
     owner: yotam180

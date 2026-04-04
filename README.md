@@ -4,13 +4,23 @@ A developer automation platform for teams managing complex repositories. PI repl
 
 ## Install
 
-Download a pre-built binary from [GitHub Releases](https://github.com/yotam180/pi/releases), or install with Go:
+### Homebrew (macOS / Linux)
+
+```bash
+brew install yotam180/pi/pi
+```
+
+### Go
 
 ```bash
 go install github.com/vyper-tooling/pi/cmd/pi@latest
 ```
 
-Or build from source:
+### Pre-built binaries
+
+Download from [GitHub Releases](https://github.com/yotam180/pi/releases).
+
+### From source
 
 ```bash
 make build       # builds bin/pi
