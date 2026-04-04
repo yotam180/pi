@@ -1,0 +1,33 @@
+name: Docker Test Matrix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - ubuntu-fresh
+          - ubuntu-node
+          - ubuntu-python
+          - alpine-fresh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            -t pi-test-${{ matrix.environment }} \
+            -f tests/docker/${{ matrix.environment }}/Dockerfile \
+            .
+
+      - name: Run tests
+        run: docker run --rm pi-test-${{ matrix.environment }}

@@ -1,7 +1,7 @@
 # Environment Robustness
 
 ## Status
-todo
+done
 
 ## Priority
 medium
@@ -119,8 +119,8 @@ A `make test-matrix` target builds each image, runs `go test ./...` + integratio
 - [x] `pi doctor` scans all automations and prints per-automation requirement status
 - [x] `provision: auto` mode silently provisions node and python via `mise` (or direct download as fallback) and runs the step successfully
 - [x] Provisioned runtimes are isolated to `~/.pi/runtimes/` — nothing written to system PATH
-- [ ] `tests/docker/ubuntu-fresh/` image has a passing integration test that runs a TypeScript automation from scratch via `provision: auto`
-- [ ] All 4 Docker environments pass `go test ./...`
+- [x] `tests/docker/ubuntu-fresh/` image has a passing integration test that runs a TypeScript automation from scratch via `provision: auto`
+- [x] All 4 Docker environments pass `go test ./...`
 - [x] `go test ./...` passes on the host as well
 
 ## Notes

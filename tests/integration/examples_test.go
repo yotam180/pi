@@ -282,6 +282,7 @@ func TestPipe_Upper(t *testing.T) {
 }
 
 func TestPipe_CountLines(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "pipe")
 	out, code := runPi(t, dir, "run", "count-lines")
 	if code != 0 {
@@ -1104,6 +1105,7 @@ func TestBuiltins_InstallerHomebrewShowsCondition(t *testing.T) {
 }
 
 func TestBuiltins_InstallTsxIdempotent(t *testing.T) {
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "builtins")
 	out, code := runPi(t, dir, "run", "pi:install-tsx")
 	if code != 0 {
@@ -1427,6 +1429,7 @@ func TestInstallerSchema_RegularAutomationUnaffectedBySilent(t *testing.T) {
 }
 
 func TestInstallerSchema_BuiltinInstallerAlreadyInstalled(t *testing.T) {
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "installer-schema")
 	out, code := runPi(t, dir, "run", "pi:install-tsx")
 	if code != 0 {
@@ -1467,6 +1470,7 @@ func TestRequiresValidation_SatisfiedCommand(t *testing.T) {
 }
 
 func TestRequiresValidation_SatisfiedRuntime(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, code := runPi(t, dir, "run", "needs-python")
 	if code != 0 {
@@ -1498,6 +1502,7 @@ func TestRequiresValidation_MissingCommand(t *testing.T) {
 }
 
 func TestRequiresValidation_ImpossibleVersion(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, code := runPi(t, dir, "run", "needs-impossible-version")
 	if code != 1 {
@@ -1542,6 +1547,7 @@ func TestRequiresValidation_ErrorShowsInstallHint(t *testing.T) {
 // ===== pi doctor tests =====
 
 func TestDoctor_AllSatisfied(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, code := runPi(t, dir, "doctor")
 
@@ -1582,6 +1588,7 @@ func TestDoctor_ShowsMissingRequirements(t *testing.T) {
 }
 
 func TestDoctor_ShowsVersionMismatch(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, code := runPi(t, dir, "doctor")
 	if code != 1 {
@@ -1615,6 +1622,7 @@ func TestDoctor_SkipsNoRequiresAutomations(t *testing.T) {
 }
 
 func TestDoctor_ShowsDetectedVersion(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, _ := runPi(t, dir, "doctor")
 
@@ -1629,6 +1637,7 @@ func TestDoctor_ShowsDetectedVersion(t *testing.T) {
 }
 
 func TestDoctor_ShowsInstallHint(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "requires-validation")
 	out, code := runPi(t, dir, "doctor")
 	if code != 1 {
@@ -1700,6 +1709,7 @@ func TestRuntimeProvisioning_NoRequirements(t *testing.T) {
 }
 
 func TestRuntimeProvisioning_PythonAlreadyInstalled(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "runtime-provisioning")
 	out, code := runPi(t, dir, "run", "needs-python")
 	if code != 0 {

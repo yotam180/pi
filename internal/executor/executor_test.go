@@ -441,6 +441,7 @@ func TestExitError_Message(t *testing.T) {
 // --- Python step tests ---
 
 func TestPythonInline_Success(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 	script := `with open("` + outFile + `", "w") as f: f.write("hello\n")`
@@ -463,6 +464,7 @@ func TestPythonInline_Success(t *testing.T) {
 }
 
 func TestPythonInline_Failure(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	a := newAutomation("test", pythonStep("import sys; sys.exit(42)"))
 	exec := newExecutor(dir, newDiscovery(nil))
@@ -482,6 +484,7 @@ func TestPythonInline_Failure(t *testing.T) {
 }
 
 func TestPythonInline_WithArgs(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 	script := `import sys; open("` + outFile + `", "w").write(" ".join(sys.argv[1:]) + "\n")`
@@ -504,6 +507,7 @@ func TestPythonInline_WithArgs(t *testing.T) {
 }
 
 func TestPythonFile_Success(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 
@@ -528,6 +532,7 @@ func TestPythonFile_Success(t *testing.T) {
 }
 
 func TestPythonFile_WithArgs(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 
@@ -564,6 +569,7 @@ func TestPythonFile_NotFound(t *testing.T) {
 }
 
 func TestPythonInline_Multiline(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 	script := "import os\nx = 'multiline'\nwith open('" + outFile + "', 'w') as f:\n    f.write(x + '\\n')"
@@ -583,6 +589,7 @@ func TestPythonInline_Multiline(t *testing.T) {
 }
 
 func TestPythonVenvDetection(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 
@@ -616,6 +623,7 @@ func TestPythonVenvDetection(t *testing.T) {
 }
 
 func TestMixedSteps_BashAndPython(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")
 
@@ -690,6 +698,13 @@ func TestCallStackIsolation(t *testing.T) {
 	}
 	if len(exec.callStack) != 0 {
 		t.Errorf("call stack should be empty after runs, got %v", exec.callStack)
+	}
+}
+
+func requirePython(t *testing.T) {
+	t.Helper()
+	if _, err := osexec.LookPath("python3"); err != nil {
+		t.Skip("python3 not found in PATH, skipping Python test")
 	}
 }
 
@@ -921,6 +936,7 @@ func TestPipe_BashToBash(t *testing.T) {
 }
 
 func TestPipe_BashToPython(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	a := newAutomation("test",
 		pipedBashStep("echo hello world"),
@@ -1052,6 +1068,7 @@ func TestPipe_LastStepPipeToNextIsNoop(t *testing.T) {
 }
 
 func TestPipe_PythonToBash(t *testing.T) {
+	requirePython(t)
 	dir := t.TempDir()
 	a := newAutomation("test",
 		pipedPythonStep("print('hello from python')"),

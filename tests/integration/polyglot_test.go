@@ -31,6 +31,7 @@ func TestPolyglot_List(t *testing.T) {
 }
 
 func TestPolyglot_PythonInline(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "text/reverse")
 	if code != 0 {
@@ -42,6 +43,7 @@ func TestPolyglot_PythonInline(t *testing.T) {
 }
 
 func TestPolyglot_PythonInlineWithArg(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "text/reverse", "automation")
 	if code != 0 {
@@ -53,6 +55,7 @@ func TestPolyglot_PythonInlineWithArg(t *testing.T) {
 }
 
 func TestPolyglot_PythonFile(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "text/transform")
 	if code != 0 {
@@ -70,6 +73,7 @@ func TestPolyglot_PythonFile(t *testing.T) {
 }
 
 func TestPolyglot_TypeScriptInline(t *testing.T) {
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "data/generate")
 	if code != 0 {
@@ -84,6 +88,7 @@ func TestPolyglot_TypeScriptInline(t *testing.T) {
 }
 
 func TestPolyglot_TypeScriptFile(t *testing.T) {
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "data/format")
 	if code != 0 {
@@ -101,6 +106,8 @@ func TestPolyglot_TypeScriptFile(t *testing.T) {
 }
 
 func TestPolyglot_ETLPipeline(t *testing.T) {
+	requirePython(t)
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "pipeline/etl")
 	if code != 0 {
@@ -118,6 +125,8 @@ func TestPolyglot_ETLPipeline(t *testing.T) {
 }
 
 func TestPolyglot_ETLPipeline_StepOrder(t *testing.T) {
+	requirePython(t)
+	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "pipeline/etl")
 	if code != 0 {
@@ -134,6 +143,7 @@ func TestPolyglot_ETLPipeline_StepOrder(t *testing.T) {
 }
 
 func TestPolyglot_WordCount(t *testing.T) {
+	requirePython(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
 	out, code := runPi(t, dir, "run", "pipeline/wordcount")
 	if code != 0 {

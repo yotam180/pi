@@ -182,6 +182,12 @@ pi doctor
        Exit 0 (all satisfied) or 1 (any missing)
 ```
 
+## Build
+
+```
+Makefile                               build, vet, test, test-matrix targets
+```
+
 ## Key Design Decisions
 
 ### Project root detection
@@ -446,6 +452,27 @@ pi doctor
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
 Total tests: 531 (75 automation + 38 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 131 executor + 4 project + 16 runtimes + 14 shell + 125 integration)
+
+### Runtime skip guards
+Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
+
+- `internal/executor/executor_test.go`: `requirePython()` and `requireTsx()` helpers for unit tests
+- `tests/integration/helpers_test.go`: shared `requirePython()`, `requireNode()`, `requireTsx()` for integration tests
+
+### Docker test matrix
+Four Docker environments prove PI works on fresh systems (`make test-matrix`):
+
+```
+tests/docker/
+  ubuntu-fresh/       golang:1.26.1-bookworm — Go + bash only
+  ubuntu-node/        golang:1.26.1-bookworm — Go + Node 20 + tsx
+  ubuntu-python/      golang:1.26.1-bookworm — Go + Python 3
+  alpine-fresh/       golang:1.26.1-alpine   — Go + bash (musl libc)
+```
+
+- `tests/docker/test-matrix.sh` — builds each image, runs `go test ./...`, reports pass/fail summary
+- `Makefile` — `make test-matrix` target invokes the script
+- `.github/workflows/docker-matrix.yml` — CI workflow runs each environment as a separate matrix job on PRs
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
