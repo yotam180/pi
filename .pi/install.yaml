@@ -1,0 +1,8 @@
+name: install
+description: Build and install pi to /usr/local/bin
+
+steps:
+  - run: build
+  - bash: |
+      cp bin/pi /usr/local/bin/pi
+      echo "Installed pi to /usr/local/bin/pi"

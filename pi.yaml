@@ -1,0 +1,12 @@
+project: pi
+
+shortcuts:
+  pibuild: build
+  pitest: test
+  picheck: check
+  pilint: lint
+  piinstall: install
+  piclean: clean
+
+setup:
+  - run: pi:install-tsx

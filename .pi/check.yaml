@@ -1,0 +1,6 @@
+name: check
+description: Run lint and tests (full CI check)
+
+steps:
+  - run: lint
+  - run: test

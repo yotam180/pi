@@ -1,0 +1,5 @@
+name: lint
+description: Run go vet on all packages
+
+steps:
+  - bash: go vet ./...

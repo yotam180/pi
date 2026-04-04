@@ -323,7 +323,7 @@ pi setup
 - Produces cross-compiled binaries for: darwin/amd64, darwin/arm64, linux/amd64, linux/arm64
 - Each binary archived as `.tar.gz` with `README.md`
 - `checksums.txt` included in every release
-- Version injected via ldflags (`cli.version`) — same variable as the Makefile
+- Version injected via ldflags (`cli.version`) — same variable as the `.pi/build.yaml` automation
 - Uses default `GITHUB_TOKEN` for GitHub Release creation
 - Passes `HOMEBREW_TAP_TOKEN` secret to GoReleaser for Homebrew tap updates
 
@@ -331,7 +331,7 @@ pi setup
 - Config version 2
 - CGO disabled, binaries stripped (`-s -w`)
 - Changelog auto-generated, excludes docs/test/chore commits
-- `make snapshot` runs a local snapshot build for testing
+- `pi run snapshot` runs a local snapshot build for testing
 - `homebrew_casks:` section auto-publishes a Homebrew Cask to `yotam180/homebrew-pi` on each non-prerelease tag
 - Cask includes xattr quarantine removal postflight hook for unsigned macOS binaries
 

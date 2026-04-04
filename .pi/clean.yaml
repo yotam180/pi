@@ -1,0 +1,7 @@
+name: clean
+description: Remove build artifacts
+
+steps:
+  - bash: |
+      rm -rf bin/ dist/
+      echo "Cleaned bin/ and dist/"

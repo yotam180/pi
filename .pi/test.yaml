@@ -1,0 +1,5 @@
+name: test
+description: Run all tests with race detection
+
+steps:
+  - bash: go test ./... -race -count=1

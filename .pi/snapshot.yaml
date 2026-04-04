@@ -1,0 +1,5 @@
+name: snapshot
+description: Build a local snapshot release with GoReleaser
+
+steps:
+  - bash: goreleaser release --snapshot --clean

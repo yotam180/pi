@@ -1,0 +1,9 @@
+name: build
+description: Build the pi binary to bin/
+
+steps:
+  - bash: |
+      VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+      mkdir -p bin
+      go build -ldflags "-X github.com/vyper-tooling/pi/internal/cli.version=${VERSION}" -o bin/pi ./cmd/pi
+      echo "Built bin/pi (${VERSION})"

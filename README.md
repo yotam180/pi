@@ -23,8 +23,14 @@ Download from [GitHub Releases](https://github.com/yotam180/pi/releases).
 ### From source
 
 ```bash
-make build       # builds bin/pi
-make install     # copies to /usr/local/bin/pi
+pi run build      # builds bin/pi
+pi run install    # copies to /usr/local/bin/pi
+```
+
+Or without PI installed:
+
+```bash
+go build -o bin/pi ./cmd/pi
 ```
 
 ## Quick Start
@@ -38,8 +44,13 @@ See `docs/README.md` for the full product definition.
 ## Development
 
 ```bash
-make build      # compile (dev build)
-make test       # run tests with race detector
-make snapshot   # local GoReleaser snapshot build (all platforms)
-make clean      # remove build artifacts
+pi setup          # install dev dependencies (tsx) + shell shortcuts
+pi run build      # compile (dev build with version tag)
+pi run test       # run tests with race detector
+pi run lint       # run go vet
+pi run check      # lint + test
+pi run snapshot   # local GoReleaser snapshot build (all platforms)
+pi run clean      # remove build artifacts
 ```
+
+PI dogfoods itself — all development workflows are defined in `.pi/` and `pi.yaml`.

@@ -1,7 +1,7 @@
 # Built-in Automation Library & `pi setup`
 
 ## Status
-todo
+done
 
 ## Priority
 medium
@@ -43,12 +43,19 @@ Bundling automations with the binary avoids the chicken-and-egg problem of needi
 - Parallel setup steps
 
 ## Success Criteria
-- [ ] `pi setup` runs all setup steps and reports status for each
-- [ ] `pi setup` is idempotent — running it twice on a configured machine produces no changes and no errors
-- [ ] All built-in automations listed above are implemented and work on macOS
-- [ ] Replace `setup_environment.sh` in the PI repo itself with `pi.yaml` + `pi setup` as the dogfood integration test
-- [ ] `with:` parameters work: `run: pi:install-python` with `version: "3.13"` installs Python 3.13
-- [ ] `go test ./...` passes; integration test runs `pi setup` in a clean temp environment
+- [x] `pi setup` runs all setup steps and reports status for each
+- [x] `pi setup` is idempotent — running it twice on a configured machine produces no changes and no errors
+- [x] All built-in automations listed above are implemented and work on macOS
+- [x] Replace `setup_environment.sh` in the PI repo itself with `pi.yaml` + `pi setup` as the dogfood integration test
+- [x] `with:` parameters work: `run: pi:install-python` with `version: "3.13"` installs Python 3.13
+- [x] `go test ./...` passes; integration test runs `pi setup` in a clean temp environment
+
+## Tasks Completed
+- 23 — Built-in automation infrastructure
+- 24 — Built-in Docker Compose automations
+- 25 — Built-in installer automations
+- 26 — Built-in dev tool automations (cursor/install-extensions, git/install-hooks)
+- 27 — Dogfood: PI setup for the PI repo itself
 
 ## Dependencies
 - Task `07-automation-inputs-schema` must be completed before any built-in automation that uses `with:` is implemented. The `inputs:` schema is intentionally uniform across local, built-in, and marketplace automations — do not implement `with:` as a built-in-only shortcut.
