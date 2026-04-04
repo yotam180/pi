@@ -11,12 +11,15 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
-    run.go                         pi run — resolves and executes automations
+    run.go                         pi run — resolves and executes automations; --repo flag
     list.go                        pi list — discovers and prints automations
-    setup.go                       pi setup (stub)
-    root_test.go                   CLI tests (6 tests)
+    setup.go                       pi setup — runs setup entries, then pi shell (CI-aware)
+    shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
+    root_test.go                   CLI tests (7 tests)
     run_test.go                    pi run tests (8 tests)
     list_test.go                   pi list tests (6 tests)
+    setup_test.go                  pi setup tests (4 tests)
+    shell_test.go                  pi shell tests (3 tests)
   config/                          pi.yaml parsing
     config.go                      ProjectConfig, Shortcut, SetupEntry + Load()
     config_test.go                 8 tests
@@ -32,6 +35,9 @@ internal/
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
+  shell/                           Shell shortcut file generation and management
+    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled()
+    shell_test.go                  11 tests
 ```
 
 ## Data Flow
@@ -66,6 +72,40 @@ pi list
   └─ Discovery (internal/discovery)
        Walks .pi/ → map[name]*Automation
        Names() → sorted list → formatted table output
+```
+
+```
+pi shell
+  │
+  ├─ CLI (internal/cli)
+  │    Parses args, gets CWD
+  │
+  ├─ Project (internal/project)
+  │    Walks up from CWD to find pi.yaml → repo root path
+  │
+  ├─ Config (internal/config)
+  │    Loads pi.yaml → ProjectConfig (project name, shortcuts)
+  │
+  └─ Shell (internal/shell)
+       GenerateShellFile() → builds function definitions
+       Install() → writes to ~/.pi/shell/<project>.sh
+       ensureSourceLine() → injects source block into .zshrc/.bashrc
+```
+
+```
+pi setup
+  │
+  ├─ CLI (internal/cli)
+  │    Parses args (--no-shell), gets CWD
+  │
+  ├─ Project + Config + Discovery
+  │    Loads pi.yaml, discovers automations
+  │
+  ├─ Executor (internal/executor)
+  │    Runs each setup entry sequentially
+  │
+  └─ Shell (internal/shell)  [unless CI or --no-shell]
+       Install() → writes shortcuts, injects source line
 ```
 
 ## Key Design Decisions
@@ -112,6 +152,18 @@ pi list
 - Exit code propagation: if a piping step fails, execution stops immediately
 - Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
 
+### Shell shortcuts (`pi shell`)
+- Shortcuts are defined in `pi.yaml → shortcuts:` as either a string (`"docker/up"`) or an object (`{run: ..., anywhere: true}`)
+- `pi shell` writes shell functions to `~/.pi/shell/<project>.sh` — one file per project
+- A source block (`for f in ~/.pi/shell/*.sh; do source "$f"; done`) is injected into `.zshrc` (and `.bashrc` if it exists)
+- Source line injection is idempotent — checked before appending
+- Default shortcuts `cd` to the repo root and call `pi run <automation> "$@"`
+- `anywhere: true` shortcuts use `pi run --repo <root> <automation> "$@"` without cd
+- `pi shell uninstall` removes the project file and cleans the source line if no repos remain
+- `pi shell list` shows all installed shortcut files
+- `pi setup` runs `pi shell` as its final step, skipping in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
+- `pi setup --no-shell` explicitly skips the shell step
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -135,10 +187,11 @@ pi list
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 127 (14 automation + 20 CLI + 8 config + 18 discovery + 47 executor + 4 project + 16 integration)
+Total tests: 152 (14 automation + 28 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 23 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
 - Run `pi list` and `pi run` against `examples/basic/`, `examples/docker-project/`, and `examples/pipe/`
 - Assert exit codes, output content, and step ordering
 - Pipe tests verify cross-language piping (bash→python→bash) end-to-end
+- Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`

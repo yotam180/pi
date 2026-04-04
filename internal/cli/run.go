@@ -13,21 +13,33 @@ import (
 )
 
 func newRunCmd() *cobra.Command {
-	return &cobra.Command{
+	var repoFlag string
+
+	cmd := &cobra.Command{
 		Use:   "run <automation> [args...]",
 		Short: "Run an automation by name",
 		Long: `Run a PI automation by its name. The automation is resolved from the .pi/ folder
 in the current project. PI walks up from the current directory to find pi.yaml,
-so this works from any subdirectory of the project.`,
+so this works from any subdirectory of the project.
+
+Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+			startDir := repoFlag
+			if startDir == "" {
+				var err error
+				startDir, err = os.Getwd()
+				if err != nil {
+					return fmt.Errorf("getting working directory: %w", err)
+				}
 			}
-			return runAutomation(cwd, args[0], args[1:], os.Stdout, os.Stderr)
+			return runAutomation(startDir, args[0], args[1:], os.Stdout, os.Stderr)
 		},
 	}
+
+	cmd.Flags().StringVar(&repoFlag, "repo", "", "project root path (used by anywhere shortcuts)")
+
+	return cmd
 }
 
 // runAutomation resolves and executes an automation. Extracted for testability.

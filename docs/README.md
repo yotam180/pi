@@ -192,8 +192,12 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | Command                        | Description                                              |
 |-------------------------------|----------------------------------------------------------|
 | `pi run <name> [args]`        | Run an automation by name                                |
-| `pi setup`                    | Run all setup automations                                |
+| `pi run --repo <path> <name>` | Run an automation with explicit project root             |
+| `pi setup`                    | Run all setup automations, then install shell shortcuts  |
+| `pi setup --no-shell`         | Run setup automations without installing shortcuts       |
 | `pi shell`                    | Install shortcut functions into the current shell config |
+| `pi shell uninstall`          | Remove shortcuts for the current project                 |
+| `pi shell list`               | List all installed shortcut files across all projects    |
 | `pi list`                     | List all available automations in the project            |
 | `pi add org/package@version`  | Download and cache a marketplace automation              |
 

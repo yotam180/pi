@@ -25,6 +25,7 @@ and shareable automation model.`,
 	root.AddCommand(newRunCmd())
 	root.AddCommand(newListCmd())
 	root.AddCommand(newSetupCmd())
+	root.AddCommand(newShellCmd())
 
 	return root
 }
