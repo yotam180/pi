@@ -41,19 +41,6 @@ func TestRunHelp(t *testing.T) {
 	}
 }
 
-func TestRunStub(t *testing.T) {
-	out, err := executeCmd("run", "docker/up")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(out, "not implemented") {
-		t.Errorf("expected stub message, got: %s", out)
-	}
-	if !strings.Contains(out, "docker/up") {
-		t.Errorf("expected automation name in output, got: %s", out)
-	}
-}
-
 func TestRunRequiresArg(t *testing.T) {
 	_, err := executeCmd("run")
 	if err == nil {
@@ -61,13 +48,13 @@ func TestRunRequiresArg(t *testing.T) {
 	}
 }
 
-func TestListStub(t *testing.T) {
-	out, err := executeCmd("list")
+func TestListHelp(t *testing.T) {
+	out, err := executeCmd("list", "--help")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "not implemented") {
-		t.Errorf("expected stub message, got: %s", out)
+	if !strings.Contains(out, "automation") {
+		t.Errorf("expected list help to mention automations, got: %s", out)
 	}
 }
 

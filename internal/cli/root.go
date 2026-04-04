@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/executor"
 )
 
 var version = "dev"
@@ -30,6 +31,9 @@ and shareable automation model.`,
 
 func Execute() {
 	if err := NewRootCmd().Execute(); err != nil {
+		if exitErr, ok := err.(*executor.ExitError); ok {
+			os.Exit(exitErr.Code)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
