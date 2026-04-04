@@ -1,0 +1,42 @@
+name: install-node
+description: Install Node.js at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Node.js major version to install (e.g. "22")
+
+steps:
+  - bash: |
+      TARGET="$PI_INPUT_VERSION"
+      if [ -z "$TARGET" ]; then
+        echo "Error: version input is required" >&2
+        exit 1
+      fi
+
+      if command -v node >/dev/null 2>&1; then
+        CURRENT=$(node --version 2>&1 | sed 's/^v//')
+        MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+        if [ "$MAJOR" = "$TARGET" ]; then
+          echo "[already installed] Node.js v${CURRENT}"
+          exit 0
+        fi
+      fi
+
+      if command -v mise >/dev/null 2>&1; then
+        echo "Installing Node.js ${TARGET} via mise..."
+        mise install "node@${TARGET}"
+        mise use "node@${TARGET}"
+        echo "[installed] Node.js ${TARGET} (via mise)"
+        exit 0
+      fi
+
+      if command -v brew >/dev/null 2>&1; then
+        echo "Installing Node.js ${TARGET} via Homebrew..."
+        brew install "node@${TARGET}"
+        echo "[installed] Node.js ${TARGET} (via brew)"
+        exit 0
+      fi
+
+      echo "Error: could not install Node.js ${TARGET} — neither mise nor brew found" >&2
+      exit 1

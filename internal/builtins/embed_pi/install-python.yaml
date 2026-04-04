@@ -1,0 +1,45 @@
+name: install-python
+description: Install Python at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Python version to install (e.g. "3.13")
+
+steps:
+  - bash: |
+      TARGET="$PI_INPUT_VERSION"
+      if [ -z "$TARGET" ]; then
+        echo "Error: version input is required" >&2
+        exit 1
+      fi
+
+      if command -v "python${TARGET}" >/dev/null 2>&1; then
+        CURRENT=$("python${TARGET}" --version 2>&1 | awk '{print $2}')
+        echo "[already installed] Python ${CURRENT}"
+        exit 0
+      fi
+
+      if python3 --version 2>&1 | grep -q "Python ${TARGET}"; then
+        CURRENT=$(python3 --version 2>&1 | awk '{print $2}')
+        echo "[already installed] Python ${CURRENT}"
+        exit 0
+      fi
+
+      if command -v mise >/dev/null 2>&1; then
+        echo "Installing Python ${TARGET} via mise..."
+        mise install "python@${TARGET}"
+        mise use "python@${TARGET}"
+        echo "[installed] Python ${TARGET} (via mise)"
+        exit 0
+      fi
+
+      if command -v brew >/dev/null 2>&1; then
+        echo "Installing Python ${TARGET} via Homebrew..."
+        brew install "python@${TARGET}"
+        echo "[installed] Python ${TARGET} (via brew)"
+        exit 0
+      fi
+
+      echo "Error: could not install Python ${TARGET} — neither mise nor brew found" >&2
+      exit 1

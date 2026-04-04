@@ -1027,6 +1027,109 @@ func TestBuiltins_DockerRunStepInfoResolvesBuiltin(t *testing.T) {
 	}
 }
 
+// --- Installer built-in automations ---
+
+func TestBuiltins_InstallerAutomationsMarkedBuiltIn(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"install-homebrew", "install-python", "install-node", "install-uv", "install-tsx"} {
+		found := false
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, name) && strings.Contains(line, "[built-in]") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestBuiltins_InstallerInfoShowsDetails(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	installers := []struct {
+		name   string
+		substr string
+	}{
+		{"pi:install-homebrew", "Homebrew"},
+		{"pi:install-python", "Python"},
+		{"pi:install-node", "Node.js"},
+		{"pi:install-uv", "uv"},
+		{"pi:install-tsx", "tsx"},
+	}
+	for _, tc := range installers {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := runPi(t, dir, "info", tc.name)
+			if code != 0 {
+				t.Fatalf("expected exit 0, got %d: %s", code, out)
+			}
+			if !strings.Contains(out, "Name:") {
+				t.Errorf("expected Name: in info output, got:\n%s", out)
+			}
+			if !strings.Contains(out, tc.substr) {
+				t.Errorf("expected %q in info output, got:\n%s", tc.substr, out)
+			}
+		})
+	}
+}
+
+func TestBuiltins_InstallerInfoShowsInputs(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	for _, name := range []string{"pi:install-python", "pi:install-node"} {
+		t.Run(name, func(t *testing.T) {
+			out, code := runPi(t, dir, "info", name)
+			if code != 0 {
+				t.Fatalf("expected exit 0, got %d: %s", code, out)
+			}
+			if !strings.Contains(out, "version") {
+				t.Errorf("expected 'version' input in info output, got:\n%s", out)
+			}
+		})
+	}
+}
+
+func TestBuiltins_InstallerHomebrewShowsCondition(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "info", "pi:install-homebrew")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "os.macos") {
+		t.Errorf("expected 'os.macos' condition in info output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_InstallTsxIdempotent(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "pi:install-tsx")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "[already installed]") && !strings.Contains(out, "[installed]") {
+		t.Errorf("expected '[already installed]' or '[installed]' in output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_InstallerListShowsInputsColumn(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "install-python") && strings.Contains(line, "[built-in]") {
+			if !strings.Contains(line, "version") {
+				t.Errorf("expected install-python list line to show 'version' input, got:\n%s", line)
+			}
+			break
+		}
+	}
+}
+
 // --- Conditional: list shows all conditional automations ---
 
 func TestConditional_List_AllAutomations(t *testing.T) {

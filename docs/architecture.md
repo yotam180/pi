@@ -11,9 +11,14 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               10 tests (3 base + 7 docker)
+    builtins_test.go               22 tests (3 base + 7 docker + 12 installer)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
+      install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
+      install-python.yaml          pi:install-python — installs Python via mise/brew (version input)
+      install-node.yaml            pi:install-node — installs Node.js via mise/brew (version input)
+      install-uv.yaml              pi:install-uv — installs uv via official installer
+      install-tsx.yaml             pi:install-tsx — installs tsx via npm
       docker/
         up.yaml                    pi:docker/up — docker compose up -d with v1 fallback
         down.yaml                  pi:docker/down — docker compose down with v1 fallback
@@ -253,6 +258,12 @@ pi setup
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
 - Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
+- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) are idempotent check-then-install scripts:
+  - Each checks `command -v` first and prints `[already installed]` with version info; installs and prints `[installed]` otherwise
+  - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
+  - `install-python` and `install-node` accept a `version` input; try `mise` first, fall back to `brew`
+  - `install-uv` uses the official `astral.sh/uv/install.sh` script
+  - `install-tsx` uses `npm install -g tsx`
 
 ### Error philosophy
 - Parse errors include file path and field name
@@ -333,7 +344,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 409 (45 automation + 22 builtins + 54 CLI + 30 conditions + 11 config + 24 discovery + 120 executor + 4 project + 14 shell + 85 integration)
+Total tests: 368 (41 automation + 22 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 86 executor + 4 project + 14 shell + 88 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -346,3 +357,4 @@ Total tests: 409 (45 automation + 22 builtins + 54 CLI + 30 conditions + 11 conf
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
 - Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
+- Installer built-in tests: all 5 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently, `pi list` shows INPUTS column for versioned installers
