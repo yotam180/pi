@@ -8,11 +8,45 @@ import (
 	"testing"
 )
 
+var ciEnvVars = map[string]bool{
+	"CI": true, "GITHUB_ACTIONS": true, "GITLAB_CI": true,
+	"CIRCLECI": true, "JENKINS_URL": true, "BUILDKITE": true,
+	"TRAVIS": true, "CODEBUILD_BUILD_ID": true, "TF_BUILD": true,
+}
+
+func envWithoutCI() []string {
+	var filtered []string
+	for _, e := range os.Environ() {
+		key, _, _ := strings.Cut(e, "=")
+		if !ciEnvVars[key] {
+			filtered = append(filtered, e)
+		}
+	}
+	return filtered
+}
+
 func runPiWithHome(t *testing.T, dir, home string, args ...string) (string, int) {
 	t.Helper()
 	cmd := exec.Command(piBinary, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "HOME="+home)
+	out, err := cmd.CombinedOutput()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("running pi %v: %v\n%s", args, err, string(out))
+		}
+	}
+	return string(out), exitCode
+}
+
+func runPiWithHomeNoCI(t *testing.T, dir, home string, args ...string) (string, int) {
+	t.Helper()
+	cmd := exec.Command(piBinary, args...)
+	cmd.Dir = dir
+	cmd.Env = append(envWithoutCI(), "HOME="+home)
 	out, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
@@ -150,7 +184,7 @@ func TestSetup_Integration(t *testing.T) {
 	tmpHome := t.TempDir()
 	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
 
-	out, code := runPiWithHome(t, dir, tmpHome, "setup")
+	out, code := runPiWithHomeNoCI(t, dir, tmpHome, "setup")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -172,7 +206,7 @@ func TestSetup_WithNoShell(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "docker-project")
 	tmpHome := t.TempDir()
 
-	out, code := runPiWithHome(t, dir, tmpHome, "setup", "--no-shell")
+	out, code := runPiWithHomeNoCI(t, dir, tmpHome, "setup", "--no-shell")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}

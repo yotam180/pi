@@ -32,9 +32,17 @@ steps:
 	return root
 }
 
+func clearCIEnvVars(t *testing.T) {
+	t.Helper()
+	for _, v := range ciEnvVars {
+		t.Setenv(v, "")
+	}
+}
+
 func TestSetup_RunsEntries(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	clearCIEnvVars(t)
 
 	root := setupSetupWorkspace(t)
 	t.Chdir(root)
@@ -80,6 +88,7 @@ func TestSetup_SkipsShellInCI(t *testing.T) {
 func TestSetup_InstallsShortcuts(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
+	clearCIEnvVars(t)
 
 	root := setupSetupWorkspace(t)
 	t.Chdir(root)
