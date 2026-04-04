@@ -50,6 +50,22 @@ Shell shortcut injection solves the onboarding problem: instead of "copy this so
 - [ ] Port `vplf`, `vpbrl`, `vpbrlf`, `vprl`, `vprlf` from Vyper's `shell_shortcuts.sh` as integration tests
 - [ ] `go test ./...` passes
 
+## Dependencies & Design Constraints
+
+**Shortcut `with:` mapping (task `07-automation-inputs-schema`):** The `pi shell` codegen must be input-aware. Shortcuts can declare explicit `with:` mappings that bind CLI positional args to named automation inputs:
+
+```yaml
+shortcuts:
+  dlogs: docker/logs           # simple: forwards "$@", auto-maps to inputs in order
+  dlogs:
+    run: docker/logs
+    with:
+      service: $1              # explicit: generates --with service="$1" in shell function
+      tail: $2
+```
+
+The generated shell function for an explicit `with:` shortcut passes `--with key=value` flags to `pi run` rather than raw `"$@"`. This means `pi shell` implementation must check whether a shortcut has a `with:` block and emit different function bodies accordingly. Do not implement the simple `"$@"` passthrough in a way that makes the explicit `with:` case hard to add later — design for both forms from the start.
+
 ## Notes
 - Python step should detect and use an active virtualenv (`VIRTUAL_ENV` env var) if present, otherwise fall back to `python3` in PATH.
 - TypeScript step assumes `tsx` is available; PI should emit a clear error if it's not, with an install hint.

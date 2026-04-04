@@ -1,0 +1,14 @@
+name: count-lines
+description: Generate lines and count them through a three-step pipe chain
+
+steps:
+  - bash: printf "alpha\nbeta\ngamma\n"
+    pipe_to: next
+
+  - python: |
+      import sys
+      for line in sys.stdin:
+          print(f"processed: {line.strip()}")
+    pipe_to: next
+
+  - bash: wc -l | tr -d ' '

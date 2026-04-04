@@ -49,18 +49,11 @@ func runAutomation(startDir, name string, args []string, stdout, stderr io.Write
 		return err
 	}
 
-	stdoutFile, stdoutIsFile := stdout.(*os.File)
-	stderrFile, stderrIsFile := stderr.(*os.File)
-
 	exec := &executor.Executor{
 		RepoRoot:  root,
 		Discovery: result,
-	}
-	if stdoutIsFile {
-		exec.Stdout = stdoutFile
-	}
-	if stderrIsFile {
-		exec.Stderr = stderrFile
+		Stdout:    stdout,
+		Stderr:    stderr,
 	}
 
 	return exec.Run(a, args)

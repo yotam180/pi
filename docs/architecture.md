@@ -27,8 +27,8 @@ internal/
     discovery.go                   Discover(), Result, Find()
     discovery_test.go              18 tests
   executor/                        Step execution engine
-    executor.go                    Executor, ExitError, Run(), execBash(), execPython(), execTypeScript(), execRun()
-    executor_test.go               37 tests
+    executor.go                    Executor, ExitError, Run(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support
+    executor_test.go               47 tests
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
@@ -103,6 +103,15 @@ pi list
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
 
+### Pipe support (`pipe_to: next`)
+- When a step declares `pipe_to: next`, its stdout is captured to a `bytes.Buffer` instead of printed to terminal
+- The captured buffer is fed as stdin to the next step
+- If `pipe_to: next` appears on the last step, it's a no-op — output goes to terminal normally
+- Stderr is never captured — it always goes to the terminal regardless of piping
+- Works across all step types (bash, python, typescript, run)
+- Exit code propagation: if a piping step fails, execution stops immediately
+- Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -126,9 +135,10 @@ pi list
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 114 (14 automation + 20 CLI + 8 config + 18 discovery + 37 executor + 4 project + 13 integration)
+Total tests: 127 (14 automation + 20 CLI + 8 config + 18 discovery + 47 executor + 4 project + 16 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
-- Run `pi list` and `pi run` against `examples/basic/` and `examples/docker-project/`
+- Run `pi list` and `pi run` against `examples/basic/`, `examples/docker-project/`, and `examples/pipe/`
 - Assert exit codes, output content, and step ordering
+- Pipe tests verify cross-language piping (bash→python→bash) end-to-end

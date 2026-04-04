@@ -1,0 +1,5 @@
+project: pipe-example
+
+shortcuts:
+  upper: upper
+  count: count-lines

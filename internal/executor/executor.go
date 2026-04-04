@@ -1,7 +1,9 @@
 package executor
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,12 +24,19 @@ type Executor struct {
 
 	// Stdout and Stderr control where step output goes.
 	// Defaults to os.Stdout and os.Stderr if nil.
-	Stdout *os.File
-	Stderr *os.File
+	Stdout io.Writer
+	Stderr io.Writer
+
+	// Stdin provides input to the first step (or any step not receiving piped data).
+	// Defaults to os.Stdin if nil.
+	Stdin io.Reader
 
 	// callStack tracks the chain of automation names currently being executed,
 	// used to detect circular run: dependencies.
 	callStack []string
+
+	// lastPipeBuffer holds captured stdout from the last pipe_to:next step.
+	lastPipeBuffer *bytes.Buffer
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -41,36 +50,56 @@ func (e *ExitError) Error() string {
 
 // Run executes all steps of the given automation in order.
 // args are passed to bash steps as $1, $2, etc.
+// When a step declares pipe_to: next, its stdout is captured and fed as stdin
+// to the following step.
 func (e *Executor) Run(a *automation.Automation, args []string) error {
 	if err := e.pushCall(a.Name); err != nil {
 		return err
 	}
 	defer e.popCall()
 
+	var pipedInput io.Reader
 	for i, step := range a.Steps {
-		if err := e.execStep(a, step, args, i); err != nil {
+		isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
+		if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc); err != nil {
 			return err
+		}
+		pipedInput = nil
+		if isPipeSrc {
+			pipedInput = e.lastPipeBuffer
 		}
 	}
 	return nil
 }
 
-func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int) error {
+func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool) error {
+	stdout := e.stdout()
+	if capturePipe {
+		buf := &bytes.Buffer{}
+		stdout = buf
+		defer func() { e.lastPipeBuffer = buf }()
+	}
+
+	stdin := e.stdin()
+	if stdinOverride != nil {
+		stdin = stdinOverride
+	}
+
 	switch step.Type {
 	case automation.StepTypeBash:
-		return e.execBash(a, step, args)
+		return e.execBash(a, step, args, stdout, stdin)
 	case automation.StepTypePython:
-		return e.execPython(a, step, args)
+		return e.execPython(a, step, args, stdout, stdin)
 	case automation.StepTypeTypeScript:
-		return e.execTypeScript(a, step, args)
+		return e.execTypeScript(a, step, args, stdout, stdin)
 	case automation.StepTypeRun:
-		return e.execRun(step, args)
+		return e.execRun(step, args, stdout, stdin)
 	default:
 		return fmt.Errorf("step[%d]: step type %q is not implemented", index, step.Type)
 	}
 }
 
-func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string) error {
+func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
 	var cmdArgs []string
 
 	if isFilePath(step.Value) {
@@ -85,9 +114,9 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 
 	cmd := exec.Command("bash", cmdArgs...)
 	cmd.Dir = e.RepoRoot
-	cmd.Stdout = e.stdout()
+	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = stdin
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -98,7 +127,7 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	return nil
 }
 
-func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string) error {
+func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
 	pythonBin := e.resolvePythonBin()
 
 	var cmdArgs []string
@@ -109,15 +138,14 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 		}
 		cmdArgs = append([]string{resolved}, args...)
 	} else {
-		// python3 -c "script" arg1 arg2 → sys.argv = ['-c', 'arg1', 'arg2']
 		cmdArgs = append([]string{"-c", step.Value}, args...)
 	}
 
 	cmd := exec.Command(pythonBin, cmdArgs...)
 	cmd.Dir = e.RepoRoot
-	cmd.Stdout = e.stdout()
+	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = stdin
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -146,7 +174,7 @@ func isCommandNotFound(err error) bool {
 		strings.Contains(err.Error(), "no such file or directory")
 }
 
-func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string) error {
+func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
 	var cmdArgs []string
 	var tmpFile string
 
@@ -175,9 +203,9 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 
 	cmd := exec.Command("tsx", cmdArgs...)
 	cmd.Dir = e.RepoRoot
-	cmd.Stdout = e.stdout()
+	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
-	cmd.Stdin = os.Stdin
+	cmd.Stdin = stdin
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -191,12 +219,18 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	return nil
 }
 
-func (e *Executor) execRun(step automation.Step, args []string) error {
+func (e *Executor) execRun(step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
 	target, err := e.Discovery.Find(step.Value)
 	if err != nil {
 		return fmt.Errorf("run step: %w", err)
 	}
-	return e.Run(target, args)
+
+	// Temporarily override stdout/stdin for the nested automation run.
+	origStdout, origStdin := e.Stdout, e.Stdin
+	e.Stdout, e.Stdin = stdout, stdin
+	err = e.Run(target, args)
+	e.Stdout, e.Stdin = origStdout, origStdin
+	return err
 }
 
 // pushCall adds a name to the call stack, returning an error on circular dependency.
@@ -236,16 +270,23 @@ func resolveScriptPath(automationDir, scriptPath string) string {
 	return filepath.Join(automationDir, scriptPath)
 }
 
-func (e *Executor) stdout() *os.File {
+func (e *Executor) stdout() io.Writer {
 	if e.Stdout != nil {
 		return e.Stdout
 	}
 	return os.Stdout
 }
 
-func (e *Executor) stderr() *os.File {
+func (e *Executor) stderr() io.Writer {
 	if e.Stderr != nil {
 		return e.Stderr
 	}
 	return os.Stderr
+}
+
+func (e *Executor) stdin() io.Reader {
+	if e.Stdin != nil {
+		return e.Stdin
+	}
+	return os.Stdin
 }

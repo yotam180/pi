@@ -24,6 +24,9 @@ Implement the `pi shell` command that reads shortcuts from `pi.yaml` and writes 
 - [ ] `pi shell --list` shows all currently installed shortcuts across all repos
 - [ ] Running `pi shell` again overwrites the file (idempotent)
 - [ ] `pi run --repo <path>` flag is added so anywhere-shortcuts can specify the repo without `cd`
+- [ ] `pi setup` automatically runs `pi shell` as its final step — a full setup leaves the developer with both environment and shortcuts configured
+- [ ] `pi setup` skips the `pi shell` step when `CI=true` (or any common CI env var is set) — shell config is irrelevant in CI
+- [ ] `pi setup --no-shell` flag skips the shell step explicitly
 - [ ] Unit tests for function generation, source line injection, uninstall
 - [ ] Integration test: run `pi shell` in example workspace and verify the generated file content
 
@@ -37,6 +40,8 @@ Implement the `pi shell` command that reads shortcuts from `pi.yaml` and writes 
 - [ ] Wire `pi shell` cobra command
 - [ ] Add `--repo` flag to `pi run`
 - [ ] Implement `--uninstall` and `--list`
+- [ ] Add CI env var detection to `pi setup` (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
+- [ ] Add `--no-shell` flag to `pi setup`
 - [ ] Write tests
 
 ## Blocked By

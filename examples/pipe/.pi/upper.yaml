@@ -1,0 +1,8 @@
+name: upper
+description: Echo a message and pipe it to uppercase
+
+steps:
+  - bash: echo "hello from pipe"
+    pipe_to: next
+
+  - bash: tr a-z A-Z
