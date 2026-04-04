@@ -62,7 +62,13 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 	}
 	fmt.Fprintf(out, "Description:  %s\n", desc)
 
+	if a.If != "" {
+		fmt.Fprintf(out, "Condition:    %s\n", a.If)
+	}
+
 	fmt.Fprintf(out, "Steps:        %d\n", len(a.Steps))
+
+	printStepsDetail(a.Steps, out)
 
 	if len(a.InputKeys) == 0 {
 		fmt.Fprintf(out, "\nNo inputs.\n")
@@ -74,6 +80,37 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 		spec := a.Inputs[key]
 		printInputSpec(key, spec, out)
 	}
+}
+
+func printStepsDetail(steps []automation.Step, out io.Writer) {
+	hasConditions := false
+	for _, s := range steps {
+		if s.If != "" {
+			hasConditions = true
+			break
+		}
+	}
+	if !hasConditions {
+		return
+	}
+
+	fmt.Fprintf(out, "\nStep details:\n")
+	for i, s := range steps {
+		label := fmt.Sprintf("%s: %s", s.Type, truncateValue(s.Value, 40))
+		if s.If != "" {
+			fmt.Fprintf(out, "  %d. %s  [if: %s]\n", i+1, label, s.If)
+		} else {
+			fmt.Fprintf(out, "  %d. %s\n", i+1, label)
+		}
+	}
+}
+
+func truncateValue(s string, maxLen int) string {
+	s = strings.SplitN(s, "\n", 2)[0]
+	if len(s) > maxLen {
+		return s[:maxLen-3] + "..."
+	}
+	return s
 }
 
 func printInputSpec(name string, spec automation.InputSpec, out io.Writer) {

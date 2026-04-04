@@ -1,0 +1,11 @@
+name: command-check
+description: Conditional steps based on command availability
+
+steps:
+  - bash: echo "bash is available"
+    if: command.bash
+
+  - bash: echo "nonexistent-tool found"
+    if: command.nonexistent_xyz_tool_42
+
+  - bash: echo "command-check done"

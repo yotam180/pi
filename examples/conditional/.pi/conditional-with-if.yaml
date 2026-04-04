@@ -1,0 +1,12 @@
+name: conditional-with-if
+description: Automation with top-level if and step-level if combined
+if: os.macos or os.linux
+
+steps:
+  - bash: echo "macos step"
+    if: os.macos
+
+  - bash: echo "linux step"
+    if: os.linux
+
+  - bash: echo "both platforms"

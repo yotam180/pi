@@ -1,0 +1,17 @@
+name: complex-bool
+description: Exercises complex boolean expressions with multiple operators
+
+steps:
+  - bash: echo "macos or linux"
+    if: os.macos or os.linux
+
+  - bash: echo "has bash and pi.yaml"
+    if: command.bash and file.exists("pi.yaml")
+
+  - bash: echo "impossible combo"
+    if: (os.windows and os.linux) or (os.macos and os.windows)
+
+  - bash: echo "not windows"
+    if: not os.windows
+
+  - bash: echo "complex-bool done"

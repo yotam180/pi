@@ -13,14 +13,14 @@ internal/
     root.go                        Root command, wires subcommands, exit code handling
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
     list.go                        pi list — discovers and prints automations
-    info.go                        pi info — shows automation name, description, and input docs
+    info.go                        pi info — shows automation name, description, input docs, and if: conditions
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
     run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column test)
-    info_test.go                   pi info tests (9 tests)
+    info_test.go                   pi info tests (13 tests — includes if: condition display)
     setup_test.go                  pi setup tests (6 tests)
     shell_test.go                  pi shell tests (3 tests)
   conditions/                      Boolean expression parser/evaluator for if: fields
@@ -114,7 +114,9 @@ pi info <name>
   │    Find(name) → *Automation
   │
   └─ Output
-       Prints name, description, step count, and input specs
+       Prints name, description, if: condition (when present), step count,
+       step details with per-step if: conditions (when any step has if:),
+       and input specs
 ```
 
 ```
@@ -299,7 +301,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 306 (41 automation + 44 CLI + 30 conditions + 11 config + 18 discovery + 86 executor + 4 project + 14 shell + 58 integration)
+Total tests: 320 (41 automation + 48 CLI + 30 conditions + 11 config + 18 discovery + 86 executor + 4 project + 14 shell + 68 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -310,4 +312,4 @@ Total tests: 306 (41 automation + 44 CLI + 30 conditions + 11 config + 18 discov
 - Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`, setup with conditional entries (skip/run), conditional skip shows condition
 - Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
-- Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation
+- Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)

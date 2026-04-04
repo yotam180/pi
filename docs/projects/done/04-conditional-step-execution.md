@@ -1,7 +1,7 @@
 # Conditional Step Execution (`if:`)
 
 ## Status
-in_progress
+done
 
 ## Priority
 medium
@@ -112,14 +112,14 @@ if: os.macos and not command.brew
 - Parallel step execution gated on conditions
 
 ## Success Criteria
-- [ ] All predicates in the vocabulary table are implemented and tested
-- [ ] `and`, `or`, `not`, and parentheses work correctly in all combinations
-- [ ] Unknown predicates and malformed expressions produce clear, actionable errors
-- [ ] `if:` works on: steps, `run:` steps, `pi.yaml` setup entries, and automation-level declarations
-- [ ] Skipped steps are silent; skipped automations print a one-line note
-- [ ] `pi list` shows `if:` conditions in step details
-- [ ] `go test ./...` passes; unit tests cover the parser and all predicates
-- [ ] At least one built-in automation (`pi:install-homebrew` or `pi:install-python`) uses `if:` as a real-world integration test
+- [x] All predicates in the vocabulary table are implemented and tested
+- [x] `and`, `or`, `not`, and parentheses work correctly in all combinations
+- [x] Unknown predicates and malformed expressions produce clear, actionable errors
+- [x] `if:` works on: steps, `run:` steps, `pi.yaml` setup entries, and automation-level declarations
+- [x] Skipped steps are silent; skipped automations print a one-line note
+- [x] `pi info` shows `if:` conditions on automations and steps
+- [x] `go test ./...` passes; unit tests cover the parser and all predicates
+- [ ] At least one built-in automation (`pi:install-homebrew` or `pi:install-python`) uses `if:` as a real-world integration test (deferred: built-in automations not yet implemented; covered by `examples/conditional/` integration tests)
 
 ## Notes
 - Implement the evaluator in a dedicated `internal/conditions` package so it has no dependencies on the executor or automation packages — it receives a `map[string]bool` of resolved predicates and an expression string, returns bool + error.

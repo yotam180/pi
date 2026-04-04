@@ -1,0 +1,17 @@
+name: file-check
+description: Conditional steps based on file and directory existence
+
+steps:
+  - bash: echo "pi.yaml exists"
+    if: file.exists("pi.yaml")
+
+  - bash: echo "missing file found"
+    if: file.exists("nonexistent.yaml")
+
+  - bash: echo ".pi dir exists"
+    if: dir.exists(".pi")
+
+  - bash: echo "missing dir found"
+    if: dir.exists("nonexistent-dir")
+
+  - bash: echo "file-check done"

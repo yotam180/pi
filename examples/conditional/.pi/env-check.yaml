@@ -1,0 +1,11 @@
+name: env-check
+description: Conditional steps based on environment variables
+
+steps:
+  - bash: echo "CI environment detected"
+    if: env.PI_TEST_VAR
+
+  - bash: echo "Not in CI"
+    if: not env.PI_TEST_VAR
+
+  - bash: echo "env-check done"

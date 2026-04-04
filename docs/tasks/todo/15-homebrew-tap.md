@@ -30,9 +30,11 @@ Create a Homebrew tap at `github.com/yotam180/homebrew-pi` and wire GoReleaser t
 ## Subtasks
 - [ ] Create `github.com/yotam180/homebrew-pi` as a public GitHub repo
 - [ ] Create a fine-grained PAT with write access to `homebrew-pi` and store it as secret `HOMEBREW_TAP_TOKEN` in the `pi` repo
+    -> Already done
 - [ ] Add `brews:` section to `.goreleaser.yaml` pointing at `yotam180/homebrew-pi`
 - [ ] Update `.github/workflows/release.yml` to pass `HOMEBREW_TAP_TOKEN` to GoReleaser
 - [ ] Trigger a release and verify the formula is committed to the tap repo
+    -> you have access to gh command line and can also just push a tag to trigger a release (?)
 - [ ] Test `brew install yotam180/pi/pi` on a clean machine (or VM / CI runner)
 - [ ] Add tap install instructions to repo `README.md`
 

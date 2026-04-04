@@ -207,3 +207,89 @@ func TestShowAutomationInfo_DefaultValues(t *testing.T) {
 		t.Errorf("expected default value shown, got:\n%s", out)
 	}
 }
+
+func TestShowAutomationInfo_AutomationLevelIf(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "cond.yaml"), []byte(`name: cond
+description: Conditional automation
+if: os.macos
+steps:
+  - bash: echo hello
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "cond", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Condition:    os.macos") {
+		t.Errorf("expected Condition line, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_NoConditionWhenAbsent(t *testing.T) {
+	root := setupInfoWorkspace(t)
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "simple", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(buf.String(), "Condition:") {
+		t.Errorf("expected no Condition line for unconditional automation, got:\n%s", buf.String())
+	}
+}
+
+func TestShowAutomationInfo_StepLevelIf(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "stepif.yaml"), []byte(`name: stepif
+description: Steps with conditions
+steps:
+  - bash: echo macos
+    if: os.macos
+  - bash: echo linux
+    if: os.linux
+  - bash: echo always
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "stepif", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Step details:") {
+		t.Errorf("expected Step details section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[if: os.macos]") {
+		t.Errorf("expected step condition shown, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[if: os.linux]") {
+		t.Errorf("expected step condition shown, got:\n%s", out)
+	}
+	if !strings.Contains(out, "3. bash: echo always") {
+		t.Errorf("expected unconditional step without [if:], got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_NoStepDetailsWithoutConditions(t *testing.T) {
+	root := setupInfoWorkspace(t)
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "multi-step", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(buf.String(), "Step details:") {
+		t.Errorf("expected no Step details for steps without conditions, got:\n%s", buf.String())
+	}
+}
