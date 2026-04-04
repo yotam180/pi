@@ -26,9 +26,10 @@ var supportedStepTypes = map[StepType]bool{
 }
 
 var implementedStepTypes = map[StepType]bool{
-	StepTypeBash:   true,
-	StepTypeRun:    true,
-	StepTypePython: true,
+	StepTypeBash:       true,
+	StepTypeRun:        true,
+	StepTypePython:     true,
+	StepTypeTypeScript: true,
 }
 
 // Step represents a single step within an automation.

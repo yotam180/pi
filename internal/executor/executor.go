@@ -61,6 +61,8 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 		return e.execBash(a, step, args)
 	case automation.StepTypePython:
 		return e.execPython(a, step, args)
+	case automation.StepTypeTypeScript:
+		return e.execTypeScript(a, step, args)
 	case automation.StepTypeRun:
 		return e.execRun(step, args)
 	default:
@@ -142,6 +144,51 @@ func (e *Executor) resolvePythonBin() string {
 func isCommandNotFound(err error) bool {
 	return strings.Contains(err.Error(), "executable file not found") ||
 		strings.Contains(err.Error(), "no such file or directory")
+}
+
+func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string) error {
+	var cmdArgs []string
+	var tmpFile string
+
+	if isFilePath(step.Value) {
+		resolved := resolveScriptPath(a.Dir(), step.Value)
+		if _, err := os.Stat(resolved); err != nil {
+			return fmt.Errorf("typescript file not found: %s (resolved from %q relative to %s)", resolved, step.Value, a.Dir())
+		}
+		cmdArgs = append([]string{resolved}, args...)
+	} else {
+		tmp, err := os.CreateTemp("", "pi-ts-*.ts")
+		if err != nil {
+			return fmt.Errorf("creating temp file for typescript step: %w", err)
+		}
+		tmpFile = tmp.Name()
+		defer os.Remove(tmpFile)
+
+		if _, err := tmp.WriteString(step.Value); err != nil {
+			tmp.Close()
+			return fmt.Errorf("writing typescript temp file: %w", err)
+		}
+		tmp.Close()
+
+		cmdArgs = append([]string{tmpFile}, args...)
+	}
+
+	cmd := exec.Command("tsx", cmdArgs...)
+	cmd.Dir = e.RepoRoot
+	cmd.Stdout = e.stdout()
+	cmd.Stderr = e.stderr()
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
+		if isCommandNotFound(err) {
+			return fmt.Errorf("tsx not found in PATH — install it with: npm install -g tsx")
+		}
+		return fmt.Errorf("running typescript step: %w", err)
+	}
+	return nil
 }
 
 func (e *Executor) execRun(step automation.Step, args []string) error {
