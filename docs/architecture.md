@@ -50,8 +50,8 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field) + Load()
     config_test.go                 11 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If and Install fields), Step (with If field), StepType, InputSpec, InstallSpec, InstallPhase + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             61 tests
+    automation.go                  Automation (with If, Install, and Requires fields), Step (with If field), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             75 tests
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
@@ -252,6 +252,21 @@ pi setup
 - `pi setup` runs `pi shell` as its final step, skipping in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
 - `pi setup --no-shell` explicitly skips the shell step
 
+### Requirement declarations (`requires:`)
+- Automations can declare a `requires:` block listing tools/runtimes needed before execution
+- `Requirement` struct has `Name`, `Kind` (RequirementRuntime or RequirementCommand), `MinVersion` (optional)
+- Four forms supported in YAML:
+  - `python` — runtime, any version
+  - `python >= 3.11` — runtime with minimum version constraint
+  - `command: docker` — command in PATH, any version
+  - `command: kubectl >= 1.28` — command with minimum version
+- Scalar entries are parsed as runtimes; only `python` and `node` are known runtimes — unknown names produce an error suggesting `command:` syntax
+- Mapping entries with `command:` key are parsed as commands (any name is valid)
+- Version constraints use `>=` operator with dot-separated numeric components (validated at parse time)
+- `requires:` is valid on both `steps:` and `install:` automations
+- Automations without `requires:` have an empty slice (backward compatible)
+- Parsing happens via `requirementRaw.UnmarshalYAML()` with custom scalar/mapping handling
+
 ### Automation inputs (`inputs:` / `with:`)
 - Automations can declare an `inputs:` block defining named parameters with type, required, default, and description
 - `InputSpec` uses `*bool` for Required so we can distinguish "not set" from "set to false"
@@ -368,7 +383,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 425 (61 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 98 executor + 4 project + 14 shell + 97 integration)
+Total tests: 439 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 98 executor + 4 project + 14 shell + 97 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
