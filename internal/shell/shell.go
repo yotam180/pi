@@ -58,12 +58,59 @@ func GenerateShellFile(cfg *config.ProjectConfig, piBinary, repoRoot string) str
 }
 
 func generateFunction(name string, sc config.Shortcut, piBinary, repoRoot string) string {
+	if len(sc.With) > 0 {
+		return generateFunctionWithInputs(name, sc, piBinary, repoRoot)
+	}
 	if sc.Anywhere {
 		return fmt.Sprintf("function %s() {\n  %s run --repo %q %s \"$@\"\n}\n",
 			name, piBinary, repoRoot, sc.Run)
 	}
 	return fmt.Sprintf("function %s() {\n  (cd %q && %s run %s \"$@\")\n}\n",
 		name, repoRoot, piBinary, sc.Run)
+}
+
+func generateFunctionWithInputs(name string, sc config.Shortcut, piBinary, repoRoot string) string {
+	withNames := sortedKeys(sc.With)
+
+	var withParts []string
+	for _, k := range withNames {
+		v := sc.With[k]
+		if isPositionalRef(v) {
+			argNum := v[1:]
+			withParts = append(withParts, fmt.Sprintf("--with %s=\"$%s\"", k, argNum))
+		} else {
+			withParts = append(withParts, fmt.Sprintf("--with %s=%q", k, v))
+		}
+	}
+	withStr := strings.Join(withParts, " ")
+
+	if sc.Anywhere {
+		return fmt.Sprintf("function %s() {\n  %s run --repo %q %s %s\n}\n",
+			name, piBinary, repoRoot, sc.Run, withStr)
+	}
+	return fmt.Sprintf("function %s() {\n  (cd %q && %s run %s %s)\n}\n",
+		name, repoRoot, piBinary, sc.Run, withStr)
+}
+
+func isPositionalRef(v string) bool {
+	if len(v) < 2 || v[0] != '$' {
+		return false
+	}
+	for _, c := range v[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // Install writes the shortcuts file and ensures the source line is in shell configs.

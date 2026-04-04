@@ -262,3 +262,73 @@ func TestUninstall_KeepsSourceLineIfOtherReposExist(t *testing.T) {
 		t.Error("source line should remain when other repos still installed")
 	}
 }
+
+func TestGenerateShellFile_WithMapping(t *testing.T) {
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Shortcuts: map[string]config.Shortcut{
+			"dlogs": {
+				Run: "docker/logs",
+				With: map[string]string{
+					"service": "$1",
+					"tail":    "$2",
+				},
+			},
+		},
+	}
+
+	content := GenerateShellFile(cfg, "pi", "/repo")
+	if !strings.Contains(content, "--with service=\"$1\"") {
+		t.Errorf("expected --with service=\"$1\" in output, got:\n%s", content)
+	}
+	if !strings.Contains(content, "--with tail=\"$2\"") {
+		t.Errorf("expected --with tail=\"$2\" in output, got:\n%s", content)
+	}
+	if strings.Contains(content, "\"$@\"") {
+		t.Errorf("with-mapped shortcut should not include $@ passthrough, got:\n%s", content)
+	}
+}
+
+func TestGenerateShellFile_WithLiteralValue(t *testing.T) {
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Shortcuts: map[string]config.Shortcut{
+			"dlogs-short": {
+				Run: "docker/logs",
+				With: map[string]string{
+					"tail":    "50",
+					"service": "$1",
+				},
+			},
+		},
+	}
+
+	content := GenerateShellFile(cfg, "pi", "/repo")
+	if !strings.Contains(content, "--with service=\"$1\"") {
+		t.Errorf("expected --with service=\"$1\" in output, got:\n%s", content)
+	}
+	if !strings.Contains(content, `--with tail="50"`) {
+		t.Errorf("expected --with tail=\"50\" in output, got:\n%s", content)
+	}
+}
+
+func TestGenerateShellFile_WithAnywhereAndWith(t *testing.T) {
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Shortcuts: map[string]config.Shortcut{
+			"deploy": {
+				Run:      "deploy/push",
+				Anywhere: true,
+				With:     map[string]string{"env": "$1"},
+			},
+		},
+	}
+
+	content := GenerateShellFile(cfg, "pi", "/repo")
+	if !strings.Contains(content, "--repo") {
+		t.Errorf("anywhere shortcut with 'with' should have --repo, got:\n%s", content)
+	}
+	if !strings.Contains(content, "--with env=\"$1\"") {
+		t.Errorf("expected --with env=\"$1\", got:\n%s", content)
+	}
+}

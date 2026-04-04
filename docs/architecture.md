@@ -11,34 +11,34 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
-    run.go                         pi run — resolves and executes automations; --repo flag
+    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag
     list.go                        pi list — discovers and prints automations
     setup.go                       pi setup — runs setup entries, then pi shell (CI-aware)
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     root_test.go                   CLI tests (9 tests)
-    run_test.go                    pi run tests (8 tests)
-    list_test.go                   pi list tests (6 tests)
+    run_test.go                    pi run tests (14 tests — includes --with and inputs tests)
+    list_test.go                   pi list tests (7 tests — includes INPUTS column test)
     setup_test.go                  pi setup tests (4 tests)
     shell_test.go                  pi shell tests (3 tests)
   config/                          pi.yaml parsing
-    config.go                      ProjectConfig, Shortcut, SetupEntry + Load()
-    config_test.go                 8 tests
+    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry + Load()
+    config_test.go                 9 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation, Step, StepType + Load(), FilePath, Dir()
-    automation_test.go             14 tests
+    automation.go                  Automation, Step, StepType, InputSpec + Load(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
+    automation_test.go             27 tests
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), Result, Find()
     discovery_test.go              18 tests
   executor/                        Step execution engine
-    executor.go                    Executor, ExitError, Run(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support
-    executor_test.go               47 tests
+    executor.go                    Executor, ExitError, Run(), RunWithInputs(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection
+    executor_test.go               55 tests
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
   shell/                           Shell shortcut file generation and management
-    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled()
-    shell_test.go                  11 tests
+    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(); with: shortcut codegen
+    shell_test.go                  14 tests
 ```
 
 ## Data Flow
@@ -165,6 +165,20 @@ pi setup
 - `pi setup` runs `pi shell` as its final step, skipping in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
 - `pi setup --no-shell` explicitly skips the shell step
 
+### Automation inputs (`inputs:` / `with:`)
+- Automations can declare an `inputs:` block defining named parameters with type, required, default, and description
+- `InputSpec` uses `*bool` for Required so we can distinguish "not set" from "set to false"
+- `IsRequired()` defaults to true when no default value is provided and `required` is not explicitly set
+- Input keys are stored in declaration order (`InputKeys []string`) for positional mapping
+- `ResolveInputs()` on `Automation` validates and resolves inputs from either `--with` flags or positional args (mixing is an error)
+- Resolved values are injected as `PI_INPUT_<NAME>` environment variables (uppercased, hyphens become underscores)
+- `appendInputEnv()` merges input env vars with the current process environment (returns nil when no inputs, inheriting parent env)
+- `run:` steps support `with:` to pass named inputs to the called automation
+- `pi run --with key=value` is a repeatable flag parsed by `parseWithFlags()`
+- `pi.yaml` shortcuts support `with:` mapping with `$1`, `$2` positional references
+- Shell codegen detects `with:` on shortcuts and emits `--with key="$N"` flags instead of `"$@"` passthrough
+- `pi list` shows an INPUTS column with required inputs as `name` and optional as `name?`
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -188,7 +202,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 168 (14 automation + 30 CLI + 8 config + 18 discovery + 47 executor + 4 project + 11 shell + 36 integration)
+Total tests: 205 (27 automation + 37 CLI + 9 config + 18 discovery + 55 executor + 4 project + 14 shell + 41 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -197,3 +211,4 @@ Total tests: 168 (14 automation + 30 CLI + 8 config + 18 discovery + 47 executor
 - Pipe tests verify cross-language piping (bash→python→bash) end-to-end
 - Polyglot tests cover Python (inline/file), TypeScript (inline/file), multi-step pipe chains (bash→Python→TypeScript), and `run:` step piping
 - Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`
+- Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column

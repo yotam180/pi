@@ -18,10 +18,11 @@ type ProjectConfig struct {
 }
 
 // Shortcut can be either a simple string (automation name) or an object with
-// additional options like "anywhere".
+// additional options like "anywhere" and "with" for input mapping.
 type Shortcut struct {
-	Run      string `yaml:"run"`
-	Anywhere bool   `yaml:"anywhere"`
+	Run      string            `yaml:"run"`
+	Anywhere bool              `yaml:"anywhere"`
+	With     map[string]string `yaml:"with"`
 }
 
 // SetupEntry represents one entry in the setup list.

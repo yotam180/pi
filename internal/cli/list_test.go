@@ -123,6 +123,46 @@ func TestListAutomations_NoPiYaml(t *testing.T) {
 	}
 }
 
+func TestListAutomations_ShowsInputs(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+
+	os.WriteFile(filepath.Join(piDir, "with-inputs.yaml"), []byte(`name: with-inputs
+description: Has inputs
+inputs:
+  service:
+    type: string
+    required: true
+  tail:
+    type: string
+    default: "200"
+steps:
+  - bash: echo hi
+`), 0o644)
+
+	os.WriteFile(filepath.Join(piDir, "no-inputs.yaml"), []byte(`name: no-inputs
+description: No inputs
+steps:
+  - bash: echo hi
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := listAutomations(root, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "INPUTS") {
+		t.Error("expected INPUTS header")
+	}
+	if !strings.Contains(out, "service, tail?") {
+		t.Errorf("expected 'service, tail?' in output, got:\n%s", out)
+	}
+}
+
 func TestListAutomations_Sorted(t *testing.T) {
 	root := setupListWorkspace(t)
 	var buf bytes.Buffer

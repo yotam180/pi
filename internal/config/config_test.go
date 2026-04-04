@@ -195,3 +195,42 @@ shortcuts:
 		t.Error("complex.Anywhere should be true")
 	}
 }
+
+func TestLoad_ShortcutWithMapping(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+shortcuts:
+  dlogs:
+    run: docker/logs
+    with:
+      service: $1
+      tail: $2
+  dlogs-short:
+    run: docker/logs
+    with:
+      tail: "50"
+      service: $1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dlogs := cfg.Shortcuts["dlogs"]
+	if dlogs.With["service"] != "$1" {
+		t.Errorf("dlogs.With[service] = %q, want %q", dlogs.With["service"], "$1")
+	}
+	if dlogs.With["tail"] != "$2" {
+		t.Errorf("dlogs.With[tail] = %q, want %q", dlogs.With["tail"], "$2")
+	}
+
+	short := cfg.Shortcuts["dlogs-short"]
+	if short.With["tail"] != "50" {
+		t.Errorf("dlogs-short.With[tail] = %q, want %q", short.With["tail"], "50")
+	}
+	if short.With["service"] != "$1" {
+		t.Errorf("dlogs-short.With[service] = %q, want %q", short.With["service"], "$1")
+	}
+}

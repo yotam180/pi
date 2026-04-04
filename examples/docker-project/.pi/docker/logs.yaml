@@ -1,9 +1,19 @@
 name: docker/logs
 description: Show recent container logs
+
+inputs:
+  service:
+    type: string
+    default: all
+    description: Docker Compose service to tail
+  tail:
+    type: string
+    default: "200"
+    description: Number of log lines
+
 steps:
   - bash: |
-      service="${1:-all}"
-      echo "Showing logs for: ${service}"
+      echo "Showing logs for: $PI_INPUT_SERVICE (last $PI_INPUT_TAIL lines)"
       echo "[api]      2024-01-15 10:00:01 Server started on :8080"
       echo "[api]      2024-01-15 10:00:02 Connected to database"
       echo "[postgres] 2024-01-15 10:00:00 Database ready"

@@ -86,7 +86,7 @@ func runSetup(stdout, stderr io.Writer, noShell bool) error {
 			if err != nil {
 				return fmt.Errorf("setup[%d]: %w", i, err)
 			}
-			if err := exec.Run(a, nil); err != nil {
+			if err := exec.RunWithInputs(a, nil, entry.With); err != nil {
 				return fmt.Errorf("setup[%d] %q failed: %w", i, entry.Run, err)
 			}
 		}

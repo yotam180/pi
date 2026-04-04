@@ -142,37 +142,48 @@ This means `pi run` must accept `--with key=value` flags as an alternative to po
 - Type is currently informational (string only for now); reserved for future validation
 
 ## Acceptance Criteria
-- [ ] `inputs:` block is parsed from automation YAML into the `Automation` struct
-- [ ] `with:` block is parsed on `run:` steps (both in automation files and `pi.yaml` setup entries)
-- [ ] `with:` block is parsed on shortcut definitions in `pi.yaml`, supporting `$1`, `$2`, `$@` expressions
-- [ ] Positional args to `pi run <name> arg1 arg2` are auto-mapped to declared inputs in declaration order
-- [ ] `pi run --with key=value` flag is accepted as an explicit alternative to positional mapping
-- [ ] Mixing positional args and `--with` flags in the same call produces a clear error
-- [ ] Required inputs missing from all sources produce a clear error before execution starts
-- [ ] Unknown keys in `with:` produce a clear error
-- [ ] Default values are applied when a key is omitted and no positional/`--with` covers it
-- [ ] Input values are injected as `PI_INPUT_<NAME>` env vars for all step types
-- [ ] `pi list` shows declared inputs for automations that have them
-- [ ] `pi run --help <name>` (or equivalent) prints the automation's description and input docs
-- [ ] Schema is identical for local, built-in, and marketplace automations — no special cases
-- [ ] `go test ./...` passes; unit tests cover validation, default injection, positional mapping, and env var generation
+- [x] `inputs:` block is parsed from automation YAML into the `Automation` struct
+- [x] `with:` block is parsed on `run:` steps (both in automation files and `pi.yaml` setup entries)
+- [x] `with:` block is parsed on shortcut definitions in `pi.yaml`, supporting `$1`, `$2`, `$@` expressions
+- [x] Positional args to `pi run <name> arg1 arg2` are auto-mapped to declared inputs in declaration order
+- [x] `pi run --with key=value` flag is accepted as an explicit alternative to positional mapping
+- [x] Mixing positional args and `--with` flags in the same call produces a clear error
+- [x] Required inputs missing from all sources produce a clear error before execution starts
+- [x] Unknown keys in `with:` produce a clear error
+- [x] Default values are applied when a key is omitted and no positional/`--with` covers it
+- [x] Input values are injected as `PI_INPUT_<NAME>` env vars for all step types
+- [x] `pi list` shows declared inputs for automations that have them
+- [ ] `pi run --help <name>` (or equivalent) prints the automation's description and input docs — deferred to a follow-up task
+- [x] Schema is identical for local, built-in, and marketplace automations — no special cases
+- [x] `go test ./...` passes; unit tests cover validation, default injection, positional mapping, and env var generation
 
 ## Implementation Notes
-<!-- Fill in as you work. -->
+
+### Architecture decisions
+- `InputSpec.Required` is `*bool` to distinguish "not set" from "false". `IsRequired()` defaults to true when no default is provided.
+- `InputKeys []string` preserves YAML declaration order for positional mapping, using a custom `inputsRaw` unmarshaller.
+- Validation happens in `ResolveInputs()` on the `Automation` struct, not in the executor — clean separation.
+- `appendInputEnv()` returns nil when there are no input env vars, so `cmd.Env = nil` inherits the parent process environment (no behavior change for automations without inputs).
+- `run:` steps with `with:` call `RunWithInputs()` with the with map, while steps without `with:` forward positional args.
+- Shell codegen for `with:` shortcuts emits `--with key="$N"` flags. Literal values (not `$N` references) are quoted directly.
+
+### Test coverage
+- 37 new tests added across automation (13), executor (8), config (1), cli (8), shell (3), integration (8)
+- Total test count: 205
 
 ## Subtasks
-- [ ] Extend `Automation` struct with `Inputs map[string]InputSpec`
-- [ ] Extend `stepRaw` / `Step` with `With map[string]string`
-- [ ] Extend `pi.yaml` `SetupEntry` and `Shortcut` with `With map[string]string`
-- [ ] Implement `pi run --with key=value` flag (repeatable)
-- [ ] Implement positional → named input mapping in executor (args mapped in `inputs:` declaration order)
-- [ ] Implement validation in `Automation.validate()`: check required inputs, unknown keys, mixing positional + `--with`
-- [ ] Inject `PI_INPUT_*` env vars in executor before running each step
-- [ ] Update `pi shell` codegen to emit `--with` flags when shortcut has explicit `with:` mapping
-- [ ] Update `pi list` to show inputs column or inline declaration
-- [ ] Write unit tests for all validation paths
-- [ ] Write integration test: automation with required input called correctly and incorrectly
-- [ ] Update `examples/docker-project/.pi/docker/logs.yaml` to use `inputs:` + `$PI_INPUT_SERVICE` instead of `"${1:-all}"`
+- [x] Extend `Automation` struct with `Inputs map[string]InputSpec`
+- [x] Extend `stepRaw` / `Step` with `With map[string]string`
+- [x] Extend `pi.yaml` `SetupEntry` and `Shortcut` with `With map[string]string`
+- [x] Implement `pi run --with key=value` flag (repeatable)
+- [x] Implement positional → named input mapping in executor (args mapped in `inputs:` declaration order)
+- [x] Implement validation in `ResolveInputs()`: check required inputs, unknown keys, mixing positional + `--with`
+- [x] Inject `PI_INPUT_*` env vars in executor before running each step
+- [x] Update `pi shell` codegen to emit `--with` flags when shortcut has explicit `with:` mapping
+- [x] Update `pi list` to show inputs column or inline declaration
+- [x] Write unit tests for all validation paths
+- [x] Write integration test: automation with required input called correctly and incorrectly
+- [x] Update `examples/docker-project/.pi/docker/logs.yaml` to use `inputs:` + `$PI_INPUT_SERVICE` instead of `"${1:-all}"`
 
 ## Blocked By
 <!-- None — can be designed and implemented before Project 3 work begins. -->

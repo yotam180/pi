@@ -5,9 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/project"
 )
@@ -49,14 +51,31 @@ func listAutomations(startDir string, out io.Writer) error {
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-	fmt.Fprintf(w, "NAME\tDESCRIPTION\n")
+	fmt.Fprintf(w, "NAME\tDESCRIPTION\tINPUTS\n")
 	for _, name := range names {
 		a := result.Automations[name]
 		desc := a.Description
 		if desc == "" {
 			desc = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\n", name, desc)
+		inputs := formatInputsSummary(a)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", name, desc, inputs)
 	}
 	return w.Flush()
+}
+
+func formatInputsSummary(a *automation.Automation) string {
+	if len(a.InputKeys) == 0 {
+		return "-"
+	}
+	var parts []string
+	for _, key := range a.InputKeys {
+		spec := a.Inputs[key]
+		if spec.IsRequired() {
+			parts = append(parts, key)
+		} else {
+			parts = append(parts, key+"?")
+		}
+	}
+	return strings.Join(parts, ", ")
 }

@@ -49,19 +49,35 @@ func (e *ExitError) Error() string {
 }
 
 // Run executes all steps of the given automation in order.
-// args are passed to bash steps as $1, $2, etc.
+// args are passed to bash steps as $1, $2, etc., or mapped to declared inputs.
 // When a step declares pipe_to: next, its stdout is captured and fed as stdin
 // to the following step.
 func (e *Executor) Run(a *automation.Automation, args []string) error {
+	return e.RunWithInputs(a, args, nil)
+}
+
+// RunWithInputs executes all steps with explicit --with input values.
+// Only one of args (positional) or withArgs may be non-empty.
+func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withArgs map[string]string) error {
 	if err := e.pushCall(a.Name); err != nil {
 		return err
 	}
 	defer e.popCall()
 
+	var inputEnv []string
+	if len(a.Inputs) > 0 {
+		resolved, err := a.ResolveInputs(withArgs, args)
+		if err != nil {
+			return fmt.Errorf("automation %q: %w", a.Name, err)
+		}
+		inputEnv = automation.InputEnvVars(resolved)
+		args = nil
+	}
+
 	var pipedInput io.Reader
 	for i, step := range a.Steps {
 		isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
-		if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc); err != nil {
+		if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
 			return err
 		}
 		pipedInput = nil
@@ -72,7 +88,7 @@ func (e *Executor) Run(a *automation.Automation, args []string) error {
 	return nil
 }
 
-func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool) error {
+func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
 	stdout := e.stdout()
 	if capturePipe {
 		buf := &bytes.Buffer{}
@@ -87,19 +103,19 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 
 	switch step.Type {
 	case automation.StepTypeBash:
-		return e.execBash(a, step, args, stdout, stdin)
+		return e.execBash(a, step, args, stdout, stdin, inputEnv)
 	case automation.StepTypePython:
-		return e.execPython(a, step, args, stdout, stdin)
+		return e.execPython(a, step, args, stdout, stdin, inputEnv)
 	case automation.StepTypeTypeScript:
-		return e.execTypeScript(a, step, args, stdout, stdin)
+		return e.execTypeScript(a, step, args, stdout, stdin, inputEnv)
 	case automation.StepTypeRun:
-		return e.execRun(step, args, stdout, stdin)
+		return e.execRun(step, args, stdout, stdin, inputEnv)
 	default:
 		return fmt.Errorf("step[%d]: step type %q is not implemented", index, step.Type)
 	}
 }
 
-func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
+func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	var cmdArgs []string
 
 	if isFilePath(step.Value) {
@@ -117,6 +133,7 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
+	cmd.Env = appendInputEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -127,7 +144,7 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	return nil
 }
 
-func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
+func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	pythonBin := e.resolvePythonBin()
 
 	var cmdArgs []string
@@ -146,6 +163,7 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
+	cmd.Env = appendInputEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -174,7 +192,7 @@ func isCommandNotFound(err error) bool {
 		strings.Contains(err.Error(), "no such file or directory")
 }
 
-func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
+func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	var cmdArgs []string
 	var tmpFile string
 
@@ -206,6 +224,7 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
+	cmd.Env = appendInputEnv(inputEnv)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -219,18 +238,22 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	return nil
 }
 
-func (e *Executor) execRun(step automation.Step, args []string, stdout io.Writer, stdin io.Reader) error {
+func (e *Executor) execRun(step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	target, err := e.Discovery.Find(step.Value)
 	if err != nil {
 		return fmt.Errorf("run step: %w", err)
 	}
 
-	// Temporarily override stdout/stdin for the nested automation run.
 	origStdout, origStdin := e.Stdout, e.Stdin
 	e.Stdout, e.Stdin = stdout, stdin
-	err = e.Run(target, args)
+	var runErr error
+	if len(step.With) > 0 {
+		runErr = e.RunWithInputs(target, nil, step.With)
+	} else {
+		runErr = e.RunWithInputs(target, args, nil)
+	}
 	e.Stdout, e.Stdin = origStdout, origStdin
-	return err
+	return runErr
 }
 
 // pushCall adds a name to the call stack, returning an error on circular dependency.
@@ -268,6 +291,16 @@ func resolveScriptPath(automationDir, scriptPath string) string {
 		return scriptPath
 	}
 	return filepath.Join(automationDir, scriptPath)
+}
+
+// appendInputEnv merges PI_INPUT_* env vars into the current environment.
+// If inputEnv is empty, returns nil (cmd.Env=nil inherits parent env).
+func appendInputEnv(inputEnv []string) []string {
+	if len(inputEnv) == 0 {
+		return nil
+	}
+	env := os.Environ()
+	return append(env, inputEnv...)
 }
 
 func (e *Executor) stdout() io.Writer {

@@ -189,10 +189,11 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 
 ## CLI Reference
 
-| Command                        | Description                                              |
-|-------------------------------|----------------------------------------------------------|
-| `pi run <name> [args]`        | Run an automation by name                                |
-| `pi run --repo <path> <name>` | Run an automation with explicit project root             |
+| Command                                  | Description                                              |
+|-----------------------------------------|----------------------------------------------------------|
+| `pi run <name> [args]`                  | Run an automation by name (args mapped to inputs)        |
+| `pi run <name> --with key=value`        | Run with explicit named inputs (repeatable)              |
+| `pi run --repo <path> <name>`           | Run an automation with explicit project root             |
 | `pi setup`                    | Run all setup automations, then install shell shortcuts  |
 | `pi setup --no-shell`         | Run setup automations without installing shortcuts       |
 | `pi shell`                    | Install shortcut functions into the current shell config |

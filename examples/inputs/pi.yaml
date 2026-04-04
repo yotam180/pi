@@ -1,0 +1,9 @@
+project: inputs-example
+
+shortcuts:
+  greet: greet
+  greet-loud:
+    run: greet
+    with:
+      greeting: HEY
+      name: $1

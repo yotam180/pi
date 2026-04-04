@@ -1,0 +1,16 @@
+name: greet
+description: Greet someone
+
+inputs:
+  name:
+    type: string
+    required: true
+    description: Who to greet
+  greeting:
+    type: string
+    required: false
+    default: hello
+    description: The greeting word
+
+steps:
+  - bash: echo "$PI_INPUT_GREETING $PI_INPUT_NAME"

@@ -1,0 +1,8 @@
+name: caller
+description: Calls greet with explicit with
+
+steps:
+  - run: greet
+    with:
+      name: world
+      greeting: hey
