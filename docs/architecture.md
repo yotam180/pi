@@ -11,12 +11,13 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               38 tests (3 base + 7 docker + 12 installer + 16 devtool)
+    builtins_test.go               40 tests (3 base + 7 docker + 14 installer + 16 devtool)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
       install-python.yaml          pi:install-python — installs Python via mise/brew (version input)
       install-node.yaml            pi:install-node — installs Node.js via mise/brew (version input)
+      install-go.yaml              pi:install-go — installs Go via mise/brew (version input)
       install-uv.yaml              pi:install-uv — installs uv via official installer
       install-tsx.yaml             pi:install-tsx — installs tsx via npm
       cursor/
@@ -52,17 +53,17 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If, Install, and Requires fields), Step (with If field), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             75 tests
+    automation.go                  Automation (with If, Install, and Requires fields), Step (with If and Env fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             78 tests
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor (with RuntimeEnv, Silent, and Provisioner fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(), buildEnv(), prependPathInEnv(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle; provisioned runtime PATH injection
+    executor.go                    Executor (with RuntimeEnv, Silent, and Provisioner fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(), buildEnv(), prependPathInEnv(); pipe_to:next support; PI_INPUT_* env injection; step-level env: injection; step-level and automation-level if: conditional execution; structured installer lifecycle; provisioned runtime PATH injection
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
-    executor_test.go               87 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer)
-    validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv, prependPathInEnv)
+    executor_test.go               95 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env)
+    validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv with step env, prependPathInEnv)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
@@ -246,6 +247,16 @@ Makefile                               build, vet, test, test-matrix targets
 - Exit code propagation: if a piping step fails, execution stops immediately
 - Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
 
+### Step-level environment variables (`env:` on steps)
+- Steps can declare an `env:` mapping of key-value pairs to inject into the step's execution environment
+- `env:` vars are merged into the process environment after PI_INPUT_* vars and provisioned runtime PATH
+- Step-level env vars do not leak between steps — each step gets a fresh copy of the process environment plus its own `env:` overlay
+- Steps without `env:` inherit the parent process environment as before (backward compatible)
+- Step-level env vars override parent env vars with the same name (last-writer-wins since they're appended)
+- Works with all step types: bash, python, typescript
+- `pi info` shows `[env: KEY1, KEY2]` annotations on steps that declare env vars
+- Install phases (`install:` block) do not support step-level `env:` — they use only input env vars
+
 ### Conditional step execution (`if:` on steps)
 - Steps can declare an `if:` field containing a boolean condition expression
 - Before executing a step with `if:`, the executor extracts predicates, resolves them via the predicate resolver, and evaluates the expression
@@ -346,13 +357,13 @@ Makefile                               build, vet, test, test-matrix targets
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
 - Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
-- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) use the structured `install:` block:
+- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-uv`, `install-tsx`) use the structured `install:` block:
   - Each defines `test:`, `run:`, and optional `verify:` and `version:` fields
   - PI manages all user-facing output — automations only provide commands
   - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
   - `test` exits non-zero → `→  <name>  installing...` → `run` executes → `verify` (or re-run `test`) → `✓  <name>  installed  (<version>)` or `✗  <name>  failed`
   - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
-  - `install-python` and `install-node` accept a `version` input; use step lists with `if:` conditions to try `mise` first, fall back to `brew`
+  - `install-python`, `install-node`, and `install-go` accept a `version` input; use step lists with `if:` conditions to try `mise` first, fall back to `brew`
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
   - `install-tsx` uses `npm install -g tsx`
 - Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) handle common team setup tasks:
@@ -451,7 +462,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 531 (75 automation + 38 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 131 executor + 4 project + 16 runtimes + 14 shell + 125 integration)
+Total tests: 548 (78 automation + 40 builtins + 57 CLI + 30 conditions + 17 config + 24 discovery + 139 executor + 4 project + 16 runtimes + 14 shell + 130 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -485,9 +496,10 @@ tests/docker/
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
 - Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
 - Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
-- Installer built-in tests: all 5 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
+- Installer built-in tests: all 6 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
 - Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
 - Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints
 - Doctor tests: `pi doctor` on `requires-validation` workspace showing ✓ for satisfied, ✗ for missing, version mismatch, skipping no-requires automations, detected version display, install hints; healthy workspace with all-satisfied exit code 0
 - Runtime provisioning tests: `runtime-provisioning` and `runtime-provisioning-never` example workspaces; list automations, no-requirements runs normally, python already installed (no provisioning needed), never-mode errors, config parsing with auto/ask/direct modes
+- Step env tests: `step-env` example workspace; env vars injected into step execution, per-step isolation (no leaking between steps), `pi info` shows env annotations, env combined with if: conditions

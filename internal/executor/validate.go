@@ -275,6 +275,7 @@ var installHints = map[string]string{
 	"git":        "brew install git",
 	"curl":       "brew install curl",
 	"wget":       "brew install wget",
+	"go":         "brew install go  or  https://go.dev/dl/",
 	"make":       "xcode-select --install  (macOS)  or  apt install build-essential",
 	"mise":       "curl https://mise.run | sh",
 	"uv":         "curl -LsSf https://astral.sh/uv/install.sh | sh",

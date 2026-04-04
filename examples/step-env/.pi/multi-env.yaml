@@ -1,0 +1,8 @@
+name: multi-env
+description: Multiple steps with different env vars
+
+steps:
+  - bash: echo "step1=$STEP_VAR"
+    env:
+      STEP_VAR: alpha
+  - bash: echo "step2=${STEP_VAR:-unset}"

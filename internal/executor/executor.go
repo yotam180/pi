@@ -265,7 +265,7 @@ func (e *Executor) execBashSuppressed(a *automation.Automation, script string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = io.Discard
 	cmd.Stdin = nil
-	cmd.Env = e.buildEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv, nil)
 
 	if stderrCapture != nil {
 		cmd.Stderr = stderrCapture
@@ -324,7 +324,7 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
-	cmd.Env = e.buildEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv, nil)
 
 	if err := cmd.Run(); err != nil {
 		return ""
@@ -396,7 +396,7 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv, step.Env)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -426,7 +426,7 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv, step.Env)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -487,7 +487,7 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	cmd.Stdout = stdout
 	cmd.Stderr = e.stderr()
 	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv)
+	cmd.Env = e.buildEnv(inputEnv, step.Env)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -567,9 +567,9 @@ func appendInputEnv(inputEnv []string) []string {
 }
 
 // buildEnv constructs the environment for step execution, including
-// PI_INPUT_* vars and provisioned runtime PATH prepends.
-func (e *Executor) buildEnv(inputEnv []string) []string {
-	if len(inputEnv) == 0 && len(e.runtimePaths) == 0 {
+// PI_INPUT_* vars, provisioned runtime PATH prepends, and step-level env vars.
+func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []string {
+	if len(inputEnv) == 0 && len(e.runtimePaths) == 0 && len(stepEnv) == 0 {
 		return nil
 	}
 	env := os.Environ()
@@ -578,6 +578,9 @@ func (e *Executor) buildEnv(inputEnv []string) []string {
 	}
 	if len(inputEnv) > 0 {
 		env = append(env, inputEnv...)
+	}
+	for k, v := range stepEnv {
+		env = append(env, k+"="+v)
 	}
 	return env
 }

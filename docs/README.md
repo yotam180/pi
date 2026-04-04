@@ -116,6 +116,23 @@ steps:
 
 Steps can pass data to the next step using `pipe_to: next`. Full inter-step communication (env, named outputs) is planned for a future iteration.
 
+### Environment Variables (`env:`)
+
+Steps can declare an `env:` mapping to inject environment variables into the step's execution context:
+
+```yaml
+steps:
+  - bash: go build -o bin/app ./...
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      CGO_ENABLED: "0"
+
+  - bash: go test ./...
+```
+
+Environment variables are scoped to the step — they do not leak to subsequent steps. Step-level env vars override parent process env vars with the same name.
+
 ### Installer Automations (`install:`)
 
 Automations that install tools use the `install:` block instead of `steps:`. The two are mutually exclusive. The `install:` block explicitly declares a test-run-verify lifecycle, and PI manages all status output.
@@ -236,6 +253,7 @@ PI ships with a standard collection of automations for common tasks:
 
 - `pi:install-python` — check/install Python at a specific version
 - `pi:install-node` — check/install Node.js
+- `pi:install-go` — check/install Go at a specific version
 - `pi:install-uv` — check/install uv
 - `pi:install-homebrew` — check/install Homebrew
 - `pi:install-tsx` — check/install tsx globally via npm

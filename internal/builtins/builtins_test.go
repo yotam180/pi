@@ -222,6 +222,7 @@ func TestDiscover_InstallerAutomationsExist(t *testing.T) {
 		{"install-homebrew", "Install Homebrew (macOS only)"},
 		{"install-python", "Install Python at a specific version"},
 		{"install-node", "Install Node.js at a specific version"},
+		{"install-go", "Install Go at a specific version"},
 		{"install-uv", "Install the uv Python package manager"},
 		{"install-tsx", "Install tsx globally for TypeScript execution"},
 	}
@@ -254,7 +255,7 @@ func TestDiscover_InstallerAutomationsAreResolvable(t *testing.T) {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	names := []string{"install-homebrew", "install-python", "install-node", "install-uv", "install-tsx"}
+	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-uv", "install-tsx"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			a, err := result.Find(name)
@@ -274,7 +275,7 @@ func TestDiscover_InstallerAutomationsHaveInstallBlock(t *testing.T) {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	names := []string{"install-homebrew", "install-python", "install-node", "install-uv", "install-tsx"}
+	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-uv", "install-tsx"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			a := result.Automations[name]
@@ -420,6 +421,49 @@ func TestDiscover_InstallNodeAcceptsVersionInput(t *testing.T) {
 	}
 }
 
+func TestDiscover_InstallGoAcceptsVersionInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-go"]
+	if len(a.Inputs) == 0 {
+		t.Fatal("expected install-go to have inputs")
+	}
+	spec, ok := a.Inputs["version"]
+	if !ok {
+		t.Fatal("expected install-go to have a 'version' input")
+	}
+	if !spec.IsRequired() {
+		t.Error("expected 'version' input to be required")
+	}
+	if spec.Description == "" {
+		t.Error("expected 'version' input to have a description")
+	}
+
+	if !a.IsInstaller() {
+		t.Fatal("expected install-go to be an installer")
+	}
+	testPhase := a.Install.Test
+	if testPhase.IsScalar {
+		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
+			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		}
+	} else if len(testPhase.Steps) > 0 {
+		found := false
+		for _, s := range testPhase.Steps {
+			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+		}
+	}
+}
+
 func TestDiscover_InstallUvUsesOfficialInstaller(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
@@ -515,6 +559,37 @@ func TestDiscover_InstallNodeUsesMiseAndBrew(t *testing.T) {
 	}
 	if !foundBrew {
 		t.Error("expected install-node to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallGoUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-go"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-go run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range run.Steps {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-go to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-go to fall back to brew")
 	}
 }
 

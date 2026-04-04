@@ -728,6 +728,80 @@ steps:
 	}
 }
 
+func TestLoad_StepWithEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "env-step.yaml", `
+name: build-with-env
+steps:
+  - bash: go build ./...
+    env:
+      GOOS: linux
+      GOARCH: amd64
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if len(a.Steps[0].Env) != 2 {
+		t.Fatalf("env count = %d, want 2", len(a.Steps[0].Env))
+	}
+	if a.Steps[0].Env["GOOS"] != "linux" {
+		t.Errorf("env[GOOS] = %q, want %q", a.Steps[0].Env["GOOS"], "linux")
+	}
+	if a.Steps[0].Env["GOARCH"] != "amd64" {
+		t.Errorf("env[GOARCH] = %q, want %q", a.Steps[0].Env["GOARCH"], "amd64")
+	}
+}
+
+func TestLoad_StepWithoutEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-env.yaml", `
+name: plain
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps[0].Env) != 0 {
+		t.Errorf("env should be empty, got %v", a.Steps[0].Env)
+	}
+}
+
+func TestLoad_StepEnvWithIfAndPipeTo(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "env-combo.yaml", `
+name: combo
+steps:
+  - bash: echo hello
+    env:
+      FOO: bar
+    if: os.macos
+    pipe_to: next
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Env["FOO"] != "bar" {
+		t.Errorf("env[FOO] = %q, want %q", a.Steps[0].Env["FOO"], "bar")
+	}
+	if a.Steps[0].If != "os.macos" {
+		t.Errorf("If = %q, want %q", a.Steps[0].If, "os.macos")
+	}
+	if a.Steps[0].PipeTo != "next" {
+		t.Errorf("PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	}
+}
+
 func TestLoad_AutomationWithIf(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "cond-auto.yaml", `

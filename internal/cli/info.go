@@ -106,22 +106,33 @@ func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
 }
 
 func printStepsDetail(steps []automation.Step, out io.Writer) {
-	hasConditions := false
+	hasDetails := false
 	for _, s := range steps {
-		if s.If != "" {
-			hasConditions = true
+		if s.If != "" || len(s.Env) > 0 {
+			hasDetails = true
 			break
 		}
 	}
-	if !hasConditions {
+	if !hasDetails {
 		return
 	}
 
 	fmt.Fprintf(out, "\nStep details:\n")
 	for i, s := range steps {
 		label := fmt.Sprintf("%s: %s", s.Type, truncateValue(s.Value, 40))
+		var annotations []string
 		if s.If != "" {
-			fmt.Fprintf(out, "  %d. %s  [if: %s]\n", i+1, label, s.If)
+			annotations = append(annotations, fmt.Sprintf("if: %s", s.If))
+		}
+		if len(s.Env) > 0 {
+			envKeys := make([]string, 0, len(s.Env))
+			for k := range s.Env {
+				envKeys = append(envKeys, k)
+			}
+			annotations = append(annotations, fmt.Sprintf("env: %s", strings.Join(envKeys, ", ")))
+		}
+		if len(annotations) > 0 {
+			fmt.Fprintf(out, "  %d. %s  [%s]\n", i+1, label, strings.Join(annotations, "; "))
 		} else {
 			fmt.Fprintf(out, "  %d. %s\n", i+1, label)
 		}

@@ -1,0 +1,26 @@
+name: install-go
+description: Install Go at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Go version to install (e.g. "1.23")
+
+install:
+  test:
+    - bash: |
+        CURRENT=$(go version 2>/dev/null | awk '{print $3}' | sed 's/^go//')
+        MAJOR_MINOR=$(echo "$CURRENT" | cut -d. -f1,2)
+        [ "$MAJOR_MINOR" = "$PI_INPUT_VERSION" ]
+
+  run:
+    - bash: mise install "go@$PI_INPUT_VERSION" && mise use "go@$PI_INPUT_VERSION"
+      if: command.mise
+    - bash: brew install "go@$PI_INPUT_VERSION"
+      if: command.brew and not command.mise
+    - bash: |
+        echo "no suitable installer found (tried mise, brew)" >&2
+        exit 1
+      if: not command.mise and not command.brew
+
+  version: go version 2>&1 | awk '{print $3}' | sed 's/^go//'

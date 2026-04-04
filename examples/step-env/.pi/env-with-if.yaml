@@ -1,0 +1,9 @@
+name: env-with-if
+description: Step with env and condition
+
+steps:
+  - bash: echo "platform=$PLATFORM"
+    env:
+      PLATFORM: darwin
+    if: os.macos
+  - bash: echo "done"

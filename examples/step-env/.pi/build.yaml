@@ -1,0 +1,8 @@
+name: build
+description: Build with env vars
+
+steps:
+  - bash: echo "building for $GOOS/$GOARCH"
+    env:
+      GOOS: linux
+      GOARCH: amd64
