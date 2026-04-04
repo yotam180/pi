@@ -113,6 +113,25 @@ steps:
 
 Steps can pass data to the next step using `pipe_to: next`. Full inter-step communication (env, named outputs) is planned for a future iteration.
 
+### Conditional Steps (`if:`)
+
+Steps can declare an `if:` field to conditionally execute based on the runtime environment. If the condition evaluates to false, the step is silently skipped.
+
+```yaml
+steps:
+  - bash: brew install jq
+    if: os.macos and not command.jq
+
+  - bash: apt-get install -y jq
+    if: os.linux and not command.jq
+
+  - bash: echo "jq is ready"
+```
+
+Supported predicates: `os.macos`, `os.linux`, `os.windows`, `os.arch.arm64`, `os.arch.amd64`, `env.<NAME>`, `command.<name>`, `file.exists("<path>")`, `dir.exists("<path>")`, `shell.zsh`, `shell.bash`. Combine with `and`, `or`, `not`, and parentheses.
+
+When a step with `pipe_to: next` is skipped, any piped data passes through to the next step unchanged.
+
 ---
 
 ## Shell Shortcuts

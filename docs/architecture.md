@@ -30,15 +30,15 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry + Load()
     config_test.go                 9 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation, Step, StepType, InputSpec + Load(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
-    automation_test.go             27 tests
+    automation.go                  Automation, Step (with If field), StepType, InputSpec + Load(), FilePath, Dir(), ResolveInputs(), InputEnvVars()
+    automation_test.go             35 tests
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), Result, Find()
     discovery_test.go              18 tests
   executor/                        Step execution engine
-    executor.go                    Executor, ExitError, Run(), RunWithInputs(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection
+    executor.go                    Executor (with RuntimeEnv field), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection; step-level if: conditional execution
     predicates.go                  RuntimeEnv, DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
-    executor_test.go               55 tests
+    executor_test.go               68 tests (55 base + 13 conditional)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
@@ -178,6 +178,15 @@ pi setup
 - Exit code propagation: if a piping step fails, execution stops immediately
 - Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
 
+### Conditional step execution (`if:` on steps)
+- Steps can declare an `if:` field containing a boolean condition expression
+- Before executing a step with `if:`, the executor extracts predicates, resolves them via the predicate resolver, and evaluates the expression
+- If the expression evaluates to false, the step is silently skipped (no output, no error)
+- Steps without `if:` always execute (backward compatible)
+- Invalid `if:` expressions are caught at YAML load time, not at runtime
+- `evaluateCondition()` on `Executor` uses `RuntimeEnv` field if set (for testing), otherwise `DefaultRuntimeEnv()`
+- **Pipe passthrough on skip**: when a skipped step has `pipe_to: next`, any existing piped input from a prior step passes through to the next step unchanged. If the skipped step is the first in a pipe chain, `pipedInput` remains nil.
+
 ### Shell shortcuts (`pi shell`)
 - Shortcuts are defined in `pi.yaml → shortcuts:` as either a string (`"docker/up"`) or an object (`{run: ..., anywhere: true}`)
 - `pi shell` writes shell functions to `~/.pi/shell/<project>.sh` — one file per project
@@ -273,7 +282,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 270 (33 automation + 48 CLI + 30 conditions + 9 config + 18 discovery + 66 executor + 4 project + 14 shell + 48 integration)
+Total tests: 283 (35 automation + 42 CLI + 30 conditions + 9 config + 18 discovery + 79 executor + 4 project + 14 shell + 52 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -284,3 +293,4 @@ Total tests: 270 (33 automation + 48 CLI + 30 conditions + 9 config + 18 discove
 - Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`
 - Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
 - Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
+- Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step)

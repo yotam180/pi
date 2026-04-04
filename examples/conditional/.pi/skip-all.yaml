@@ -1,0 +1,8 @@
+name: skip-all
+description: All conditional steps skipped, only unconditional runs
+
+steps:
+  - bash: echo "This will be skipped"
+    if: os.windows and os.linux
+
+  - bash: echo "Always runs"

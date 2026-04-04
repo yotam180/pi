@@ -1,0 +1,14 @@
+name: platform-info
+description: Print platform-specific information using conditional steps
+
+steps:
+  - bash: echo "Running on macOS"
+    if: os.macos
+
+  - bash: echo "Running on Linux"
+    if: os.linux
+
+  - bash: echo "Running on Windows"
+    if: os.windows
+
+  - bash: echo "Done"

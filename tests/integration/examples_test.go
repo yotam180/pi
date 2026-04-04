@@ -475,3 +475,78 @@ func TestInfo_NoArgs(t *testing.T) {
 		t.Fatal("expected non-zero exit when no argument provided")
 	}
 }
+
+// --- Conditional step tests ---
+
+func TestConditional_List(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, name := range []string{"platform-info", "skip-all", "pipe-conditional"} {
+		if !strings.Contains(out, name) {
+			t.Errorf("expected %q in list output, got:\n%s", name, out)
+		}
+	}
+}
+
+func TestConditional_PlatformInfo(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "platform-info")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	trimmed := strings.TrimSpace(out)
+	lines := strings.Split(trimmed, "\n")
+
+	if runtime.GOOS == "darwin" {
+		if !strings.Contains(trimmed, "Running on macOS") {
+			t.Errorf("on macOS, expected 'Running on macOS' in output, got:\n%s", trimmed)
+		}
+		if strings.Contains(trimmed, "Running on Linux") {
+			t.Error("on macOS, should not contain 'Running on Linux'")
+		}
+	} else if runtime.GOOS == "linux" {
+		if !strings.Contains(trimmed, "Running on Linux") {
+			t.Errorf("on Linux, expected 'Running on Linux' in output, got:\n%s", trimmed)
+		}
+		if strings.Contains(trimmed, "Running on macOS") {
+			t.Error("on Linux, should not contain 'Running on macOS'")
+		}
+	}
+
+	lastLine := lines[len(lines)-1]
+	if lastLine != "Done" {
+		t.Errorf("last line = %q, want %q", lastLine, "Done")
+	}
+}
+
+func TestConditional_SkipAll(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "skip-all")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	trimmed := strings.TrimSpace(out)
+	if trimmed != "Always runs" {
+		t.Errorf("output = %q, want %q", trimmed, "Always runs")
+	}
+}
+
+func TestConditional_PipePassesThroughSkipped(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "conditional")
+	out, code := runPi(t, dir, "run", "pipe-conditional")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+
+	trimmed := strings.TrimSpace(out)
+	// The middle step (tr a-z A-Z) should be skipped (condition is os.windows),
+	// so the output should be lowercase "hello world" passed through unchanged.
+	if trimmed != "hello world" {
+		t.Errorf("output = %q, want %q (pipe should pass through skipped step)", trimmed, "hello world")
+	}
+}

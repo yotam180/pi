@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"gopkg.in/yaml.v3"
 )
 
@@ -56,6 +57,7 @@ type Step struct {
 	Value  string            `yaml:"-"`
 	PipeTo string            `yaml:"pipe_to"`
 	With   map[string]string `yaml:"-"`
+	If     string            `yaml:"-"`
 }
 
 // Automation represents a parsed automation YAML file.
@@ -83,6 +85,7 @@ type stepRaw struct {
 	TypeScript *string           `yaml:"typescript"`
 	PipeTo     string            `yaml:"pipe_to"`
 	With       map[string]string `yaml:"with"`
+	If         string            `yaml:"if"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -188,6 +191,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		Type:   s.t,
 		Value:  s.v,
 		PipeTo: sr.PipeTo,
+		If:     sr.If,
 	}
 	if len(sr.With) > 0 {
 		if s.t != StepTypeRun {
@@ -242,6 +246,11 @@ func (a *Automation) validate(path string) error {
 		}
 		if !implementedStepTypes[step.Type] {
 			return fmt.Errorf("%s: step[%d] type %q is recognized but not yet implemented", path, i, step.Type)
+		}
+		if step.If != "" {
+			if _, err := conditions.Predicates(step.If); err != nil {
+				return fmt.Errorf("%s: step[%d] invalid if expression: %w", path, i, err)
+			}
 		}
 	}
 

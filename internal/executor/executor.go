@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
 )
 
@@ -37,6 +38,10 @@ type Executor struct {
 
 	// lastPipeBuffer holds captured stdout from the last pipe_to:next step.
 	lastPipeBuffer *bytes.Buffer
+
+	// RuntimeEnv overrides the default runtime environment for predicate resolution.
+	// If nil, DefaultRuntimeEnv() is used.
+	RuntimeEnv *RuntimeEnv
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -76,6 +81,30 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 	var pipedInput io.Reader
 	for i, step := range a.Steps {
+		if step.If != "" {
+			skip, err := e.evaluateCondition(step.If)
+			if err != nil {
+				return fmt.Errorf("automation %q step[%d] if: %w", a.Name, i, err)
+			}
+			if skip {
+				// If this step is a pipe source, pass through the current piped input
+				// (or discard it if there's nothing to pass through).
+				if step.PipeTo == "next" && i < len(a.Steps)-1 {
+					if pipedInput != nil {
+						buf := &bytes.Buffer{}
+						if _, err := io.Copy(buf, pipedInput); err != nil {
+							return fmt.Errorf("passing piped input through skipped step[%d]: %w", i, err)
+						}
+						pipedInput = buf
+					}
+					// else pipedInput stays nil — nothing to pass through
+				} else {
+					pipedInput = nil
+				}
+				continue
+			}
+		}
+
 		isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
 		if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
 			return err
@@ -301,6 +330,32 @@ func appendInputEnv(inputEnv []string) []string {
 	}
 	env := os.Environ()
 	return append(env, inputEnv...)
+}
+
+// evaluateCondition resolves and evaluates an if: expression.
+// Returns true if the step should be skipped (condition is false).
+func (e *Executor) evaluateCondition(expr string) (bool, error) {
+	predNames, err := conditions.Predicates(expr)
+	if err != nil {
+		return false, err
+	}
+
+	env := e.RuntimeEnv
+	if env == nil {
+		env = DefaultRuntimeEnv()
+	}
+
+	resolved, err := ResolvePredicatesWithEnv(predNames, e.RepoRoot, env)
+	if err != nil {
+		return false, err
+	}
+
+	result, err := conditions.Eval(expr, resolved)
+	if err != nil {
+		return false, err
+	}
+
+	return !result, nil
 }
 
 func (e *Executor) stdout() io.Writer {

@@ -601,3 +601,129 @@ func TestInputEnvVars_HyphenToUnderscore(t *testing.T) {
 		t.Errorf("expected PI_INPUT_MY_INPUT=val, got: %v", vars)
 	}
 }
+
+// --- if: field tests ---
+
+func TestLoad_StepWithIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "cond.yaml", `
+name: conditional
+description: Test conditional step
+steps:
+  - bash: echo hello
+    if: os.macos
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	if a.Steps[0].If != "os.macos" {
+		t.Errorf("step.If = %q, want %q", a.Steps[0].If, "os.macos")
+	}
+}
+
+func TestLoad_StepWithoutIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-cond.yaml", `
+name: normal
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].If != "" {
+		t.Errorf("step.If should be empty, got %q", a.Steps[0].If)
+	}
+}
+
+func TestLoad_StepWithComplexIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "complex-cond.yaml", `
+name: complex
+steps:
+  - bash: echo hello
+    if: os.macos and not command.brew
+  - bash: echo world
+    if: os.linux or os.macos
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(a.Steps))
+	}
+	if a.Steps[0].If != "os.macos and not command.brew" {
+		t.Errorf("step[0].If = %q, want %q", a.Steps[0].If, "os.macos and not command.brew")
+	}
+	if a.Steps[1].If != "os.linux or os.macos" {
+		t.Errorf("step[1].If = %q, want %q", a.Steps[1].If, "os.linux or os.macos")
+	}
+}
+
+func TestLoad_StepWithIfAndPipeTo(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-cond.yaml", `
+name: piped
+steps:
+  - bash: echo data
+    pipe_to: next
+    if: os.macos
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].If != "os.macos" {
+		t.Errorf("step[0].If = %q, want %q", a.Steps[0].If, "os.macos")
+	}
+	if a.Steps[0].PipeTo != "next" {
+		t.Errorf("step[0].PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	}
+}
+
+func TestLoad_StepWithInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad-if.yaml", `
+name: bad-if
+steps:
+  - bash: echo hello
+    if: "and and and"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid if expression")
+	}
+	if !strings.Contains(err.Error(), "invalid if expression") {
+		t.Errorf("error should mention 'invalid if expression', got: %v", err)
+	}
+}
+
+func TestLoad_StepWithFuncCallIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "func-if.yaml", `
+name: func-cond
+steps:
+  - bash: echo hello
+    if: file.exists(".env")
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].If != `file.exists(".env")` {
+		t.Errorf("step.If = %q, want %q", a.Steps[0].If, `file.exists(".env")`)
+	}
+}
