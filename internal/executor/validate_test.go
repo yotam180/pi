@@ -525,3 +525,76 @@ func TestRunWithInputs_InstallerWithMissingRequirement(t *testing.T) {
 		t.Errorf("stderr should contain validation error, got:\n%s", stderr.String())
 	}
 }
+
+func TestCheckRequirementForDoctor_DetectsVersionWithoutConstraint(t *testing.T) {
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "/usr/bin/" + file, nil },
+		ExecOutput: func(cmd string, args ...string) string {
+			if cmd == "bash" {
+				return "GNU bash, version 5.2.37(1)-release"
+			}
+			return ""
+		},
+	}
+
+	req := automation.Requirement{Name: "bash", Kind: automation.RequirementCommand}
+	result := CheckRequirementForDoctor(req, env)
+
+	if !result.Satisfied {
+		t.Fatalf("expected satisfied, got error: %s", result.Error)
+	}
+	if result.DetectedVersion != "5.2.37" {
+		t.Errorf("expected version 5.2.37, got %q", result.DetectedVersion)
+	}
+}
+
+func TestCheckRequirementForDoctor_NotFound(t *testing.T) {
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
+	}
+
+	req := automation.Requirement{Name: "missing", Kind: automation.RequirementCommand}
+	result := CheckRequirementForDoctor(req, env)
+
+	if result.Satisfied {
+		t.Fatal("expected not satisfied for missing command")
+	}
+	if result.Error != "not found" {
+		t.Errorf("expected 'not found' error, got %q", result.Error)
+	}
+}
+
+func TestCheckRequirementForDoctor_VersionConstraint(t *testing.T) {
+	env := &RuntimeEnv{
+		LookPath: func(file string) (string, error) { return "/usr/bin/" + file, nil },
+		ExecOutput: func(cmd string, args ...string) string {
+			return "Python 3.13.0"
+		},
+	}
+
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
+	result := CheckRequirementForDoctor(req, env)
+
+	if !result.Satisfied {
+		t.Fatalf("expected satisfied, got error: %s", result.Error)
+	}
+	if result.DetectedVersion != "3.13.0" {
+		t.Errorf("expected version 3.13.0, got %q", result.DetectedVersion)
+	}
+}
+
+func TestInstallHintFor_KnownTool(t *testing.T) {
+	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
+	hint := InstallHintFor(req)
+	if hint == "" {
+		t.Error("expected install hint for python")
+	}
+}
+
+func TestInstallHintFor_UnknownTool(t *testing.T) {
+	req := automation.Requirement{Name: "unknown-tool-xyz", Kind: automation.RequirementCommand}
+	hint := InstallHintFor(req)
+	if hint != "" {
+		t.Errorf("expected empty hint for unknown tool, got %q", hint)
+	}
+}

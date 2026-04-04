@@ -1,0 +1,111 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/executor"
+	"github.com/vyper-tooling/pi/internal/project"
+)
+
+func newDoctorCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor",
+		Short: "Check requirement health for all automations",
+		Long: `Scan all automations in the project, check their requires: entries,
+and print a per-automation health table showing which requirements are
+satisfied and which are missing.
+
+Exits with code 0 if all requirements are met, 1 if any are missing.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("getting working directory: %w", err)
+			}
+			return runDoctor(cwd, cmd.OutOrStdout())
+		},
+	}
+}
+
+func runDoctor(startDir string, out io.Writer) error {
+	root, err := project.FindRoot(startDir)
+	if err != nil {
+		return err
+	}
+
+	result, err := discoverAll(root)
+	if err != nil {
+		return err
+	}
+
+	names := result.Names()
+	if len(names) == 0 {
+		fmt.Fprintln(out, "No automations found.")
+		return nil
+	}
+
+	env := executor.DefaultRuntimeEnv()
+	anyFailed := false
+	anyPrinted := false
+
+	for _, name := range names {
+		a := result.Automations[name]
+		if len(a.Requires) == 0 {
+			continue
+		}
+
+		if anyPrinted {
+			fmt.Fprintln(out)
+		}
+		fmt.Fprintf(out, "  %s\n", name)
+		anyPrinted = true
+
+		for _, req := range a.Requires {
+			check := executor.CheckRequirementForDoctor(req, env)
+			if check.Satisfied {
+				label := formatDoctorLabel(req)
+				if check.DetectedVersion != "" {
+					fmt.Fprintf(out, "    ✓ %-25s (%s)\n", label, check.DetectedVersion)
+				} else {
+					fmt.Fprintf(out, "    ✓ %s\n", label)
+				}
+			} else {
+				label := formatDoctorLabel(req)
+				hint := executor.InstallHintFor(req)
+				if hint != "" {
+					fmt.Fprintf(out, "    ✗ %-25s %s → %s\n", label, check.Error, hint)
+				} else {
+					fmt.Fprintf(out, "    ✗ %-25s %s\n", label, check.Error)
+				}
+				anyFailed = true
+			}
+		}
+	}
+
+	if !anyPrinted {
+		fmt.Fprintln(out, "No automations have requirements.")
+		return nil
+	}
+
+	if anyFailed {
+		return &executor.ExitError{Code: 1}
+	}
+
+	return nil
+}
+
+func formatDoctorLabel(req automation.Requirement) string {
+	if req.MinVersion != "" {
+		if req.Kind == automation.RequirementCommand {
+			return fmt.Sprintf("command: %s >= %s", req.Name, req.MinVersion)
+		}
+		return fmt.Sprintf("%s >= %s", req.Name, req.MinVersion)
+	}
+	if req.Kind == automation.RequirementCommand {
+		return fmt.Sprintf("command: %s", req.Name)
+	}
+	return req.Name
+}

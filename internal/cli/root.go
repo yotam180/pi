@@ -30,6 +30,7 @@ and shareable automation model.`,
 	root.AddCommand(newSetupCmd())
 	root.AddCommand(newShellCmd())
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newDoctorCmd())
 
 	return root
 }

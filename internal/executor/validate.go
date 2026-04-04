@@ -266,3 +266,70 @@ func installHint(req automation.Requirement) string {
 	}
 	return ""
 }
+
+// InstallHintFor is the exported version of installHint for use by other packages.
+func InstallHintFor(req automation.Requirement) string {
+	return installHint(req)
+}
+
+// CheckRequirementForDoctor checks a single requirement, always detecting the
+// version even when no minimum version constraint is set. This is used by
+// `pi doctor` to show the detected version for satisfied requirements.
+func CheckRequirementForDoctor(req automation.Requirement, env *RuntimeEnv) CheckResult {
+	cmdName := req.Name
+	if req.Kind == automation.RequirementRuntime {
+		cmdName = runtimeCommand(req.Name)
+	}
+
+	_, err := env.LookPath(cmdName)
+	if err != nil {
+		return CheckResult{
+			Requirement: req,
+			Satisfied:   false,
+			Error:       "not found",
+		}
+	}
+
+	detected := detectVersion(cmdName, env)
+
+	if req.MinVersion == "" {
+		return CheckResult{
+			Requirement:     req,
+			Satisfied:       true,
+			DetectedVersion: detected,
+		}
+	}
+
+	if detected == "" {
+		return CheckResult{
+			Requirement: req,
+			Satisfied:   false,
+			Error:       fmt.Sprintf("installed but unable to detect version (tried %s --version)", cmdName),
+		}
+	}
+
+	cmp, err := compareVersions(detected, req.MinVersion)
+	if err != nil {
+		return CheckResult{
+			Requirement:     req,
+			Satisfied:       false,
+			DetectedVersion: detected,
+			Error:           fmt.Sprintf("version parse error: %v", err),
+		}
+	}
+
+	if cmp < 0 {
+		return CheckResult{
+			Requirement:     req,
+			Satisfied:       false,
+			DetectedVersion: detected,
+			Error:           fmt.Sprintf("found %s but need >= %s", detected, req.MinVersion),
+		}
+	}
+
+	return CheckResult{
+		Requirement:     req,
+		Satisfied:       true,
+		DetectedVersion: detected,
+	}
+}

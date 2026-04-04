@@ -37,12 +37,14 @@ internal/
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
-    root_test.go                   CLI tests (9 tests)
+    doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table
+    root_test.go                   CLI tests (10 tests — includes doctor subcommand)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
     info_test.go                   pi info tests (13 tests — includes if: condition display and installer type)
     setup_test.go                  pi setup tests (6 tests — includes --silent)
     shell_test.go                  pi shell tests (3 tests)
+    doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
   conditions/                      Boolean expression parser/evaluator for if: fields
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
@@ -57,10 +59,10 @@ internal/
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
     executor.go                    Executor (with RuntimeEnv and Silent fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(); pipe_to:next support; PI_INPUT_* env injection; step-level and automation-level if: conditional execution; structured installer lifecycle
-    validate.go                    ValidateRequirements(), checkRequirement(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), CheckResult, ValidationError, installHints; pre-execution requirement validation
+    validate.go                    ValidateRequirements(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               87 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer)
-    validate_test.go               24 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints)
+    validate_test.go               29 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
@@ -156,6 +158,25 @@ pi setup
   │
   └─ Shell (internal/shell)  [unless CI or --no-shell]
        Install() → writes shortcuts, injects source line
+```
+
+```
+pi doctor
+  │
+  ├─ CLI (internal/cli)
+  │    Parses args, gets CWD
+  │
+  ├─ Project (internal/project)
+  │    Walks up from CWD to find pi.yaml → repo root path
+  │
+  ├─ Discovery (internal/discovery + internal/builtins)
+  │    discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
+  │
+  └─ Executor/Validate (internal/executor)
+       For each automation with requires:
+         CheckRequirementForDoctor() → CheckResult per requirement
+       Prints per-automation health table with ✓/✗ icons
+       Exit 0 (all satisfied) or 1 (any missing)
 ```
 
 ## Key Design Decisions
@@ -266,6 +287,16 @@ pi setup
 - Formatted error output shows automation name, missing requirements with version info, and install hints
 - Testability: `RuntimeEnv.ExecOutput` field allows mocking `--version` calls without real command execution
 - Validation happens after input resolution but before step/install execution
+- `CheckRequirementForDoctor()` is the exported variant that always detects version (even without constraints) for `pi doctor`
+- `InstallHintFor()` is the exported version of `installHint()` for use by `pi doctor`
+
+### Doctor command (`pi doctor`)
+- Scans all automations (local + built-in), filters to those with `requires:` entries
+- For each automation, checks every requirement using `CheckRequirementForDoctor()` from `internal/executor`
+- Output format: per-automation section with `✓`/`✗` icons, detected version in parentheses, install hints
+- Automations without `requires:` are silently skipped — not shown in output
+- Exit code 0 when all requirements are satisfied, exit code 1 when any are missing
+- No network requests — only PATH lookups and `--version` calls
 
 ### Requirement declarations (`requires:`)
 - Automations can declare a `requires:` block listing tools/runtimes needed before execution
@@ -398,7 +429,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 470 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 config + 24 discovery + 122 executor + 4 project + 14 shell + 104 integration)
+Total tests: 494 (75 automation + 38 builtins + 57 CLI + 30 conditions + 11 config + 24 discovery + 123 executor + 4 project + 14 shell + 118 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
@@ -415,3 +446,4 @@ Total tests: 470 (75 automation + 38 builtins + 48 CLI + 30 conditions + 11 conf
 - Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
 - Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
 - Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints
+- Doctor tests: `pi doctor` on `requires-validation` workspace showing ✓ for satisfied, ✗ for missing, version mismatch, skipping no-requires automations, detected version display, install hints; healthy workspace with all-satisfied exit code 0
