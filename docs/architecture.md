@@ -23,6 +23,9 @@ internal/
     info_test.go                   pi info tests (9 tests)
     setup_test.go                  pi setup tests (4 tests)
     shell_test.go                  pi shell tests (3 tests)
+  conditions/                      Boolean expression parser/evaluator for if: fields
+    conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
+    conditions_test.go             31 tests
   config/                          pi.yaml parsing
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry + Load()
     config_test.go                 9 tests
@@ -145,6 +148,7 @@ pi setup
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure
 - `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths
+- `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map
 - `executor` runs automation steps; depends on `automation` (types) and `discovery` (for `run:` step resolution)
 - `project` handles finding the repo root (directory containing `pi.yaml`)
@@ -205,6 +209,17 @@ pi setup
 - Circular dependency errors show the full chain (e.g., `a → b → c → a`)
 - Missing `pi.yaml` errors mention the start directory
 
+### Condition expressions (`internal/conditions`)
+- Pure-logic package with zero PI internal dependencies — receives `map[string]bool` and expression string, returns `(bool, error)`
+- Lexer tokenizes into IDENT, AND, OR, NOT, LPAREN, RPAREN, STRING, EOF with byte-position tracking
+- Recursive-descent parser follows: `expr → orExpr → andExpr → notExpr → primary`
+- `and` binds tighter than `or` (standard boolean precedence)
+- Supports: bare dotted identifiers (`os.macos`), function-call syntax (`file.exists(".env")`), `and`/`or`/`not`, parentheses
+- Function-call predicates are keyed in the predicate map as `name("arg")` (e.g., `file.exists(".env")`)
+- `Eval(expr, predicates)` — evaluates expression; empty expression returns `true`
+- `Predicates(expr)` — extracts all predicate names for pre-resolution; deduplicates preserving first-occurrence order
+- Error messages include position information for malformed expressions and the predicate name for unknown predicates
+
 ### CLI output
 - `pi list` uses `text/tabwriter` for aligned columns (NAME, DESCRIPTION)
 - Automations without descriptions show `-` as placeholder
@@ -247,7 +262,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 228 (33 automation + 48 CLI + 9 config + 18 discovery + 54 executor + 4 project + 14 shell + 48 integration)
+Total tests: 259 (33 automation + 48 CLI + 31 conditions + 9 config + 18 discovery + 54 executor + 4 project + 14 shell + 48 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
