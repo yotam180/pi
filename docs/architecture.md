@@ -37,7 +37,9 @@ internal/
     discovery_test.go              18 tests
   executor/                        Step execution engine
     executor.go                    Executor, ExitError, Run(), RunWithInputs(), execBash(), execPython(), execTypeScript(), execRun(); pipe_to:next support; PI_INPUT_* env injection
+    predicates.go                  RuntimeEnv, DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               55 tests
+    predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
@@ -220,6 +222,15 @@ pi setup
 - `Predicates(expr)` — extracts all predicate names for pre-resolution; deduplicates preserving first-occurrence order
 - Error messages include position information for malformed expressions and the predicate name for unknown predicates
 
+### Predicate resolution (`internal/executor/predicates.go`)
+- Converts predicate names (from `conditions.Predicates()`) into `map[string]bool` for `conditions.Eval()`
+- `ResolvePredicates(names, repoRoot)` is the public API; `ResolvePredicatesWithEnv(names, repoRoot, env)` accepts an injected `RuntimeEnv` for testing
+- `RuntimeEnv` struct captures injectable `GOOS`, `GOARCH`, `Getenv()`, `LookPath()`, `Stat()` — no direct global reads
+- Static predicates: `os.macos`, `os.linux`, `os.windows`, `os.arch.arm64`, `os.arch.amd64`, `shell.zsh`, `shell.bash`
+- Dynamic predicates: `env.<NAME>` checks `Getenv(NAME) != ""`; `command.<name>` checks `LookPath(name) == nil`
+- Function-call predicates: `file.exists("path")` checks path exists and is a file; `dir.exists("path")` checks path exists and is a directory — both resolve relative to `repoRoot`
+- Unknown predicates produce an error listing all valid prefixes
+
 ### CLI output
 - `pi list` uses `text/tabwriter` for aligned columns (NAME, DESCRIPTION)
 - Automations without descriptions show `-` as placeholder
@@ -262,7 +273,7 @@ pi setup
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 259 (33 automation + 48 CLI + 31 conditions + 9 config + 18 discovery + 54 executor + 4 project + 14 shell + 48 integration)
+Total tests: 270 (33 automation + 48 CLI + 30 conditions + 9 config + 18 discovery + 66 executor + 4 project + 14 shell + 48 integration)
 
 ### Integration tests
 - Build `pi` binary once in `TestMain`
