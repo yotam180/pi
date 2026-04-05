@@ -137,6 +137,25 @@ env:
 		</div>
 	</section>
 
+	<!-- AI support -->
+	<section class="ai-section">
+		<h2>Use with your AI assistant</h2>
+		<div class="ai-grid">
+			<a href="/llms.txt" class="ai-card">
+				<code>/llms.txt</code>
+				<span>Curated entry point for LLMs</span>
+			</a>
+			<a href="/llms-ctx.txt" class="ai-card">
+				<code>/llms-ctx.txt</code>
+				<span>Full docs context — paste into any LLM</span>
+			</a>
+			<div class="ai-card">
+				<code>&lt;url&gt;.md</code>
+				<span>Every page available as clean Markdown</span>
+			</div>
+		</div>
+	</section>
+
 	<!-- Footer -->
 	<footer class="landing-footer">
 		<p>
@@ -336,6 +355,50 @@ env:
 	}
 	.step-type span {
 		font-size: 0.9rem;
+		color: var(--sl-color-gray-2, #aaa);
+	}
+
+	/* AI support */
+	.ai-section {
+		margin: 4rem 0;
+	}
+	.ai-section h2 {
+		text-align: center;
+		font-size: 1.75rem;
+		margin-bottom: 1.5rem;
+	}
+	.ai-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 1rem;
+		max-width: 52rem;
+		margin: 0 auto;
+	}
+	.ai-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 1.25rem;
+		background: var(--sl-color-gray-6, #1a1a2e);
+		border: 1px solid var(--sl-color-gray-5, #2a2a3e);
+		border-radius: 0.75rem;
+		text-align: center;
+		text-decoration: none;
+		transition: border-color 0.15s;
+	}
+	a.ai-card:hover {
+		border-color: var(--sl-color-text-accent, #818cf8);
+	}
+	.ai-card code {
+		font-size: 1rem;
+		color: var(--sl-color-text-accent, #818cf8);
+		background: none;
+		border: none;
+		padding: 0;
+	}
+	.ai-card span {
+		font-size: 0.85rem;
 		color: var(--sl-color-gray-2, #aaa);
 	}
 

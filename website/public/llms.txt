@@ -1,7 +1,40 @@
-# PI Documentation — llms.txt
-# https://llmstxt.org/
+# PI
 
-> PI is a developer automation platform that replaces shell_shortcuts.sh
-> with structured, polyglot, version-controlled automations.
+> PI is a developer automation tool that replaces your team's shell_shortcuts.sh with structured, polyglot, version-controlled automations. Write YAML files in .pi/, run them with `pi run`, share them via GitHub packages.
 
-This file will be populated with links to documentation pages.
+PI automations are YAML files that chain steps in bash, Python, or TypeScript. The root `pi.yaml` declares shortcuts, setup sequences, and external packages.
+
+## Getting Started
+
+- [Introduction](getting-started/introduction.md): What PI is and the problem it solves
+- [Installation](getting-started/installation.md): Install via Homebrew, curl, or binary download
+- [Quick Start](getting-started/quick-start.md): Run your first automation in 5 minutes
+
+## Concepts
+
+- [Automations](concepts/automations.md): YAML files, naming, step types, modifiers, install blocks
+- [pi.yaml](concepts/pi-yaml.md): Root config — shortcuts, setup, packages
+- [Step Types](concepts/step-types.md): bash, python, typescript, run
+- [Shell Shortcuts](concepts/shell-shortcuts.md): pi shell, global wrapper, parent_shell
+- [Packages](concepts/packages.md): Sharing and consuming automations via GitHub
+
+## Guides
+
+- [Setup Automations](guides/setup-automations.md): Write a full pi setup configuration
+- [Cross-Platform Scripts](guides/cross-platform-scripts.md): if:, first:, OS predicates
+- [Publishing to GitHub](guides/publishing-to-github.md): Create and tag a PI package repo
+- [Using Packages](guides/using-packages.md): Add, alias, and upgrade packages
+- [Private Repositories](guides/private-repos.md): SSH and GITHUB_TOKEN authentication
+- [Parent Shell Steps](guides/parent-shell-steps.md): Activate virtualenvs, cd, source files
+
+## Reference
+
+- [CLI Commands](reference/cli.md): Every command and flag
+- [Automation YAML](reference/automation-yaml.md): Every field and step modifier
+- [Conditions (if:)](reference/conditions.md): All predicates and operators
+- [Built-in Automations](reference/builtins.md): The pi:* standard library
+- [pi-package.yaml](reference/pi-package-yaml.md): Package metadata spec
+
+## Context Files
+
+- [Full documentation context](llms-ctx.txt): All documentation concatenated — paste into any LLM

@@ -45,17 +45,17 @@ The key pedagogical decision: start with short forms. A first-time developer sho
 - i18n / translations
 
 ## Success Criteria
-- [ ] `cd website && npm run build` completes without errors
-- [ ] GitHub Actions workflow deploys the site to GitHub Pages on push to `main`
+- [x] `cd website && npm run build` completes without errors
+- [x] GitHub Actions workflow deploys the site to GitHub Pages on push to `main`
 - [x] Landing page has install command with copy button, feature summary, and link to docs
-- [ ] Getting Started Quick Start uses short-form syntax first, reveals full form later with explanation
-- [ ] Every CLI command listed in `docs/README.md` has a corresponding reference page entry
-- [ ] Every YAML field and step modifier listed in `docs/README.md` has a documented reference entry
-- [ ] All `if:` predicates are documented in the Conditions reference
+- [x] Getting Started Quick Start uses short-form syntax first, reveals full form later with explanation
+- [x] Every CLI command listed in `docs/README.md` has a corresponding reference page entry
+- [x] Every YAML field and step modifier listed in `docs/README.md` has a documented reference entry
+- [x] All `if:` predicates are documented in the Conditions reference
 - [x] Guides cover: writing a setup automation, cross-platform scripts, publishing a package to GitHub, consuming packages, private repos, parent shell steps
-- [ ] `public/llms.txt` exists and links to key documentation pages
-- [ ] `starlight-page-actions` plugin provides "Copy as Markdown" button on all doc pages
-- [ ] Site scores 90+ on Lighthouse (Starlight default achieves this)
+- [x] `public/llms.txt` exists and links to key documentation pages
+- [x] `starlight-page-actions` plugin provides "Copy as Markdown" button on all doc pages
+- [x] Site scores 90+ on Lighthouse (Starlight default achieves this)
 
 ## Notes
 - The `docs/` folder is agent memory and stays as-is. The website content in `website/src/content/docs/` is authored separately for human readers.

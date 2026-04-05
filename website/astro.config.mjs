@@ -8,7 +8,15 @@ export default defineConfig({
 		starlight({
 			title: 'PI',
 			description: 'Structured, polyglot, shareable developer automations',
-			plugins: [starlightPageActions()],
+			plugins: [
+				starlightPageActions({
+					actions: {
+						chatgpt: true,
+						claude: true,
+						markdown: true,
+					},
+				}),
+			],
 			social: [
 				{
 					icon: 'github',
