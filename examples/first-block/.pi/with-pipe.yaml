@@ -1,0 +1,6 @@
+description: First block feeds data to the next step via pipe
+steps:
+  - first:
+      - bash: echo "HELLO_FROM_FIRST"
+    pipe_to: next
+  - bash: tr '[:upper:]' '[:lower:]'

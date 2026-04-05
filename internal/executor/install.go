@@ -74,6 +74,13 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 			}
 		}
 
+		if step.IsFirst() {
+			if err := e.execInstallFirstBlock(a, step, i, inputEnv, stderrCapture); err != nil {
+				return err
+			}
+			continue
+		}
+
 		stderrWriter := io.Writer(io.Discard)
 		if stderrCapture != nil {
 			stderrWriter = stderrCapture
@@ -150,6 +157,37 @@ func (e *Executor) printInstallStatus(icon, name, status, version string) {
 		return
 	}
 	e.printer().InstallStatus(icon, name, status, version)
+}
+
+// execInstallFirstBlock handles a first: block inside an install phase.
+func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automation.Step, index int, inputEnv []string, stderrCapture *bytes.Buffer) error {
+	for j, sub := range step.First {
+		if sub.If != "" {
+			skip, err := e.evaluateCondition(sub.If)
+			if err != nil {
+				return fmt.Errorf("install phase step[%d].first[%d] if: %w", index, j, err)
+			}
+			if skip {
+				continue
+			}
+		}
+
+		stderrWriter := io.Writer(io.Discard)
+		if stderrCapture != nil {
+			stderrWriter = stderrCapture
+		}
+
+		runner := e.registry().Get(sub.Type)
+		if runner == nil {
+			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
+		}
+
+		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv)
+		ctx.Stderr = stderrWriter
+
+		return runner.Run(ctx)
+	}
+	return nil
 }
 
 // printIndentedStderr prints stderr output indented for the error block.

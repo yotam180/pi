@@ -1,0 +1,9 @@
+description: Installer using first block in run phase
+install:
+  test: test -f /tmp/pi-first-block-test-marker
+  run:
+    - first:
+        - bash: echo "would use mise" && touch /tmp/pi-first-block-test-marker
+          if: command.misenonexistenttool
+        - bash: touch /tmp/pi-first-block-test-marker
+  version: echo 1.0.0

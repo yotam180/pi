@@ -31,6 +31,7 @@ func (s StepType) IsValid() bool {
 }
 
 // Step represents a single step within an automation.
+// A step is either a regular step (Type/Value set) or a first: block (First non-nil).
 type Step struct {
 	Type        StepType          `yaml:"-"`
 	Value       string            `yaml:"-"`
@@ -44,10 +45,20 @@ type Step struct {
 	Timeout     time.Duration     `yaml:"-"`
 	TimeoutRaw  string            `yaml:"-"` // original string for display (e.g. "30s")
 	Description string            `yaml:"-"`
+
+	// First holds the sub-steps of a first: block. When non-nil, this step
+	// is a first-match block: the executor runs the first sub-step whose if:
+	// condition passes and skips the rest. A sub-step without if: always matches.
+	First []Step `yaml:"-"`
+}
+
+// IsFirst returns true if this step is a first: block.
+func (s Step) IsFirst() bool {
+	return s.First != nil
 }
 
 // stepRaw is the intermediate representation used during YAML unmarshalling.
-// Each step is a mapping that may contain one of the step type keys.
+// Each step is a mapping that may contain one of the step type keys, or a first: block.
 type stepRaw struct {
 	Bash        *string           `yaml:"bash"`
 	Run         *string           `yaml:"run"`
@@ -62,9 +73,18 @@ type stepRaw struct {
 	Dir         string            `yaml:"dir"`
 	Timeout     string            `yaml:"timeout"`
 	Description string            `yaml:"description"`
+
+	// First holds the sub-steps of a first: block (mutually exclusive with step type keys).
+	First []stepRaw `yaml:"first"`
 }
 
 func (sr *stepRaw) toStep(index int) (Step, error) {
+	// Handle first: block — mutually exclusive with step type keys.
+	// sr.First is non-nil when the YAML key was present (even for `first: []`).
+	if sr.First != nil {
+		return sr.toFirstStep(index)
+	}
+
 	var found []struct {
 		t StepType
 		v string
@@ -96,7 +116,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 	}
 
 	if len(found) == 0 {
-		return Step{}, fmt.Errorf("step[%d]: must specify one of: bash, run, python, typescript", index)
+		return Step{}, fmt.Errorf("step[%d]: must specify one of: bash, run, python, typescript, first", index)
 	}
 	if len(found) > 1 {
 		return Step{}, fmt.Errorf("step[%d]: must specify exactly one step type, found multiple", index)
@@ -152,6 +172,53 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 	return step, nil
 }
 
+// toFirstStep converts a stepRaw with a first: block into a Step.
+func (sr *stepRaw) toFirstStep(index int) (Step, error) {
+	// first: is mutually exclusive with step type keys
+	if sr.Bash != nil || sr.Run != nil || sr.Python != nil || sr.TypeScript != nil {
+		return Step{}, fmt.Errorf("step[%d]: 'first' cannot be combined with a step type key (bash/run/python/typescript)", index)
+	}
+	// first: does not support env, dir, timeout, silent, parent_shell, with at the block level
+	if len(sr.Env) > 0 {
+		return Step{}, fmt.Errorf("step[%d]: 'env' is not valid on 'first' blocks (set env on individual sub-steps)", index)
+	}
+	if sr.Dir != "" {
+		return Step{}, fmt.Errorf("step[%d]: 'dir' is not valid on 'first' blocks (set dir on individual sub-steps)", index)
+	}
+	if sr.Timeout != "" {
+		return Step{}, fmt.Errorf("step[%d]: 'timeout' is not valid on 'first' blocks (set timeout on individual sub-steps)", index)
+	}
+	if sr.Silent {
+		return Step{}, fmt.Errorf("step[%d]: 'silent' is not valid on 'first' blocks (set silent on individual sub-steps)", index)
+	}
+	if sr.ParentShell {
+		return Step{}, fmt.Errorf("step[%d]: 'parent_shell' is not valid on 'first' blocks (set parent_shell on individual sub-steps)", index)
+	}
+	if len(sr.With) > 0 {
+		return Step{}, fmt.Errorf("step[%d]: 'with' is not valid on 'first' blocks", index)
+	}
+
+	if len(sr.First) == 0 {
+		return Step{}, fmt.Errorf("step[%d]: 'first' block must contain at least one sub-step", index)
+	}
+
+	var subSteps []Step
+	for i, sub := range sr.First {
+		s, err := sub.toStep(i)
+		if err != nil {
+			return Step{}, fmt.Errorf("step[%d].first: %w", index, err)
+		}
+		subSteps = append(subSteps, s)
+	}
+
+	return Step{
+		First:       subSteps,
+		PipeTo:      sr.PipeTo,
+		If:          sr.If,
+		Description: sr.Description,
+	}, nil
+}
+
 // InstallPhase represents a phase (test, run, verify) in an install: block.
 // It can be either a single bash string or a list of steps.
 type InstallPhase struct {
@@ -201,6 +268,12 @@ func (s *InstallSpec) HasVerify() bool {
 // validateSteps checks that all steps in a slice have valid types and if: expressions.
 func validateSteps(path string, steps []Step) error {
 	for i, step := range steps {
+		if step.IsFirst() {
+			if err := validateFirstBlock(path, i, step); err != nil {
+				return err
+			}
+			continue
+		}
 		if step.Value == "" {
 			return fmt.Errorf("%s: step[%d] has empty value", path, i)
 		}
@@ -210,6 +283,31 @@ func validateSteps(path string, steps []Step) error {
 		if step.If != "" {
 			if _, err := conditions.Predicates(step.If); err != nil {
 				return fmt.Errorf("%s: step[%d] invalid if expression: %w", path, i, err)
+			}
+		}
+	}
+	return nil
+}
+
+func validateFirstBlock(path string, index int, step Step) error {
+	if step.If != "" {
+		if _, err := conditions.Predicates(step.If); err != nil {
+			return fmt.Errorf("%s: step[%d] invalid if expression: %w", path, index, err)
+		}
+	}
+	for j, sub := range step.First {
+		if sub.IsFirst() {
+			return fmt.Errorf("%s: step[%d].first[%d]: nested first: blocks are not allowed", path, index, j)
+		}
+		if sub.Value == "" {
+			return fmt.Errorf("%s: step[%d].first[%d] has empty value", path, index, j)
+		}
+		if !validStepTypes[sub.Type] {
+			return fmt.Errorf("%s: step[%d].first[%d] type %q is not a valid step type", path, index, j, sub.Type)
+		}
+		if sub.If != "" {
+			if _, err := conditions.Predicates(sub.If); err != nil {
+				return fmt.Errorf("%s: step[%d].first[%d] invalid if expression: %w", path, index, j, err)
 			}
 		}
 	}
@@ -250,16 +348,23 @@ func validateInstallPhase(path, phaseName string, phase *InstallPhase) error {
 	if phase.IsScalar {
 		return nil
 	}
+	prefix := fmt.Sprintf("%s: install.%s", path, phaseName)
 	for i, step := range phase.Steps {
+		if step.IsFirst() {
+			if err := validateFirstBlock(prefix, i, step); err != nil {
+				return err
+			}
+			continue
+		}
 		if step.Value == "" {
-			return fmt.Errorf("%s: install.%s step[%d] has empty value", path, phaseName, i)
+			return fmt.Errorf("%s step[%d] has empty value", prefix, i)
 		}
 		if !validStepTypes[step.Type] {
-			return fmt.Errorf("%s: install.%s step[%d] type %q is not a valid step type", path, phaseName, i, step.Type)
+			return fmt.Errorf("%s step[%d] type %q is not a valid step type", prefix, i, step.Type)
 		}
 		if step.If != "" {
 			if _, err := conditions.Predicates(step.If); err != nil {
-				return fmt.Errorf("%s: install.%s step[%d] invalid if expression: %w", path, phaseName, i, err)
+				return fmt.Errorf("%s step[%d] invalid if expression: %w", prefix, i, err)
 			}
 		}
 	}

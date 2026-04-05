@@ -35,7 +35,7 @@ internal/
     discover.go                    discoverAll() — discovers local + built-in automations and merges; passes os.Stderr for name-mismatch warnings
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
-    info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, step descriptions, and install lifecycle for installer automations
+    info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
@@ -57,11 +57,11 @@ internal/
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation struct (with If, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys)
-    step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description), stepRaw, toStep(), InstallPhase, InstallSpec, validateSteps(), validateInstall(), validateInstallPhase()
+    step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First), stepRaw, toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
     automation_test.go             26 tests (core load, validate, basic step parsing, single-step shorthand)
-    step_test.go                   53 tests (if/env/silent/parent_shell/dir/timeout/description fields, install block)
+    step_test.go                   66 tests (if/env/silent/parent_shell/dir/timeout/description fields, install block, first: block)
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
@@ -72,14 +72,15 @@ internal/
     discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
     discovery_test.go              29 tests (18 base + 6 builtin merge/prefix + 5 optional name tests)
   executor/                        Step execution engine
-    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution
+    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
-    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry
+    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execInstallFirstBlock(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases
     helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
+    first_block_test.go            14 tests — first: block: first/middle/fallback matches, none match, mixed steps, pipe to next, pipe no match, outer if skip, run sub-step, exit error, install phase, silent, loud override
     executor_test.go               20 tests — core execution: bash inline/file, run step chaining, circular deps, multi-step, working dir, mixed bash+run, exit error, isFilePath, call stack isolation
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
@@ -407,6 +408,24 @@ Makefile                               build, vet, test, test-matrix targets
 - When a step with `silent: true` times out, the timeout error still propagates
 - `pi info` shows `[timeout: <value>]` annotations on steps that declare `timeout:`
 
+### First-match blocks (`first:`)
+- Steps can declare a `first:` field containing a list of sub-steps
+- A step with `First != nil` is a first-match block; `Step.IsFirst()` returns true
+- The executor evaluates each sub-step's `if:` condition in order and runs only the first one that matches
+- A sub-step without `if:` always matches and acts as a fallback
+- If no sub-step matches, the block is silently skipped
+- Nested `first:` blocks are rejected at parse time
+- Block-level fields: only `description:`, `if:`, and `pipe_to:` are valid; `env:`, `dir:`, `timeout:`, `silent:`, `parent_shell:`, `with:` are rejected with messages pointing to sub-steps
+- Sub-steps support all normal step fields: `env:`, `dir:`, `timeout:`, `silent:`, `parent_shell:`
+- `pipe_to: next` on a `first:` block correctly pipes the matched sub-step's stdout to the next step
+- When a piped `first:` block has no matching sub-step, an empty pipe buffer is set (not stale data)
+- Works in all step contexts: `steps:`, `install.run:`, `install.test:`, `install.verify:`
+- `execFirstBlock()` in `executor.go` handles `first:` in the main step loop
+- `execInstallFirstBlock()` in `install.go` handles `first:` in install phases
+- `pi info` renders `first:` blocks with lettered sub-steps (a, b, c) and sub-step annotations
+- `pi validate` traverses into `first:` blocks to check `run:` step references
+- Silent/loud mode works on sub-steps: each sub-step's `silent:` flag is respected, `Loud` overrides it
+
 ### Conditional step execution (`if:` on steps)
 - Steps can declare an `if:` field containing a boolean condition expression
 - Before executing a step with `if:`, the executor extracts predicates, resolves them via the predicate resolver, and evaluates the expression
@@ -639,7 +658,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 714 (115 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 170 executor [across 14 test files] + 4 project + 15 runtimes + 16 shell + 172 integration)
+Total tests: 749 (128 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 184 executor [across 15 test files] + 4 project + 15 runtimes + 16 shell + 180 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -689,6 +708,7 @@ tests/integration/
   step_timeout_integ_test.go      5 tests — step timeout: list, fast completes, slow exceeds (exit 124), mixed timed/untimed, info annotation
   step_description_integ_test.go  5 tests — step description: list, run, info descriptions, info with annotations, info no-desc no-details
   validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
+  first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)

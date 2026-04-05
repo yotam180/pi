@@ -1,0 +1,8 @@
+description: All conditions fail — block is silently skipped
+steps:
+  - first:
+      - bash: echo "impossible-a"
+        if: os.macos and os.linux
+      - bash: echo "impossible-b"
+        if: os.linux and os.macos
+  - bash: echo "continued"

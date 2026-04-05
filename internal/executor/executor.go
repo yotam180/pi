@@ -153,6 +153,18 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 			}
 		}
 
+		if step.IsFirst() {
+			isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
+			if err := e.execFirstBlock(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+				return err
+			}
+			pipedInput = nil
+			if isPipeSrc {
+				pipedInput = e.lastPipeBuffer
+			}
+			continue
+		}
+
 		if step.ParentShell {
 			if err := e.execParentShell(step); err != nil {
 				return fmt.Errorf("automation %q step[%d]: %w", a.Name, i, err)
@@ -179,6 +191,49 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		if isPipeSrc {
 			pipedInput = e.lastPipeBuffer
 		}
+	}
+	return nil
+}
+
+// execFirstBlock runs a first: block — evaluates sub-step conditions in order and
+// executes only the first sub-step whose if: condition passes (or has no if:).
+// If no sub-step matches, the block is silently skipped.
+func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+	for j, sub := range step.First {
+		if sub.If != "" {
+			skip, err := e.evaluateCondition(sub.If)
+			if err != nil {
+				return fmt.Errorf("automation %q step[%d].first[%d] if: %w", a.Name, index, j, err)
+			}
+			if skip {
+				continue
+			}
+		}
+
+		// Found our match — execute this sub-step
+		if sub.ParentShell {
+			if err := e.execParentShell(sub); err != nil {
+				return fmt.Errorf("automation %q step[%d].first[%d]: %w", a.Name, index, j, err)
+			}
+			return nil
+		}
+
+		suppress := sub.Silent && !e.Loud
+		if !suppress {
+			e.printer().StepTrace(string(sub.Type), sub.Value)
+		}
+
+		if suppress {
+			return e.execStepSuppressed(a, sub, args, index, stdinOverride, capturePipe, inputEnv)
+		}
+		return e.execStep(a, sub, args, index, stdinOverride, capturePipe, inputEnv)
+	}
+
+	// No sub-step matched — silently skip the entire first: block.
+	// If this block is a pipe source, set an empty buffer so downstream steps
+	// receive empty stdin rather than stale data.
+	if capturePipe {
+		e.lastPipeBuffer = &bytes.Buffer{}
 	}
 	return nil
 }

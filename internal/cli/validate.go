@@ -121,6 +121,18 @@ func validateRunStepRefs(disc *discovery.Result, result *ValidationResult) {
 
 func validateAutomationStepRefs(a *automation.Automation, disc *discovery.Result, result *ValidationResult) {
 	for i, step := range a.Steps {
+		if step.IsFirst() {
+			for j, sub := range step.First {
+				if sub.Type != automation.StepTypeRun {
+					continue
+				}
+				if _, err := disc.Find(sub.Value); err != nil {
+					result.Errors = append(result.Errors,
+						fmt.Sprintf("%s: step[%d].first[%d] run: references unknown automation %q", a.Name, i, j, sub.Value))
+				}
+			}
+			continue
+		}
 		if step.Type != automation.StepTypeRun {
 			continue
 		}
@@ -145,6 +157,19 @@ func validatePhaseStepRefs(automationName, phaseName string, phase *automation.I
 		return
 	}
 	for i, step := range phase.Steps {
+		if step.IsFirst() {
+			for j, sub := range step.First {
+				if sub.Type != automation.StepTypeRun {
+					continue
+				}
+				if _, err := disc.Find(sub.Value); err != nil {
+					result.Errors = append(result.Errors,
+						fmt.Sprintf("%s: install.%s step[%d].first[%d] run: references unknown automation %q",
+							automationName, phaseName, i, j, sub.Value))
+				}
+			}
+			continue
+		}
 		if step.Type != automation.StepTypeRun {
 			continue
 		}

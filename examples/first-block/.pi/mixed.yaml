@@ -1,0 +1,8 @@
+description: Regular steps mixed with a first block
+steps:
+  - bash: echo "before"
+  - first:
+      - bash: echo "impossible"
+        if: os.macos and os.linux
+      - bash: echo "middle"
+  - bash: echo "after"

@@ -1261,3 +1261,280 @@ steps:
 	}
 }
 
+// --- first: block tests ---
+
+func TestLoad_FirstBlock_Basic(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first.yaml", `
+description: Use first matching installer
+steps:
+  - first:
+      - bash: echo "using mise"
+        if: command.mise
+      - bash: echo "using brew"
+        if: command.brew
+      - bash: echo "fallback"
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	step := a.Steps[0]
+	if !step.IsFirst() {
+		t.Fatal("expected step to be a first: block")
+	}
+	if len(step.First) != 3 {
+		t.Fatalf("expected 3 sub-steps, got %d", len(step.First))
+	}
+	if step.First[0].If != "command.mise" {
+		t.Errorf("first[0].If = %q, want %q", step.First[0].If, "command.mise")
+	}
+	if step.First[1].If != "command.brew" {
+		t.Errorf("first[1].If = %q, want %q", step.First[1].If, "command.brew")
+	}
+	if step.First[2].If != "" {
+		t.Errorf("first[2].If = %q, want empty (fallback)", step.First[2].If)
+	}
+}
+
+func TestLoad_FirstBlock_WithDescription(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-desc.yaml", `
+description: Test
+steps:
+  - first:
+      - bash: echo hello
+    description: Pick the right installer
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Description != "Pick the right installer" {
+		t.Errorf("description = %q, want %q", a.Steps[0].Description, "Pick the right installer")
+	}
+}
+
+func TestLoad_FirstBlock_WithPipeTo(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-pipe.yaml", `
+description: Piped first
+steps:
+  - first:
+      - bash: echo data
+    pipe_to: next
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].PipeTo != "next" {
+		t.Errorf("PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	}
+}
+
+func TestLoad_FirstBlock_WithOuterIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-outerif.yaml", `
+description: Conditional first block
+steps:
+  - first:
+      - bash: echo hello
+    if: os.macos
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].If != "os.macos" {
+		t.Errorf("step.If = %q, want %q", a.Steps[0].If, "os.macos")
+	}
+}
+
+func TestLoad_FirstBlock_EmptyError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-empty.yaml", `
+description: Empty first block
+steps:
+  - first: []
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for empty first: block")
+	}
+	if !strings.Contains(err.Error(), "must contain at least one sub-step") {
+		t.Errorf("error = %q, want mention of empty sub-steps", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_WithStepTypeKeyError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-conflict.yaml", `
+description: Conflict
+steps:
+  - first:
+      - bash: echo hello
+    bash: echo world
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for first: combined with bash:")
+	}
+	if !strings.Contains(err.Error(), "cannot be combined") {
+		t.Errorf("error = %q, want mention of conflict", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_EnvOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-env.yaml", `
+description: Env on block
+steps:
+  - first:
+      - bash: echo hello
+    env:
+      FOO: bar
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for env on first: block")
+	}
+	if !strings.Contains(err.Error(), "env") && !strings.Contains(err.Error(), "first") {
+		t.Errorf("error = %q, want mention of env on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_DirOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-dir.yaml", `
+description: Dir on block
+steps:
+  - first:
+      - bash: echo hello
+    dir: some/dir
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for dir on first: block")
+	}
+	if !strings.Contains(err.Error(), "dir") {
+		t.Errorf("error = %q, want mention of dir on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_SubStepEnvOK(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-sub-env.yaml", `
+description: Sub-step env
+steps:
+  - first:
+      - bash: echo hello
+        env:
+          FOO: bar
+        if: os.macos
+      - bash: echo world
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].First[0].Env["FOO"] != "bar" {
+		t.Errorf("sub-step env FOO = %q, want %q", a.Steps[0].First[0].Env["FOO"], "bar")
+	}
+}
+
+func TestLoad_FirstBlock_InInstallPhase(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-install.yaml", `
+description: Installer with first block
+install:
+  test: command -v go
+  run:
+    - first:
+        - bash: mise install go
+          if: command.mise
+        - bash: brew install go
+          if: command.brew
+        - bash: echo "no installer" && exit 1
+  version: go version | awk '{print $3}'
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	if len(a.Install.Run.Steps) != 1 {
+		t.Fatalf("expected 1 run step, got %d", len(a.Install.Run.Steps))
+	}
+	runStep := a.Install.Run.Steps[0]
+	if !runStep.IsFirst() {
+		t.Fatal("expected first: block in install.run")
+	}
+	if len(runStep.First) != 3 {
+		t.Fatalf("expected 3 sub-steps, got %d", len(runStep.First))
+	}
+}
+
+func TestLoad_FirstBlock_NestedFirstError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-nested.yaml", `
+description: Nested first
+steps:
+  - first:
+      - first:
+          - bash: echo hello
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for nested first: blocks")
+	}
+}
+
+func TestLoad_FirstBlock_MixedWithRegularSteps(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-mixed.yaml", `
+description: Mixed steps
+steps:
+  - bash: echo before
+  - first:
+      - bash: echo first-a
+        if: os.macos
+      - bash: echo first-b
+  - bash: echo after
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeBash {
+		t.Errorf("step[0] should be bash, got %s", a.Steps[0].Type)
+	}
+	if !a.Steps[1].IsFirst() {
+		t.Error("step[1] should be a first: block")
+	}
+	if a.Steps[2].Type != StepTypeBash {
+		t.Errorf("step[2] should be bash, got %s", a.Steps[2].Type)
+	}
+}
+

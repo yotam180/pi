@@ -360,6 +360,30 @@ Supported predicates: `os.macos`, `os.linux`, `os.windows`, `os.arch.arm64`, `os
 
 When a step with `pipe_to: next` is skipped, any piped data passes through to the next step unchanged.
 
+### First-Match Blocks (`first:`)
+
+A `first:` block groups mutually exclusive sub-steps. The executor evaluates each sub-step's `if:` condition in order and runs only the first one that matches. All remaining sub-steps are skipped. A sub-step without `if:` always matches and acts as a fallback.
+
+```yaml
+steps:
+  - first:
+      - bash: mise install go@1.23 && mise use go@1.23
+        if: command.mise
+      - bash: brew install go
+        if: command.brew
+      - bash: |
+          echo "no suitable installer found" >&2
+          exit 1
+```
+
+This replaces the common pattern of compounding negation chains (`if: command.brew and not command.mise`) with clean, positive conditions. Each sub-step only needs its own condition.
+
+`first:` is a generic step-level construct usable anywhere a step appears: in `steps:`, in `install.run:`, in `install.test:`. It is not specific to installers.
+
+At the block level, `first:` supports `description:`, `if:` (to conditionally skip the entire block), and `pipe_to: next` (to pipe the matched sub-step's output). Sub-steps inside `first:` support all normal step fields: `env:`, `dir:`, `timeout:`, `silent:`.
+
+If all sub-steps have `if:` conditions and none match, the block is silently skipped (consistent with how a skipped `if:` step behaves). Nested `first:` blocks are not allowed.
+
 ---
 
 ## Shell Shortcuts

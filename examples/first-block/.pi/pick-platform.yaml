@@ -1,0 +1,8 @@
+description: Print the detected platform using first-match
+steps:
+  - first:
+      - bash: echo "Platform is macOS"
+        if: os.macos
+      - bash: echo "Platform is Linux"
+        if: os.linux
+      - bash: echo "Platform is unknown"

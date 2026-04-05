@@ -48,7 +48,7 @@ All fixes are backward-compatible with a deprecation path: old syntax continues 
 ## Success Criteria
 - [x] `name:` field is optional; PI derives it from file path when absent
 - [x] A single-step automation can be written as a top-level `bash:` / `python:` / `typescript:` / `run:` key
-- [ ] `first:` block works in any step list: runs the first sub-step whose `if:` passes, skips rest
+- [x] `first:` block works in any step list: runs the first sub-step whose `if:` passes, skips rest
 - [ ] `pipe: true` is the canonical form; `pipe_to: next` still works with deprecation warning
 - [ ] `$PI_IN_*` resolves inputs; `$PI_INPUT_*` still works with deprecation warning
 - [ ] `setup:` entries in `pi.yaml` accept bare strings (`- setup/install-go`)
