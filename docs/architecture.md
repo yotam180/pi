@@ -32,7 +32,7 @@ internal/
         install-hooks.yaml         pi:git/install-hooks — copies hook scripts to .git/hooks/ (source input)
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
-    discover.go                    discoverAll() — discovers local + built-in automations and merges
+    discover.go                    discoverAll() — discovers local + built-in automations and merges; passes os.Stderr for name-mismatch warnings
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, step descriptions, and install lifecycle for installer automations
@@ -69,8 +69,8 @@ internal/
     tty.go                         isTerminal() via golang.org/x/term
     display_test.go                30 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
-    discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
+    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
+    discovery_test.go              29 tests (18 base + 6 builtin merge/prefix + 5 optional name tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
@@ -254,6 +254,11 @@ Makefile                               build, vet, test, test-matrix targets
 - `.pi/setup/cursor/automation.yaml` → name `setup/cursor`
 - Names are always lowercase, no leading/trailing slashes
 - Two files resolving to the same name is a hard error
+- The `name:` field in automation YAML is optional — PI derives it from the file path
+- When `name:` is absent, `Discover()` sets `a.Name` to the path-derived name
+- When `name:` is present and matches, no warning is emitted
+- When `name:` is present but mismatches the derived name, a warning is printed to stderr
+- Built-in automations (`internal/builtins`) apply the same rule: name from path when absent
 
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure
@@ -624,7 +629,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 690 (103 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 170 executor [across 14 test files] + 4 project + 16 runtimes + 16 shell + 164 integration)
+Total tests: 694 (103 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 170 executor [across 14 test files] + 4 project + 15 runtimes + 16 shell + 164 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

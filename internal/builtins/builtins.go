@@ -61,6 +61,10 @@ func Discover() (*discovery.Result, error) {
 			return fmt.Errorf("loading built-in %s: %w", path, err)
 		}
 
+		if a.Name == "" {
+			a.Name = name
+		}
+
 		automations[name] = a
 		sources[name] = path
 		return nil

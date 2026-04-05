@@ -75,11 +75,11 @@ setup:
 
 ### Automations
 
-An automation is a YAML file that defines a named, runnable unit of work. It can chain steps written in different languages.
+An automation is a YAML file that defines a named, runnable unit of work. It can chain steps written in different languages. The automation name is derived from the file path — no `name:` field is needed.
 
 ```yaml
 # .pi/docker/logs-formatted.yaml
-name: docker/logs-formatted
+# Name is automatically "docker/logs-formatted" (derived from path)
 description: Stream container logs through the log formatter
 
 steps:
@@ -91,7 +91,7 @@ steps:
 
 ```yaml
 # .pi/setup/install-cursor-extensions/automation.yaml
-name: setup/install-cursor-extensions
+# Name is automatically "setup/install-cursor-extensions" (derived from path)
 description: Install required Cursor extensions if missing
 
 steps:
@@ -102,6 +102,8 @@ steps:
         fi
       done < "$(dirname "$0")/extensions.txt"
 ```
+
+> **Note:** The `name:` field is optional and deprecated. PI derives the automation name from the file path: `.pi/docker/up.yaml` → `docker/up`, `.pi/setup/cursor/automation.yaml` → `setup/cursor`. If `name:` is present and matches the derived name, it's accepted silently. If it mismatches, PI prints a warning. Existing files with `name:` continue to work.
 
 ---
 

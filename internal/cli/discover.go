@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/vyper-tooling/pi/internal/builtins"
@@ -13,7 +14,7 @@ import (
 // same name.
 func discoverAll(root string) (*discovery.Result, error) {
 	piDir := filepath.Join(root, discovery.PiDir)
-	result, err := discovery.Discover(piDir)
+	result, err := discovery.Discover(piDir, os.Stderr)
 	if err != nil {
 		return nil, fmt.Errorf("discovering automations: %w", err)
 	}

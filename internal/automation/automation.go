@@ -134,10 +134,6 @@ func LoadFromBytes(data []byte, filePath string) (*Automation, error) {
 }
 
 func (a *Automation) validate(path string) error {
-	if a.Name == "" {
-		return fmt.Errorf("%s: \"name\" is required", path)
-	}
-
 	hasSteps := len(a.Steps) > 0
 	hasInstall := a.Install != nil
 

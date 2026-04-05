@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func TestDiscover_EmptyPiDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -51,7 +52,7 @@ func TestDiscover_NonExistentPiDir(t *testing.T) {
 	dir := t.TempDir()
 	piDir := filepath.Join(dir, PiDir)
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestDiscover_FlatYAML(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "docker", "down.yaml"),
 		makeAutomation("docker/down", "Stop containers"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestDiscover_DirectoryAutomation(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "setup", "cursor", "automation.yaml"),
 		makeAutomation("setup/cursor", "Install cursor extensions"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestDiscover_MixedFormats(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "build.yaml"),
 		makeAutomation("build", "Build project"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +149,7 @@ func TestDiscover_NameCollision(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "docker", "up", "automation.yaml"),
 		makeAutomation("docker/up", "Dir form"))
 
-	_, err := Discover(piDir)
+	_, err := Discover(piDir, nil)
 	if err == nil {
 		t.Fatal("expected name collision error, got nil")
 	}
@@ -170,7 +171,7 @@ func TestDiscover_SkipsNonYAML(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "notes.txt"),
 		"just notes")
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestDiscover_NameNormalization(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "Docker", "Up.yaml"),
 		makeAutomation("Docker/Up", "Start containers"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,7 +205,7 @@ func TestFind_ExistingAutomation(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "docker", "up.yaml"),
 		makeAutomation("docker/up", "Start containers"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -224,7 +225,7 @@ func TestFind_CaseInsensitive(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "docker", "up.yaml"),
 		makeAutomation("docker/up", "Start containers"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -246,7 +247,7 @@ func TestFind_NotFound_WithAvailable(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "build.yaml"),
 		makeAutomation("build", "Build it"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -274,7 +275,7 @@ func TestFind_NotFound_Empty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestFind_TrimsSlashes(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "docker", "up.yaml"),
 		makeAutomation("docker/up", "Start containers"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -315,7 +316,7 @@ func TestDiscover_DeeplyNested(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "infra", "k8s", "deploy.yaml"),
 		makeAutomation("infra/k8s/deploy", "Deploy to k8s"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -331,7 +332,7 @@ func TestDiscover_InvalidAutomationFile(t *testing.T) {
 
 	writeFile(t, filepath.Join(piDir, "bad.yaml"), "not: valid: yaml: [")
 
-	_, err := Discover(piDir)
+	_, err := Discover(piDir, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid yaml")
 	}
@@ -345,7 +346,7 @@ func TestNames_ReturnsCopy(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "b.yaml"),
 		makeAutomation("b", "B"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -366,7 +367,7 @@ func TestDiscover_RootLevelAutomation(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "build.yaml"),
 		makeAutomation("build", "Build the project"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -382,7 +383,7 @@ func TestMergeBuiltins_AddsBuiltins(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "local.yaml"),
 		makeAutomation("local", "Local automation"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -417,7 +418,7 @@ func TestMergeBuiltins_LocalTakesPrecedence(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "shared.yaml"),
 		makeAutomation("shared", "Local version"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -445,7 +446,7 @@ func TestIsBuiltin_CorrectlyMarked(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "local.yaml"),
 		makeAutomation("local", "Local"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -470,7 +471,7 @@ func TestFind_BuiltinPrefix(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "shared.yaml"),
 		makeAutomation("shared", "Local version"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -516,7 +517,7 @@ func TestFind_BuiltinPrefix_NotFound(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "local.yaml"),
 		makeAutomation("local", "Local"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -537,7 +538,7 @@ func TestMergeBuiltins_NilIsNoOp(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "local.yaml"),
 		makeAutomation("local", "Local"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -558,12 +559,147 @@ func TestDiscover_AutomationYAMLAtRoot(t *testing.T) {
 	writeFile(t, filepath.Join(piDir, "automation.yaml"),
 		makeAutomation("root", "Root automation"))
 
-	result, err := Discover(piDir)
+	result, err := Discover(piDir, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	if len(result.Automations) != 0 {
 		t.Errorf("expected automation.yaml at .pi/ root to be skipped, got %d automations", len(result.Automations))
+	}
+}
+
+func TestDiscover_NameAbsent_DerivedFromPath(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+
+	writeFile(t, filepath.Join(piDir, "build.yaml"), `
+description: Build the project
+steps:
+  - bash: echo building
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, ok := result.Automations["build"]
+	if !ok {
+		t.Fatal("expected automation 'build' to be discovered")
+	}
+	if a.Name != "build" {
+		t.Errorf("expected derived name 'build', got %q", a.Name)
+	}
+	if a.Description != "Build the project" {
+		t.Errorf("expected description 'Build the project', got %q", a.Description)
+	}
+}
+
+func TestDiscover_NameAbsent_NestedPath(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+
+	writeFile(t, filepath.Join(piDir, "docker", "up.yaml"), `
+description: Start containers
+steps:
+  - bash: echo starting
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, ok := result.Automations["docker/up"]
+	if !ok {
+		t.Fatal("expected automation 'docker/up'")
+	}
+	if a.Name != "docker/up" {
+		t.Errorf("expected derived name 'docker/up', got %q", a.Name)
+	}
+}
+
+func TestDiscover_NameAbsent_AutomationYAML(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+
+	writeFile(t, filepath.Join(piDir, "setup", "cursor", "automation.yaml"), `
+description: Install cursor extensions
+steps:
+  - bash: echo installing
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	a, ok := result.Automations["setup/cursor"]
+	if !ok {
+		t.Fatal("expected automation 'setup/cursor'")
+	}
+	if a.Name != "setup/cursor" {
+		t.Errorf("expected derived name 'setup/cursor', got %q", a.Name)
+	}
+}
+
+func TestDiscover_NamePresent_Matching_NoWarning(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+
+	writeFile(t, filepath.Join(piDir, "build.yaml"),
+		makeAutomation("build", "Build it"))
+
+	var warnings bytes.Buffer
+	result, err := Discover(piDir, &warnings)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, ok := result.Automations["build"]; !ok {
+		t.Fatal("expected automation 'build'")
+	}
+	if warnings.Len() != 0 {
+		t.Errorf("expected no warnings for matching name, got: %s", warnings.String())
+	}
+}
+
+func TestDiscover_NamePresent_Mismatching_Warning(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+
+	writeFile(t, filepath.Join(piDir, "build.yaml"), `
+name: wrong-name
+description: Build it
+steps:
+  - bash: echo building
+`)
+
+	var warnings bytes.Buffer
+	result, err := Discover(piDir, &warnings)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Still discoverable under path-derived name
+	a, ok := result.Automations["build"]
+	if !ok {
+		t.Fatal("expected automation 'build' (keyed by path)")
+	}
+	// Name kept as declared for backward compat
+	if a.Name != "wrong-name" {
+		t.Errorf("expected declared name preserved as 'wrong-name', got %q", a.Name)
+	}
+
+	warnStr := warnings.String()
+	if !strings.Contains(warnStr, "warning") {
+		t.Errorf("expected warning about mismatching name, got: %q", warnStr)
+	}
+	if !strings.Contains(warnStr, "wrong-name") {
+		t.Errorf("expected warning to mention 'wrong-name', got: %q", warnStr)
+	}
+	if !strings.Contains(warnStr, "build") {
+		t.Errorf("expected warning to mention derived name 'build', got: %q", warnStr)
 	}
 }

@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -31,8 +32,12 @@ type Result struct {
 //   - .pi/docker/up.yaml          → name "docker/up"
 //   - .pi/setup/cursor/automation.yaml → name "setup/cursor"
 //
+// The name: field in automation YAML is optional. When absent, PI derives the
+// name from the file path. When present but mismatching the derived name, a
+// warning is printed to warnWriter (if non-nil).
+//
 // Returns an error if two files resolve to the same automation name.
-func Discover(piDir string) (*Result, error) {
+func Discover(piDir string, warnWriter io.Writer) (*Result, error) {
 	info, err := os.Stat(piDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -77,6 +82,8 @@ func Discover(piDir string) (*Result, error) {
 			return fmt.Errorf("loading %s: %w", path, err)
 		}
 
+		reconcileAutomationName(a, name, path, warnWriter)
+
 		automations[name] = a
 		sources[name] = path
 		return nil
@@ -96,6 +103,20 @@ func Discover(piDir string) (*Result, error) {
 		names:       names,
 		builtinSet:  make(map[string]bool),
 	}, nil
+}
+
+// reconcileAutomationName sets the automation's Name from the derived path
+// when absent, or emits a warning when the declared name mismatches.
+func reconcileAutomationName(a *automation.Automation, derivedName, path string, warnWriter io.Writer) {
+	if a.Name == "" {
+		a.Name = derivedName
+		return
+	}
+	declared := normalizeName(a.Name)
+	if declared != derivedName && warnWriter != nil {
+		fmt.Fprintf(warnWriter, "warning: %s: name %q does not match path-derived name %q — the name: field can be removed\n",
+			path, a.Name, derivedName)
+	}
 }
 
 // NewResult creates a Result from a pre-built map and sorted name list.

@@ -129,19 +129,19 @@ func TestLoad_MissingFile(t *testing.T) {
 	}
 }
 
-func TestLoad_MissingName(t *testing.T) {
+func TestLoad_MissingName_Allowed(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "no-name.yaml", `
 steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for missing name")
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "name") {
-		t.Errorf("expected 'name' in error, got: %v", err)
+	if a.Name != "" {
+		t.Errorf("expected empty name (to be set by discovery), got %q", a.Name)
 	}
 }
 
