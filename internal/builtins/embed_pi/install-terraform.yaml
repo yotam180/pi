@@ -1,0 +1,23 @@
+description: Install Terraform at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Terraform version to install (e.g. "1.7")
+
+install:
+  test:
+    - bash: terraform version 2>&1 | grep -q "Terraform v$PI_IN_VERSION"
+
+  run:
+    - first:
+        - bash: mise install "terraform@$PI_IN_VERSION" && mise use -g "terraform@$PI_IN_VERSION"
+          if: command.mise
+        - bash: brew install hashicorp/tap/terraform
+          if: command.brew
+        - bash: |
+            echo "no suitable installer found (tried mise, brew)" >&2
+            echo "Install manually: https://developer.hashicorp.com/terraform/install" >&2
+            exit 1
+
+  version: terraform version 2>&1 | head -1 | awk '{print $2}' | tr -d 'v'

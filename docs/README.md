@@ -673,7 +673,17 @@ PI ships with a standard collection of automations for common tasks:
 - `pi:install-uv` — check/install uv
 - `pi:install-homebrew` — check/install Homebrew
 - `pi:install-tsx` — check/install tsx globally via npm
+- `pi:install-terraform` — check/install Terraform at a specific version
+- `pi:install-kubectl` — check/install kubectl at a specific version
+- `pi:install-helm` — check/install Helm at a specific version
+- `pi:install-pnpm` — check/install pnpm (optional version)
+- `pi:install-bun` — check/install Bun JavaScript runtime (optional version)
+- `pi:install-deno` — check/install Deno runtime (optional version)
+- `pi:install-aws-cli` — check/install AWS CLI v2
 - `pi:docker/up`, `pi:docker/down`, `pi:docker/logs` — standard Docker Compose ops
+- `pi:uv/sync` — sync Python project dependencies using uv
+- `pi:npm/install` — install Node.js dependencies using npm ci or npm install
+- `pi:set-env` — idempotently add an environment variable export to the shell config
 - `pi:cursor/install-extensions` — install missing Cursor extensions from a list
 - `pi:git/install-hooks` — install git hooks from a source directory
 

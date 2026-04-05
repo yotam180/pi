@@ -1,0 +1,36 @@
+description: Idempotently add an environment variable export to the shell config
+
+inputs:
+  key:
+    type: string
+    description: Environment variable name (e.g. "VYPER_HOME")
+  value:
+    type: string
+    description: Value to export (e.g. "/Users/me/projects/myapp")
+  comment:
+    type: string
+    description: Optional comment to add above the export line
+    required: false
+
+bash: |
+  set_env_if_missing() {
+    local rc_file="$1"
+    local key="$PI_IN_KEY"
+    local value="$PI_IN_VALUE"
+    local comment="$PI_IN_COMMENT"
+
+    [ -f "$rc_file" ] || return 0
+
+    if grep -q "export $key=" "$rc_file"; then
+      echo "  $key already set in $rc_file"
+    else
+      if [ -n "$comment" ]; then
+        echo "# $comment" >> "$rc_file"
+      fi
+      echo "export $key=\"$value\"" >> "$rc_file"
+      echo "  added $key to $rc_file"
+    fi
+  }
+
+  set_env_if_missing "$HOME/.zshrc"
+  set_env_if_missing "$HOME/.bashrc"

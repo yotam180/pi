@@ -11,7 +11,7 @@ cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               42 tests (3 base + 7 docker + 16 installer + 16 devtool)
+    builtins_test.go               59 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
@@ -21,6 +21,14 @@ internal/
       install-rust.yaml            pi:install-rust — installs Rust via rustup (version input)
       install-uv.yaml              pi:install-uv — installs uv via official installer
       install-tsx.yaml             pi:install-tsx — installs tsx via npm
+      install-terraform.yaml       pi:install-terraform — installs Terraform via mise/brew (version input)
+      install-kubectl.yaml         pi:install-kubectl — installs kubectl via mise/brew (version input)
+      install-helm.yaml            pi:install-helm — installs Helm via mise/brew/script (version input)
+      install-pnpm.yaml            pi:install-pnpm — installs pnpm via mise/npm/script (optional version input)
+      install-bun.yaml             pi:install-bun — installs Bun via mise/brew/script (optional version input)
+      install-deno.yaml            pi:install-deno — installs Deno via mise/brew/script (optional version input)
+      install-aws-cli.yaml         pi:install-aws-cli — installs AWS CLI v2 via brew/official installer
+      set-env.yaml                 pi:set-env — idempotently writes export to .zshrc/.bashrc (key, value, comment inputs)
       cursor/
         install-extensions/
           automation.yaml          pi:cursor/install-extensions — installs missing Cursor extensions (extensions input)
@@ -30,6 +38,10 @@ internal/
         logs.yaml                  pi:docker/logs — docker compose logs with v1 fallback
       git/
         install-hooks.yaml         pi:git/install-hooks — copies hook scripts to .git/hooks/ (source input)
+      npm/
+        install.yaml               pi:npm/install — runs npm ci (preferred) or npm install (optional dir input)
+      uv/
+        sync.yaml                  pi:uv/sync — runs uv sync with optional groups and args inputs
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
     context.go                     ProjectContext — shared project resolution pipeline (root + config + discovery + executor construction); resolveProject(), resolveProjectStrict(), Discover(), NewExecutor(), getwd(); eliminates boilerplate across all CLI commands
@@ -771,7 +783,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
 - All built-in YAML files use the new concise syntax: no `name:` fields, single-step shorthand where applicable, `first:` blocks in installer run phases, `PI_IN_*` input variables
 - Docker automations (`docker/up`, `docker/down`, `docker/logs`) use single-step shorthand; detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
-- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`) use the structured `install:` block:
+- Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`, `install-terraform`, `install-kubectl`, `install-helm`, `install-pnpm`, `install-bun`, `install-deno`, `install-aws-cli`) use the structured `install:` block:
   - Each defines `test:`, `run:`, and optional `verify:` and `version:` fields
   - PI manages all user-facing output — automations only provide commands
   - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
@@ -781,6 +793,13 @@ Makefile                               build, vet, test, test-matrix targets
   - `install-rust` accepts a `version` input; uses `rustup` if available, otherwise installs via the official `rustup.rs` installer script
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
   - `install-tsx` uses `npm install -g tsx`
+  - `install-terraform`, `install-kubectl`, `install-helm` accept a required `version` input; use `first:` blocks prioritizing mise, then brew/script fallbacks
+  - `install-pnpm`, `install-bun`, `install-deno` accept an optional `version` input (omit for latest); use `first:` blocks prioritizing mise, then platform-specific fallbacks
+  - `install-aws-cli` has no version input; uses platform-specific installers (brew on macOS, official zip on Linux amd64/arm64)
+- Utility automations (`uv/sync`, `npm/install`, `set-env`) use single-step shorthand:
+  - `uv/sync` accepts optional `dir`, `groups`, `args` inputs; runs `uv sync` with computed flags
+  - `npm/install` accepts optional `dir` input; prefers `npm ci` when `package-lock.json` exists, falls back to `npm install`
+  - `set-env` accepts required `key` and `value` inputs, optional `comment`; idempotently writes `export KEY=VALUE` to `~/.zshrc` and `~/.bashrc`
 - Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) use single-step shorthand:
   - `cursor/install-extensions` accepts an `extensions` input (comma or newline-separated IDs), checks `cursor --list-extensions`, installs missing ones via `cursor --install-extension`
   - `git/install-hooks` accepts a `source` input (directory path relative to repo root), copies hook files to `.git/hooks/`, makes them executable; uses `cmp` for idempotency
@@ -906,7 +925,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1215 (170 automation + 81 builtins + 32 cache + 143 CLI [includes 11 completion, 13 init, 13 setup add] + 30 conditions + 64 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 258 integration [includes 8 completion, 8 init, 11 setup add])
+Total tests: 1268 (170 automation + 136 builtins + 32 cache + 143 CLI [includes 11 completion, 13 init, 13 setup add] + 30 conditions + 64 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 258 integration [includes 8 completion, 8 init, 11 setup add])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

@@ -1,0 +1,20 @@
+description: Install Helm at a specific version
+
+inputs:
+  version:
+    type: string
+    description: Helm version to install (e.g. "3.14")
+
+install:
+  test:
+    - bash: helm version 2>&1 | grep -q "v$PI_IN_VERSION"
+
+  run:
+    - first:
+        - bash: mise install "helm@$PI_IN_VERSION" && mise use -g "helm@$PI_IN_VERSION"
+          if: command.mise
+        - bash: brew install helm
+          if: command.brew
+        - bash: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+  version: helm version --short 2>&1 | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | tr -d 'v'

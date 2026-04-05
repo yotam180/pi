@@ -365,20 +365,44 @@ New tests go in `internal/builtins/builtins_test.go`. For each new builtin, add:
 Follow the pattern of the existing installer tests in that file.
 
 ## Subtasks
-- [ ] Create `install-terraform.yaml`
-- [ ] Create `install-kubectl.yaml`
-- [ ] Create `install-helm.yaml`
-- [ ] Create `install-pnpm.yaml`
-- [ ] Create `install-bun.yaml`
-- [ ] Create `install-deno.yaml`
-- [ ] Create `install-aws-cli.yaml`
-- [ ] Create `uv/sync.yaml` (in `embed_pi/uv/`)
-- [ ] Create `set-env.yaml`
-- [ ] Create `npm/install.yaml` (in `embed_pi/npm/`)
-- [ ] Update `builtins_test.go` with tests for all new automations
-- [ ] Update `docs/README.md` Built-in library table
-- [ ] Verify `pi list --builtins` shows all new automations
-- [ ] Verify `pi info pi:install-terraform` etc. shows correct descriptions
+- [x] Create `install-terraform.yaml`
+- [x] Create `install-kubectl.yaml`
+- [x] Create `install-helm.yaml`
+- [x] Create `install-pnpm.yaml`
+- [x] Create `install-bun.yaml`
+- [x] Create `install-deno.yaml`
+- [x] Create `install-aws-cli.yaml`
+- [x] Create `uv/sync.yaml` (in `embed_pi/uv/`)
+- [x] Create `set-env.yaml`
+- [x] Create `npm/install.yaml` (in `embed_pi/npm/`)
+- [x] Update `builtins_test.go` with tests for all new automations
+- [x] Update `docs/README.md` Built-in library table
+- [x] Verify `pi list --builtins` shows all new automations
+- [x] Verify `pi info pi:install-terraform` etc. shows correct descriptions
 
 ## Blocked By
 None (can proceed independently of tasks 87 and 88)
+
+## Implementation Notes
+
+### Session 2026-04-05
+
+All 10 new automations created and tested:
+
+**Installer automations (7):**
+- `install-terraform`, `install-kubectl`, `install-helm` — required `version` input, mise→brew→error fallback chain via `first:` blocks
+- `install-pnpm` — optional `version` input, mise→npm→curl fallback chain
+- `install-bun`, `install-deno` — optional `version` input, mise→brew→curl fallback chain
+- `install-aws-cli` — no version input, brew on macOS→official zip on Linux (amd64/arm64)→error
+
+**Utility automations (3):**
+- `uv/sync` — all inputs optional (`dir`, `groups`, `args`), uses single-step shorthand
+- `set-env` — `key` and `value` required, `comment` optional, writes to both `.zshrc` and `.bashrc`
+- `npm/install` — `dir` optional, prefers `npm ci` when `package-lock.json` exists
+
+**Key decisions:**
+- Used `required: false` for optional inputs (not `default: ""`) because `IsRequired()` treats empty string default as "no default"
+- YAML descriptions containing colons need quoting (e.g. `"Directory containing package.json (default: project root)"`)
+- `setupAddKnownTools` map in `setup_add.go` already had entries for all new tools (terraform, kubectl, helm, pnpm, bun, deno, aws-cli)
+- 55 new test cases added to `builtins_test.go` (total now 136 subtests)
+- Updated `docs/README.md` built-in library list and `docs/architecture.md` package structure + design decisions

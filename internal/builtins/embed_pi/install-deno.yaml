@@ -1,0 +1,20 @@
+description: Install Deno JavaScript/TypeScript runtime
+
+inputs:
+  version:
+    type: string
+    description: Deno version to install (optional; omit for latest)
+    required: false
+
+install:
+  test: command -v deno >/dev/null 2>&1
+
+  run:
+    - first:
+        - bash: mise install "deno@${PI_IN_VERSION:-latest}" && mise use -g "deno@${PI_IN_VERSION:-latest}"
+          if: command.mise
+        - bash: brew install deno
+          if: command.brew
+        - bash: curl -fsSL https://deno.land/install.sh | sh
+
+  version: deno --version 2>&1 | head -1 | awk '{print $2}'

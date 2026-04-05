@@ -239,6 +239,13 @@ func TestDiscover_InstallerAutomationsExist(t *testing.T) {
 		{"install-rust", "Install Rust at a specific version"},
 		{"install-uv", "Install the uv Python package manager"},
 		{"install-tsx", "Install tsx globally for TypeScript execution"},
+		{"install-terraform", "Install Terraform at a specific version"},
+		{"install-kubectl", "Install kubectl at a specific version"},
+		{"install-helm", "Install Helm at a specific version"},
+		{"install-pnpm", "Install pnpm package manager"},
+		{"install-bun", "Install Bun JavaScript runtime"},
+		{"install-deno", "Install Deno JavaScript/TypeScript runtime"},
+		{"install-aws-cli", "Install AWS CLI v2"},
 	}
 
 	for _, tc := range installers {
@@ -269,7 +276,7 @@ func TestDiscover_InstallerAutomationsAreResolvable(t *testing.T) {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-rust", "install-uv", "install-tsx"}
+	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-rust", "install-uv", "install-tsx", "install-terraform", "install-kubectl", "install-helm", "install-pnpm", "install-bun", "install-deno", "install-aws-cli"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			a, err := result.Find(name)
@@ -289,7 +296,7 @@ func TestDiscover_InstallerAutomationsHaveInstallBlock(t *testing.T) {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-rust", "install-uv", "install-tsx"}
+	names := []string{"install-homebrew", "install-python", "install-node", "install-go", "install-rust", "install-uv", "install-tsx", "install-terraform", "install-kubectl", "install-helm", "install-pnpm", "install-bun", "install-deno", "install-aws-cli"}
 	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			a := result.Automations[name]
@@ -323,6 +330,9 @@ func TestDiscover_InstallerAutomationsHaveTestPhase(t *testing.T) {
 		"install-homebrew": "command -v brew",
 		"install-uv":       "command -v uv",
 		"install-tsx":      "command -v tsx",
+		"install-pnpm":     "command -v pnpm",
+		"install-bun":      "command -v bun",
+		"install-deno":     "command -v deno",
 	}
 	for name, expectedContent := range scalarInstallers {
 		t.Run(name, func(t *testing.T) {
@@ -959,7 +969,7 @@ func TestDiscover_InstallerAutomationsNoInputs(t *testing.T) {
 		t.Fatalf("Discover() returned error: %v", err)
 	}
 
-	noInputs := []string{"install-homebrew", "install-uv", "install-tsx"}
+	noInputs := []string{"install-homebrew", "install-uv", "install-tsx", "install-aws-cli"}
 	for _, name := range noInputs {
 		t.Run(name, func(t *testing.T) {
 			a := result.Automations[name]
@@ -967,5 +977,454 @@ func TestDiscover_InstallerAutomationsNoInputs(t *testing.T) {
 				t.Errorf("expected %s to have no inputs, got %d", name, len(a.Inputs))
 			}
 		})
+	}
+}
+
+func TestDiscover_NewInstallersAcceptVersionInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	requiredVersion := []string{"install-terraform", "install-kubectl", "install-helm"}
+	for _, name := range requiredVersion {
+		t.Run(name, func(t *testing.T) {
+			a := result.Automations[name]
+			spec, ok := a.Inputs["version"]
+			if !ok {
+				t.Fatalf("expected %s to have a 'version' input", name)
+			}
+			if !spec.IsRequired() {
+				t.Error("expected 'version' input to be required")
+			}
+			if spec.Description == "" {
+				t.Error("expected 'version' input to have a description")
+			}
+		})
+	}
+
+	optionalVersion := []string{"install-pnpm", "install-bun", "install-deno"}
+	for _, name := range optionalVersion {
+		t.Run(name, func(t *testing.T) {
+			a := result.Automations[name]
+			spec, ok := a.Inputs["version"]
+			if !ok {
+				t.Fatalf("expected %s to have a 'version' input", name)
+			}
+			if spec.IsRequired() {
+				t.Error("expected 'version' input to be optional")
+			}
+			if spec.Description == "" {
+				t.Error("expected 'version' input to have a description")
+			}
+		})
+	}
+}
+
+func TestDiscover_InstallTerraformUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-terraform"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-terraform run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-terraform to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-terraform to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallKubectlUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-kubectl"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-kubectl run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-kubectl to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-kubectl to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallHelmUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-helm"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-helm run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-helm to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-helm to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallPnpmUsesMiseAndNpm(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-pnpm"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-pnpm run phase")
+	}
+	foundMise, foundNpm := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "npm install -g pnpm") {
+			foundNpm = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-pnpm to try mise")
+	}
+	if !foundNpm {
+		t.Error("expected install-pnpm to fall back to npm")
+	}
+}
+
+func TestDiscover_InstallBunUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-bun"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-bun run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-bun to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-bun to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallDenoUsesMiseAndBrew(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-deno"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-deno run phase")
+	}
+	foundMise, foundBrew := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "mise") {
+			foundMise = true
+		}
+		if strings.Contains(s.Value, "brew") {
+			foundBrew = true
+		}
+	}
+	if !foundMise {
+		t.Error("expected install-deno to try mise")
+	}
+	if !foundBrew {
+		t.Error("expected install-deno to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallAwsCliUsesPlatformSpecificInstallers(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-aws-cli"]
+	if !a.IsInstaller() {
+		t.Fatal("expected installer automation")
+	}
+	run := a.Install.Run
+	if run.IsScalar {
+		t.Fatal("expected step list for install-aws-cli run phase")
+	}
+	foundBrew, foundLinux := false, false
+	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "brew install awscli") {
+			foundBrew = true
+		}
+		if strings.Contains(s.Value, "awscli-exe-linux") {
+			foundLinux = true
+		}
+	}
+	if !foundBrew {
+		t.Error("expected install-aws-cli to support brew on macOS")
+	}
+	if !foundLinux {
+		t.Error("expected install-aws-cli to support Linux installer")
+	}
+}
+
+func TestDiscover_InstallTerraformTestUsesVersionInput(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-terraform"]
+	testPhase := a.Install.Test
+	if testPhase.IsScalar {
+		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
+			t.Error("expected test phase to reference PI_IN_VERSION")
+		}
+	} else if len(testPhase.Steps) > 0 {
+		found := false
+		for _, s := range testPhase.Steps {
+			if strings.Contains(s.Value, "PI_IN_VERSION") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("expected test phase steps to reference PI_IN_VERSION")
+		}
+	}
+}
+
+func TestDiscover_UtilityAutomationsExist(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	utilities := []struct {
+		name        string
+		description string
+	}{
+		{"uv/sync", "Sync Python project dependencies using uv"},
+		{"set-env", "Idempotently add an environment variable export to the shell config"},
+		{"npm/install", "Install Node.js dependencies using npm ci or npm install"},
+	}
+
+	for _, tc := range utilities {
+		t.Run(tc.name, func(t *testing.T) {
+			a, ok := result.Automations[tc.name]
+			if !ok {
+				t.Fatalf("expected to find built-in %q automation", tc.name)
+			}
+
+			if a.Name != tc.name {
+				t.Errorf("expected name %q, got %q", tc.name, a.Name)
+			}
+
+			if a.Description != tc.description {
+				t.Errorf("expected description %q, got %q", tc.description, a.Description)
+			}
+
+			if len(a.Steps) == 0 {
+				t.Error("expected at least one step")
+			}
+
+			if a.IsInstaller() {
+				t.Error("expected utility automation to use steps:, not install:")
+			}
+		})
+	}
+}
+
+func TestDiscover_UtilityAutomationsAreResolvable(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	for _, name := range []string{"uv/sync", "set-env", "npm/install"} {
+		t.Run(name, func(t *testing.T) {
+			a, err := result.Find(name)
+			if err != nil {
+				t.Fatalf("Find(%q) returned error: %v", name, err)
+			}
+			if a.Name != name {
+				t.Errorf("expected name %q, got %q", name, a.Name)
+			}
+		})
+	}
+}
+
+func TestDiscover_UtilityAutomationsUseBash(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	for _, name := range []string{"uv/sync", "set-env", "npm/install"} {
+		t.Run(name, func(t *testing.T) {
+			a := result.Automations[name]
+			if len(a.Steps) != 1 {
+				t.Fatalf("expected 1 step, got %d", len(a.Steps))
+			}
+			if a.Steps[0].Type != automation.StepTypeBash {
+				t.Errorf("expected bash step, got %q", a.Steps[0].Type)
+			}
+		})
+	}
+}
+
+func TestDiscover_UvSyncAcceptsInputs(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["uv/sync"]
+	expectedInputs := []string{"dir", "groups", "args"}
+	for _, inputName := range expectedInputs {
+		spec, ok := a.Inputs[inputName]
+		if !ok {
+			t.Errorf("expected uv/sync to have a %q input", inputName)
+			continue
+		}
+		if spec.Description == "" {
+			t.Errorf("expected %q input to have a description", inputName)
+		}
+	}
+
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "uv sync") {
+		t.Error("expected script to call uv sync")
+	}
+}
+
+func TestDiscover_SetEnvAcceptsInputs(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["set-env"]
+	expectedInputs := []string{"key", "value", "comment"}
+	for _, inputName := range expectedInputs {
+		spec, ok := a.Inputs[inputName]
+		if !ok {
+			t.Errorf("expected set-env to have a %q input", inputName)
+			continue
+		}
+		if spec.Description == "" {
+			t.Errorf("expected %q input to have a description", inputName)
+		}
+	}
+
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "PI_IN_KEY") {
+		t.Error("expected script to use PI_IN_KEY")
+	}
+	if !strings.Contains(script, "PI_IN_VALUE") {
+		t.Error("expected script to use PI_IN_VALUE")
+	}
+	if !strings.Contains(script, ".zshrc") {
+		t.Error("expected script to write to .zshrc")
+	}
+	if !strings.Contains(script, ".bashrc") {
+		t.Error("expected script to write to .bashrc")
+	}
+}
+
+func TestDiscover_NpmInstallAcceptsInputs(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["npm/install"]
+	spec, ok := a.Inputs["dir"]
+	if !ok {
+		t.Fatal("expected npm/install to have a 'dir' input")
+	}
+	if spec.Description == "" {
+		t.Error("expected 'dir' input to have a description")
+	}
+
+	script := a.Steps[0].Value
+	if !strings.Contains(script, "npm ci") {
+		t.Error("expected script to prefer npm ci")
+	}
+	if !strings.Contains(script, "npm install") {
+		t.Error("expected script to fall back to npm install")
+	}
+	if !strings.Contains(script, "package-lock.json") {
+		t.Error("expected script to check for package-lock.json")
 	}
 }

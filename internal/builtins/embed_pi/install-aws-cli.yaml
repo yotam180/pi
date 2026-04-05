@@ -1,0 +1,28 @@
+description: Install AWS CLI v2
+
+install:
+  test:
+    - bash: aws --version 2>&1 | grep -q "aws-cli/2"
+
+  run:
+    - first:
+        - bash: brew install awscli
+          if: command.brew and os.macos
+        - bash: |
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+            unzip -q /tmp/awscliv2.zip -d /tmp
+            sudo /tmp/aws/install
+            rm -rf /tmp/aws /tmp/awscliv2.zip
+          if: os.linux and os.arch.amd64
+        - bash: |
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+            unzip -q /tmp/awscliv2.zip -d /tmp
+            sudo /tmp/aws/install
+            rm -rf /tmp/aws /tmp/awscliv2.zip
+          if: os.linux and os.arch.arm64
+        - bash: |
+            echo "AWS CLI v2 install not supported on this platform" >&2
+            echo "See: https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html" >&2
+            exit 1
+
+  version: aws --version 2>&1 | awk '{print $1}' | cut -d'/' -f2

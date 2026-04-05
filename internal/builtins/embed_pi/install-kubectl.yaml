@@ -1,0 +1,23 @@
+description: Install kubectl at a specific version
+
+inputs:
+  version:
+    type: string
+    description: kubectl version to install (e.g. "1.28")
+
+install:
+  test:
+    - bash: kubectl version --client 2>&1 | grep -q "v$PI_IN_VERSION"
+
+  run:
+    - first:
+        - bash: mise install "kubectl@$PI_IN_VERSION" && mise use -g "kubectl@$PI_IN_VERSION"
+          if: command.mise
+        - bash: brew install kubectl
+          if: command.brew
+        - bash: |
+            echo "no suitable installer found (tried mise, brew)" >&2
+            echo "Install manually: https://kubernetes.io/docs/tasks/tools/" >&2
+            exit 1
+
+  version: kubectl version --client 2>&1 | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | head -1 | tr -d 'v'

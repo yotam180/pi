@@ -1,0 +1,20 @@
+description: Install Bun JavaScript runtime
+
+inputs:
+  version:
+    type: string
+    description: Bun version to install (optional; omit for latest)
+    required: false
+
+install:
+  test: command -v bun >/dev/null 2>&1
+
+  run:
+    - first:
+        - bash: mise install "bun@${PI_IN_VERSION:-latest}" && mise use -g "bun@${PI_IN_VERSION:-latest}"
+          if: command.mise
+        - bash: brew install bun
+          if: command.brew
+        - bash: curl -fsSL https://bun.sh/install | bash
+
+  version: bun --version

@@ -1,0 +1,16 @@
+description: Install Node.js dependencies using npm ci or npm install
+
+inputs:
+  dir:
+    type: string
+    description: "Directory containing package.json (default: project root)"
+    required: false
+
+bash: |
+  TARGET="${PI_IN_DIR:-.}"
+  cd "$TARGET"
+  if [ -f "package-lock.json" ]; then
+    npm ci
+  else
+    npm install
+  fi

@@ -1,0 +1,26 @@
+description: Sync Python project dependencies using uv
+
+inputs:
+  dir:
+    type: string
+    description: "Directory containing pyproject.toml (default: project root)"
+    required: false
+  groups:
+    type: string
+    description: Dependency groups to include (e.g. "dev,local")
+    required: false
+  args:
+    type: string
+    description: Extra arguments passed to uv sync
+    required: false
+
+bash: |
+  SYNC_DIR="${PI_IN_DIR:-.}"
+  GROUPS=""
+  if [ -n "$PI_IN_GROUPS" ]; then
+    for g in $(echo "$PI_IN_GROUPS" | tr ',' ' '); do
+      GROUPS="$GROUPS --group $g"
+    done
+  fi
+  cd "$SYNC_DIR"
+  uv sync $GROUPS $PI_IN_ARGS
