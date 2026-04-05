@@ -105,6 +105,39 @@ steps:
 
 > **Note:** The `name:` field is optional and deprecated. PI derives the automation name from the file path: `.pi/docker/up.yaml` → `docker/up`, `.pi/setup/cursor/automation.yaml` → `setup/cursor`. If `name:` is present and matches the derived name, it's accepted silently. If it mismatches, PI prints a warning. Existing files with `name:` continue to work.
 
+### Single-Step Shorthand
+
+Automations with a single step can skip the `steps:` wrapper and place the step type key at the top level:
+
+```yaml
+# .pi/test.yaml
+description: Run the test suite
+bash: go test ./...
+```
+
+This is equivalent to:
+
+```yaml
+description: Run the test suite
+steps:
+  - bash: go test ./...
+```
+
+All step types work as shorthands: `bash:`, `python:`, `typescript:`, `run:`. Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe_to:`) can be used alongside the shorthand key at the top level:
+
+```yaml
+# .pi/build-linux.yaml
+description: Cross-compile for Linux
+bash: go build -o bin/app ./...
+env:
+  GOOS: linux
+  GOARCH: amd64
+dir: services/api
+timeout: 30s
+```
+
+Having both a top-level step key and `steps:` (or `install:`) in the same file is a parse error. The `description:` at the top level remains the automation description. The `if:` at the top level is the automation-level condition.
+
 ---
 
 ## Step Types

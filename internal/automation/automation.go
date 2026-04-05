@@ -46,7 +46,8 @@ func (a *Automation) Dir() string {
 }
 
 // UnmarshalYAML implements custom unmarshalling for Automation to handle
-// the polymorphic step type, ordered inputs, and install: blocks.
+// the polymorphic step type, ordered inputs, install: blocks, and
+// single-step shorthand (top-level bash:/python:/typescript:/run: keys).
 func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 	var raw struct {
 		Name        string           `yaml:"name"`
@@ -56,6 +57,17 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		Inputs      *inputsRaw       `yaml:"inputs"`
 		If          string           `yaml:"if"`
 		Requires    []requirementRaw `yaml:"requires"`
+
+		// Single-step shorthand: top-level step type keys
+		Bash       *string           `yaml:"bash"`
+		Python     *string           `yaml:"python"`
+		TypeScript *string           `yaml:"typescript"`
+		Run        *string           `yaml:"run"`
+		Env        map[string]string `yaml:"env"`
+		Dir        string            `yaml:"dir"`
+		Timeout    string            `yaml:"timeout"`
+		Silent     bool              `yaml:"silent"`
+		PipeTo     string            `yaml:"pipe_to"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -76,6 +88,31 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		a.Requires = append(a.Requires, rr.Requirement)
 	}
 
+	// Detect single-step shorthand (top-level bash:/python:/typescript:/run:)
+	shorthand, err := buildShorthandStep(raw.Bash, raw.Python, raw.TypeScript, raw.Run)
+	if err != nil {
+		return err
+	}
+	if shorthand != nil {
+		if len(raw.Steps) > 0 {
+			return fmt.Errorf("automation cannot have both a top-level step key (bash/python/typescript/run) and \"steps\"")
+		}
+		if raw.Install != nil {
+			return fmt.Errorf("automation cannot have both a top-level step key (bash/python/typescript/run) and \"install\"")
+		}
+		shorthand.Env = raw.Env
+		shorthand.Dir = raw.Dir
+		shorthand.Timeout = raw.Timeout
+		shorthand.Silent = raw.Silent
+		shorthand.PipeTo = raw.PipeTo
+		step, err := shorthand.toStep(0)
+		if err != nil {
+			return err
+		}
+		a.Steps = append(a.Steps, step)
+		return nil
+	}
+
 	for i, sr := range raw.Steps {
 		step, err := sr.toStep(i)
 		if err != nil {
@@ -85,6 +122,40 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	return nil
+}
+
+// buildShorthandStep checks for top-level step keys and returns a stepRaw if
+// exactly one is present. Returns (nil, nil) if none are present. Returns an
+// error if multiple top-level step keys are present.
+func buildShorthandStep(bash, python, typescript, run *string) (*stepRaw, error) {
+	var count int
+	if bash != nil {
+		count++
+	}
+	if python != nil {
+		count++
+	}
+	if typescript != nil {
+		count++
+	}
+	if run != nil {
+		count++
+	}
+
+	if count == 0 {
+		return nil, nil
+	}
+	if count > 1 {
+		return nil, fmt.Errorf("automation has multiple top-level step keys (bash/python/typescript/run); use exactly one")
+	}
+
+	sr := &stepRaw{
+		Bash:       bash,
+		Python:     python,
+		TypeScript: typescript,
+		Run:        run,
+	}
+	return sr, nil
 }
 
 // Load reads and parses an automation YAML file at the given path.
@@ -142,7 +213,7 @@ func (a *Automation) validate(path string) error {
 	}
 
 	if !hasSteps && !hasInstall {
-		return fmt.Errorf("%s: automation must have \"steps\" or \"install\"", path)
+		return fmt.Errorf("%s: automation must have \"steps\", \"install\", or a top-level step key (bash/python/typescript/run)", path)
 	}
 
 	if a.If != "" {

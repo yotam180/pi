@@ -1,0 +1,6 @@
+description: Greet with a name
+bash: echo "Hello, $PI_INPUT_NAME!"
+inputs:
+  name:
+    type: string
+    description: Name to greet

@@ -1,0 +1,5 @@
+description: Cross-compile for Linux
+bash: echo "Building with GOOS=$GOOS GOARCH=$GOARCH"
+env:
+  GOOS: linux
+  GOARCH: amd64

@@ -1,0 +1,5 @@
+project: shorthand-example
+
+shortcuts:
+  greet: greet
+  build: build

@@ -56,11 +56,11 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation struct (with If, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate()
+    automation.go                  Automation struct (with If, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys)
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description), stepRaw, toStep(), InstallPhase, InstallSpec, validateSteps(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
-    automation_test.go             14 tests (core load, validate, basic step parsing)
+    automation_test.go             26 tests (core load, validate, basic step parsing, single-step shorthand)
     step_test.go                   53 tests (if/env/silent/parent_shell/dir/timeout/description fields, install block)
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
@@ -259,6 +259,16 @@ Makefile                               build, vet, test, test-matrix targets
 - When `name:` is present and matches, no warning is emitted
 - When `name:` is present but mismatches the derived name, a warning is printed to stderr
 - Built-in automations (`internal/builtins`) apply the same rule: name from path when absent
+
+### Single-step shorthand
+- Automations with a single step can place the step type key (`bash:`, `python:`, `typescript:`, `run:`) at the top level, skipping the `steps:` wrapper
+- Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe_to:`) are supported alongside the shorthand key at the top level
+- Top-level `if:` maps to the automation-level condition (not a step-level condition) — for a single-step automation, these are semantically equivalent
+- Top-level `description:` remains the automation description (not a step description)
+- Having both a top-level step key and `steps:` (or `install:`) in the same file is a parse error
+- Having multiple top-level step keys (e.g. both `bash:` and `python:`) is a parse error
+- Implementation: `buildShorthandStep()` in `automation.go` constructs a `stepRaw` from top-level keys; `UnmarshalYAML` expands it to a single-element `Steps` slice before validation — the rest of the system (executor, info, validate) sees a normal automation
+- Shorthand is additive — existing `steps:` syntax continues to work unchanged
 
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure
@@ -629,7 +639,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 694 (103 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 170 executor [across 14 test files] + 4 project + 15 runtimes + 16 shell + 164 integration)
+Total tests: 714 (115 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 170 executor [across 14 test files] + 4 project + 15 runtimes + 16 shell + 172 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -679,6 +689,7 @@ tests/integration/
   step_timeout_integ_test.go      5 tests — step timeout: list, fast completes, slow exceeds (exit 124), mixed timed/untimed, info annotation
   step_description_integ_test.go  5 tests — step description: list, run, info descriptions, info with annotations, info no-desc no-details
   validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
+  shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)
 ```

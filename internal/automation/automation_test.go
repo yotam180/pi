@@ -266,6 +266,272 @@ steps:
 	}
 }
 
+// --- Single-step shorthand tests ---
+
+func TestLoad_ShorthandBash(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand.yaml", `
+description: Run tests
+bash: go test ./...
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Description != "Run tests" {
+		t.Errorf("description = %q, want %q", a.Description, "Run tests")
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeBash {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypeBash)
+	}
+	if a.Steps[0].Value != "go test ./..." {
+		t.Errorf("step value = %q, want %q", a.Steps[0].Value, "go test ./...")
+	}
+}
+
+func TestLoad_ShorthandPython(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-py.yaml", `
+description: Run Python script
+python: print("hello")
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypePython {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypePython)
+	}
+}
+
+func TestLoad_ShorthandTypeScript(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-ts.yaml", `
+description: Run TS
+typescript: console.log("hello")
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeTypeScript {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypeTypeScript)
+	}
+}
+
+func TestLoad_ShorthandRun(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-run.yaml", `
+description: Delegate to another automation
+run: setup/install-deps
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeRun {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypeRun)
+	}
+	if a.Steps[0].Value != "setup/install-deps" {
+		t.Errorf("step value = %q, want %q", a.Steps[0].Value, "setup/install-deps")
+	}
+}
+
+func TestLoad_ShorthandWithModifiers(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-mods.yaml", `
+description: Build with env
+bash: go build -o bin/app ./...
+env:
+  GOOS: linux
+  GOARCH: amd64
+dir: services/api
+timeout: 30s
+silent: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	step := a.Steps[0]
+	if step.Type != StepTypeBash {
+		t.Errorf("step type = %q, want %q", step.Type, StepTypeBash)
+	}
+	if step.Env["GOOS"] != "linux" {
+		t.Errorf("env GOOS = %q, want %q", step.Env["GOOS"], "linux")
+	}
+	if step.Env["GOARCH"] != "amd64" {
+		t.Errorf("env GOARCH = %q, want %q", step.Env["GOARCH"], "amd64")
+	}
+	if step.Dir != "services/api" {
+		t.Errorf("dir = %q, want %q", step.Dir, "services/api")
+	}
+	if step.Timeout.String() != "30s" {
+		t.Errorf("timeout = %v, want 30s", step.Timeout)
+	}
+	if !step.Silent {
+		t.Error("silent = false, want true")
+	}
+}
+
+func TestLoad_ShorthandWithIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-if.yaml", `
+description: macOS only
+bash: brew install jq
+if: os.macos
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.If != "os.macos" {
+		t.Errorf("automation if = %q, want %q", a.If, "os.macos")
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeBash {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypeBash)
+	}
+}
+
+func TestLoad_ShorthandConflictWithSteps(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "conflict.yaml", `
+bash: echo hello
+steps:
+  - bash: echo world
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for shorthand + steps conflict")
+	}
+	if !strings.Contains(err.Error(), "top-level step key") {
+		t.Errorf("expected 'top-level step key' in error, got: %v", err)
+	}
+}
+
+func TestLoad_ShorthandConflictWithInstall(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "conflict-install.yaml", `
+bash: echo hello
+install:
+  test: command -v go
+  run: echo installing
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for shorthand + install conflict")
+	}
+	if !strings.Contains(err.Error(), "top-level step key") {
+		t.Errorf("expected 'top-level step key' in error, got: %v", err)
+	}
+}
+
+func TestLoad_ShorthandMultipleStepKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "multi-keys.yaml", `
+bash: echo hello
+python: print("hello")
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for multiple top-level step keys")
+	}
+	if !strings.Contains(err.Error(), "multiple top-level step keys") {
+		t.Errorf("expected 'multiple top-level step keys' in error, got: %v", err)
+	}
+}
+
+func TestLoad_ShorthandWithPipeTo(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-pipe.yaml", `
+description: Pipe output
+bash: echo "data"
+pipe_to: next
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].PipeTo != "next" {
+		t.Errorf("pipe_to = %q, want %q", a.Steps[0].PipeTo, "next")
+	}
+}
+
+func TestLoad_ShorthandMultiline(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-multiline.yaml", `
+description: Multiline bash
+bash: |
+  echo "line 1"
+  echo "line 2"
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(a.Steps[0].Value, "line 1") {
+		t.Errorf("expected multiline content, got: %q", a.Steps[0].Value)
+	}
+	if !strings.Contains(a.Steps[0].Value, "line 2") {
+		t.Errorf("expected multiline content, got: %q", a.Steps[0].Value)
+	}
+}
+
+func TestLoad_ShorthandWithInputs(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-inputs.yaml", `
+description: Greet with input
+bash: echo "Hello, $PI_INPUT_NAME"
+inputs:
+  name:
+    type: string
+    description: Name to greet
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if len(a.Inputs) != 1 {
+		t.Fatalf("inputs count = %d, want 1", len(a.Inputs))
+	}
+	if _, ok := a.Inputs["name"]; !ok {
+		t.Error("expected input 'name' to exist")
+	}
+}
+
 func TestStepType_IsValid(t *testing.T) {
 	tests := []struct {
 		st   StepType
