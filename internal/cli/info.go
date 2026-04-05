@@ -3,14 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
-	"github.com/vyper-tooling/pi/internal/config"
-	"github.com/vyper-tooling/pi/internal/project"
 )
 
 func newInfoCmd() *cobra.Command {
@@ -22,9 +19,9 @@ PI walks up from the current directory to find pi.yaml, so this works from
 any subdirectory of the project.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			cwd, err := getwd()
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
 			return showAutomationInfo(cwd, args[0], cmd.OutOrStdout())
 		},
@@ -33,14 +30,12 @@ any subdirectory of the project.`,
 
 // showAutomationInfo resolves an automation by name and prints its details.
 func showAutomationInfo(startDir, name string, out io.Writer) error {
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
 
-	cfg, _ := config.Load(root)
-
-	result, err := discoverAllWithConfig(root, cfg, nil)
+	result, err := pc.Discover(nil)
 	if err != nil {
 		return err
 	}

@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/vyper-tooling/pi/internal/config"
-	"github.com/vyper-tooling/pi/internal/project"
 	"github.com/vyper-tooling/pi/internal/shell"
 )
 
@@ -53,7 +51,11 @@ func newShellListCmd() *cobra.Command {
 }
 
 func runShellInstall(stdout, stderr io.Writer) error {
-	root, cfg, err := loadProjectConfig()
+	cwd, err := getwd()
+	if err != nil {
+		return err
+	}
+	pc, err := resolveProjectStrict(cwd)
 	if err != nil {
 		return err
 	}
@@ -63,13 +65,13 @@ func runShellInstall(stdout, stderr io.Writer) error {
 		return err
 	}
 
-	shellPath, err := shell.Install(cfg, piBin, root)
+	shellPath, err := shell.Install(pc.Config, piBin, pc.Root)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(stdout, "Installed %d shortcut(s) to %s\n", len(cfg.Shortcuts), shellPath)
-	for name, sc := range cfg.Shortcuts {
+	fmt.Fprintf(stdout, "Installed %d shortcut(s) to %s\n", len(pc.Config.Shortcuts), shellPath)
+	for name, sc := range pc.Config.Shortcuts {
 		mode := "cd"
 		if sc.Anywhere {
 			mode = "anywhere"
@@ -81,16 +83,20 @@ func runShellInstall(stdout, stderr io.Writer) error {
 }
 
 func runShellUninstall(stdout, stderr io.Writer) error {
-	_, cfg, err := loadProjectConfig()
+	cwd, err := getwd()
+	if err != nil {
+		return err
+	}
+	pc, err := resolveProjectStrict(cwd)
 	if err != nil {
 		return err
 	}
 
-	if err := shell.Uninstall(cfg.Project); err != nil {
+	if err := shell.Uninstall(pc.Config.Project); err != nil {
 		return err
 	}
 
-	fmt.Fprintf(stdout, "Removed shell shortcuts for %s\n", cfg.Project)
+	fmt.Fprintf(stdout, "Removed shell shortcuts for %s\n", pc.Config.Project)
 	return nil
 }
 
@@ -111,25 +117,6 @@ func runShellList(out io.Writer) error {
 		fmt.Fprintf(out, "  %s.sh\n", p)
 	}
 	return nil
-}
-
-func loadProjectConfig() (string, *config.ProjectConfig, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", nil, fmt.Errorf("getting working directory: %w", err)
-	}
-
-	root, err := project.FindRoot(cwd)
-	if err != nil {
-		return "", nil, err
-	}
-
-	cfg, err := config.Load(root)
-	if err != nil {
-		return "", nil, err
-	}
-
-	return root, cfg, nil
 }
 
 func resolvePiBinary() (string, error) {

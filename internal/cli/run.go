@@ -8,10 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
-	"github.com/vyper-tooling/pi/internal/config"
-	"github.com/vyper-tooling/pi/internal/executor"
-	"github.com/vyper-tooling/pi/internal/project"
-	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
 func newRunCmd() *cobra.Command {
@@ -36,9 +32,9 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 			startDir := repoFlag
 			if startDir == "" {
 				var err error
-				startDir, err = os.Getwd()
+				startDir, err = getwd()
 				if err != nil {
-					return fmt.Errorf("getting working directory: %w", err)
+					return err
 				}
 			}
 
@@ -80,14 +76,12 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 	automation.WarnWriter = stderr
 	defer func() { automation.WarnWriter = nil }()
 
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
 
-	cfg, _ := config.Load(root)
-
-	result, err := discoverAllWithConfig(root, cfg, nil)
+	result, err := pc.Discover(nil)
 	if err != nil {
 		return err
 	}
@@ -97,19 +91,12 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		return err
 	}
 
-	exec := &executor.Executor{
-		RepoRoot:       root,
-		Discovery:      result,
-		Stdout:         stdout,
-		Stderr:         stderr,
-		Silent:         silent,
-		Loud:           loud,
-		ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
-	}
-
-	if cfg != nil && cfg.EffectiveProvisionMode() != config.ProvisionNever {
-		exec.Provisioner = runtimes.NewProvisioner(cfg, stderr)
-	}
+	exec := pc.NewExecutor(result, ExecutorOpts{
+		Stdout: stdout,
+		Stderr: stderr,
+		Silent: silent,
+		Loud:   loud,
+	})
 
 	return exec.RunWithInputs(a, args, withArgs)
 }

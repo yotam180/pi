@@ -3,14 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/executor"
-	"github.com/vyper-tooling/pi/internal/project"
 )
 
 func newValidateCmd() *cobra.Command {
@@ -30,9 +28,9 @@ Checks performed:
 
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			cwd, err := getwd()
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
 			return runValidate(cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
@@ -48,7 +46,7 @@ type ValidationResult struct {
 }
 
 func runValidate(startDir string, stdout, stderr io.Writer) error {
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
@@ -56,7 +54,7 @@ func runValidate(startDir string, stdout, stderr io.Writer) error {
 	automation.WarnWriter = stderr
 	defer func() { automation.WarnWriter = nil }()
 
-	result := validateProject(root)
+	result := validateProject(pc.Root)
 
 	if len(result.Errors) > 0 {
 		for _, e := range result.Errors {

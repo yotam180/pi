@@ -3,14 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
-	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
-	"github.com/vyper-tooling/pi/internal/project"
 )
 
 func newDoctorCmd() *cobra.Command {
@@ -23,9 +20,9 @@ satisfied and which are missing.
 
 Exits with code 0 if all requirements are met, 1 if any are missing.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			cwd, err := getwd()
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
 			return runDoctor(cwd, cmd.OutOrStdout())
 		},
@@ -33,14 +30,12 @@ Exits with code 0 if all requirements are met, 1 if any are missing.`,
 }
 
 func runDoctor(startDir string, out io.Writer) error {
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
 
-	cfg, _ := config.Load(root)
-
-	result, err := discoverAllWithConfig(root, cfg, nil)
+	result, err := pc.Discover(nil)
 	if err != nil {
 		return err
 	}

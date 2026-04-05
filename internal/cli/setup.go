@@ -8,11 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
-	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
-	"github.com/vyper-tooling/pi/internal/project"
-	"github.com/vyper-tooling/pi/internal/runtimes"
 	"github.com/vyper-tooling/pi/internal/shell"
 )
 
@@ -57,21 +54,17 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 	automation.WarnWriter = stderr
 	defer func() { automation.WarnWriter = nil }()
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getting working directory: %w", err)
-	}
-
-	root, err := project.FindRoot(cwd)
+	cwd, err := getwd()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.Load(root)
+	pc, err := resolveProjectStrict(cwd)
 	if err != nil {
 		return err
 	}
 
+	cfg := pc.Config
 	out := display.New(stdout)
 	stderrPrinter := display.New(stderr)
 
@@ -80,36 +73,27 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 		return nil
 	}
 
-	// Fetch packages before running setup automations
 	if len(cfg.Packages) > 0 {
 		out.SetupHeader("==> Fetching packages...\n")
 	}
 
-	result, err := discoverAllWithConfig(root, cfg, stderr)
+	result, err := pc.Discover(stderr)
 	if err != nil {
 		return err
 	}
 
 	if len(cfg.Setup) > 0 {
-
-		exec := &executor.Executor{
-			RepoRoot:       root,
-			Discovery:      result,
-			Stdout:         stdout,
-			Stderr:         stderr,
-			Silent:         silent,
-			Loud:           loud,
-			Printer:        stderrPrinter,
-			ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
-		}
-
-		if cfg.EffectiveProvisionMode() != config.ProvisionNever {
-			exec.Provisioner = runtimes.NewProvisioner(cfg, stderr)
-		}
+		exec := pc.NewExecutor(result, ExecutorOpts{
+			Stdout: stdout,
+			Stderr: stderr,
+			Silent: silent,
+			Loud:   loud,
+		})
+		exec.Printer = stderrPrinter
 
 		for i, entry := range cfg.Setup {
 			if entry.If != "" {
-				skip, err := evaluateSetupCondition(entry.If, root)
+				skip, err := evaluateSetupCondition(entry.If, pc.Root)
 				if err != nil {
 					return fmt.Errorf("setup[%d] if: %w", i, err)
 				}
@@ -145,7 +129,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 		if err != nil {
 			return err
 		}
-		shellPath, err := shell.Install(cfg, piBin, root)
+		shellPath, err := shell.Install(cfg, piBin, pc.Root)
 		if err != nil {
 			return err
 		}

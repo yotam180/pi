@@ -10,7 +10,6 @@ import (
 	"github.com/vyper-tooling/pi/internal/cache"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
-	"github.com/vyper-tooling/pi/internal/project"
 	"github.com/vyper-tooling/pi/internal/refparser"
 )
 
@@ -28,9 +27,9 @@ Examples:
   pi add file:~/my-automations --as mytools`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			startDir, err := os.Getwd()
+			startDir, err := getwd()
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
 			return runAdd(startDir, args[0], asFlag, os.Stdout, os.Stderr)
 		},
@@ -43,10 +42,11 @@ Examples:
 
 // runAdd implements the pi add logic. Extracted for testability.
 func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
+	root := pc.Root
 
 	entry := config.PackageEntry{
 		Source: source,

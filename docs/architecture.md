@@ -32,13 +32,14 @@ internal/
         install-hooks.yaml         pi:git/install-hooks — copies hook scripts to .git/hooks/ (source input)
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
+    context.go                     ProjectContext — shared project resolution pipeline (root + config + discovery + executor construction); resolveProject(), resolveProjectStrict(), Discover(), NewExecutor(), getwd(); eliminates boilerplate across all CLI commands
     discover.go                    discoverAll() / discoverAllWithConfig() — discovers local + package + built-in automations and merges; fetches/verifies packages from config; passes os.Stderr for warnings; newOnDemandFetcher() — creates on-demand GitHub package fetch callback with per-invocation dedup and advisory output; printOnDemandAdvisory() — prints fetch status and pi.yaml snippet to stderr
     discover_test.go               4 tests (advisory output format, nil writer, fetch status text, down arrow icon)
-    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
+    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; uses ProjectContext for resolution and executor construction
     list.go                        pi list — discovers and prints automations with SOURCE column; --all flag shows grouped package sections; --builtins/-b flag includes pi:* automations; automationSource() resolves source indicator per automation
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations; stepAnnotations() shared helper for building annotation slices from step fields
-    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
-    shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
+    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE; uses ProjectContext for resolution and executor construction
+    shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
     validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; reports all errors; exit 0/1
@@ -391,7 +392,18 @@ Makefile                               build, vet, test, test-matrix targets
 - `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`; `MergePackage()` discovers and merges package automations with alias tracking
 - `executor` runs automation steps; depends on `automation` (types) and `discovery` (for `run:` step resolution)
 - `project` handles finding the repo root (directory containing `pi.yaml`)
-- `cli` ties project + config + discovery + cache + executor together; `discoverAllWithConfig()` orchestrates package fetching and automation discovery
+- `cli` ties project + config + discovery + cache + executor together; `ProjectContext` in `context.go` provides the shared resolution pipeline; `discoverAllWithConfig()` orchestrates package fetching and automation discovery
+
+### CLI project resolution (`ProjectContext`)
+- `ProjectContext` encapsulates the common CLI resolution pipeline: project root + config + discovery + executor construction
+- `resolveProject(startDir)` finds root and loads config (ignoring config errors — used by `run`, `list`, `info`, `doctor`, `add`)
+- `resolveProjectStrict(startDir)` finds root and loads config strictly (returning errors — used by `setup`, `shell install/uninstall`)
+- `(pc *ProjectContext).Discover(stderr)` runs full discovery (local + packages + builtins)
+- `(pc *ProjectContext).NewExecutor(result, opts)` builds an `Executor` with ParentEvalFile from env and Provisioner from config
+- `ExecutorOpts` bundles Stdout, Stderr, Silent, Loud for executor construction
+- `getwd()` is a shared helper wrapping `os.Getwd()` with consistent error messaging
+- All CLI commands use this pipeline, eliminating duplicated boilerplate across `run.go`, `list.go`, `info.go`, `doctor.go`, `validate.go`, `setup.go`, `add.go`, `shell.go`
+- Adding a new CLI command requires only: call `resolveProject()`, then `pc.Discover()` and optionally `pc.NewExecutor()` — ~3 lines instead of ~15
 
 ### Execution model
 - By default, all steps run with the repo root (directory containing `pi.yaml`) as their working directory. Steps can override this with `dir:`.

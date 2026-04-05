@@ -3,16 +3,13 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
-	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
-	"github.com/vyper-tooling/pi/internal/project"
 )
 
 func newListCmd() *cobra.Command {
@@ -29,9 +26,9 @@ so this works from any subdirectory of the project.
 By default, built-in automations (pi:*) are hidden. Use --builtins to include them.
 Use --all to browse automations from all declared packages.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cwd, err := os.Getwd()
+			cwd, err := getwd()
 			if err != nil {
-				return fmt.Errorf("getting working directory: %w", err)
+				return err
 			}
 			return listAutomations(cwd, cmd.OutOrStdout(), showAll, showBuiltins)
 		},
@@ -45,14 +42,12 @@ Use --all to browse automations from all declared packages.`,
 
 // listAutomations discovers and prints all automations. Extracted for testability.
 func listAutomations(startDir string, out io.Writer, showAll bool, showBuiltins bool) error {
-	root, err := project.FindRoot(startDir)
+	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
 
-	cfg, _ := config.Load(root)
-
-	result, err := discoverAllWithConfig(root, cfg, nil)
+	result, err := pc.Discover(nil)
 	if err != nil {
 		return err
 	}
