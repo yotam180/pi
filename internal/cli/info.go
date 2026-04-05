@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -138,6 +139,7 @@ func printStepsDetail(steps []automation.Step, out io.Writer) {
 			for k := range s.Env {
 				envKeys = append(envKeys, k)
 			}
+			sort.Strings(envKeys)
 			annotations = append(annotations, fmt.Sprintf("env: %s", strings.Join(envKeys, ", ")))
 		}
 		if len(annotations) > 0 {

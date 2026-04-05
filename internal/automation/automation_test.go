@@ -296,7 +296,7 @@ steps:
 	}
 }
 
-func TestStepType_IsImplemented(t *testing.T) {
+func TestStepType_IsValid(t *testing.T) {
 	tests := []struct {
 		st   StepType
 		want bool
@@ -305,10 +305,11 @@ func TestStepType_IsImplemented(t *testing.T) {
 		{StepTypeRun, true},
 		{StepTypePython, true},
 		{StepTypeTypeScript, true},
+		{"unknown", false},
 	}
 	for _, tt := range tests {
-		if got := tt.st.IsImplemented(); got != tt.want {
-			t.Errorf("StepType(%q).IsImplemented() = %v, want %v", tt.st, got, tt.want)
+		if got := tt.st.IsValid(); got != tt.want {
+			t.Errorf("StepType(%q).IsValid() = %v, want %v", tt.st, got, tt.want)
 		}
 	}
 }

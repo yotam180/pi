@@ -151,14 +151,7 @@ const (
 	StepTypeTypeScript StepType = "typescript"
 )
 
-var supportedStepTypes = map[StepType]bool{
-	StepTypeBash:       true,
-	StepTypeRun:        true,
-	StepTypePython:     true,
-	StepTypeTypeScript: true,
-}
-
-var implementedStepTypes = map[StepType]bool{
+var validStepTypes = map[StepType]bool{
 	StepTypeBash:       true,
 	StepTypeRun:        true,
 	StepTypePython:     true,
@@ -392,7 +385,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 	}
 
 	s := found[0]
-	if !supportedStepTypes[s.t] {
+	if !validStepTypes[s.t] {
 		return Step{}, fmt.Errorf("step[%d]: unknown step type %q", index, s.t)
 	}
 
@@ -482,8 +475,8 @@ func (a *Automation) validate(path string) error {
 		if step.Value == "" {
 			return fmt.Errorf("%s: step[%d] has empty value", path, i)
 		}
-		if !implementedStepTypes[step.Type] {
-			return fmt.Errorf("%s: step[%d] type %q is recognized but not yet implemented", path, i, step.Type)
+		if !validStepTypes[step.Type] {
+			return fmt.Errorf("%s: step[%d] type %q is not a valid step type", path, i, step.Type)
 		}
 		if step.If != "" {
 			if _, err := conditions.Predicates(step.If); err != nil {
@@ -534,8 +527,8 @@ func validateInstallPhase(path, phaseName string, phase *InstallPhase) error {
 		if step.Value == "" {
 			return fmt.Errorf("%s: install.%s step[%d] has empty value", path, phaseName, i)
 		}
-		if !implementedStepTypes[step.Type] {
-			return fmt.Errorf("%s: install.%s step[%d] type %q is not implemented", path, phaseName, i, step.Type)
+		if !validStepTypes[step.Type] {
+			return fmt.Errorf("%s: install.%s step[%d] type %q is not a valid step type", path, phaseName, i, step.Type)
 		}
 		if step.If != "" {
 			if _, err := conditions.Predicates(step.If); err != nil {
@@ -631,7 +624,7 @@ func LoadFromBytes(data []byte, filePath string) (*Automation, error) {
 	return a, nil
 }
 
-// IsImplemented returns true if the step type is currently implemented in the engine.
-func (s StepType) IsImplemented() bool {
-	return implementedStepTypes[s]
+// IsValid returns true if the step type is a recognized, valid step type.
+func (s StepType) IsValid() bool {
+	return validStepTypes[s]
 }

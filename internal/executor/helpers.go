@@ -26,16 +26,6 @@ func resolveScriptPath(automationDir, scriptPath string) string {
 	return filepath.Join(automationDir, scriptPath)
 }
 
-// appendInputEnv merges PI_INPUT_* env vars into the current environment.
-// If inputEnv is empty, returns nil (cmd.Env=nil inherits parent env).
-func appendInputEnv(inputEnv []string) []string {
-	if len(inputEnv) == 0 {
-		return nil
-	}
-	env := os.Environ()
-	return append(env, inputEnv...)
-}
-
 // buildEnv constructs the environment for step execution, including
 // PI_INPUT_* vars, provisioned runtime PATH prepends, and step-level env vars.
 func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []string {
