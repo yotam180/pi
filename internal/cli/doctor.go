@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
@@ -37,7 +38,9 @@ func runDoctor(startDir string, out io.Writer) error {
 		return err
 	}
 
-	result, err := discoverAll(root)
+	cfg, _ := config.Load(root)
+
+	result, err := discoverAllWithConfig(root, cfg, nil)
 	if err != nil {
 		return err
 	}

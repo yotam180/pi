@@ -333,3 +333,55 @@ func TestTruncateTrace(t *testing.T) {
 		})
 	}
 }
+
+func TestPackageFetch_Cached(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch("✓", "yotam180/pi-common@v1.2", "cached", "")
+	got := buf.String()
+	if !strings.Contains(got, "✓") {
+		t.Errorf("expected ✓ icon, got %q", got)
+	}
+	if !strings.Contains(got, "cached") {
+		t.Errorf("expected 'cached' status, got %q", got)
+	}
+	if !strings.Contains(got, "yotam180/pi-common@v1.2") {
+		t.Errorf("expected source name, got %q", got)
+	}
+}
+
+func TestPackageFetch_WithDetail(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch("✓", "file:~/my-automations", "found", "alias: mytools")
+	got := buf.String()
+	if !strings.Contains(got, "alias: mytools") {
+		t.Errorf("expected detail in output, got %q", got)
+	}
+}
+
+func TestPackageFetch_Fetching(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch("↓", "testorg/pkg@v1.0", "fetching...", "")
+	got := buf.String()
+	if !strings.Contains(got, "↓") {
+		t.Errorf("expected ↓ icon, got %q", got)
+	}
+	if !strings.Contains(got, "fetching...") {
+		t.Errorf("expected 'fetching...' status, got %q", got)
+	}
+}
+
+func TestPackageFetch_Failed(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch("✗", "badorg/badpkg@v0.1", "failed", "")
+	got := buf.String()
+	if !strings.Contains(got, "✗") {
+		t.Errorf("expected ✗ icon, got %q", got)
+	}
+	if !strings.Contains(got, "failed") {
+		t.Errorf("expected 'failed' status, got %q", got)
+	}
+}

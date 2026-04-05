@@ -32,7 +32,7 @@ internal/
         install-hooks.yaml         pi:git/install-hooks — copies hook scripts to .git/hooks/ (source input)
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
-    discover.go                    discoverAll() — discovers local + built-in automations and merges; passes os.Stderr for name-mismatch warnings
+    discover.go                    discoverAll() / discoverAllWithConfig() — discovers local + package + built-in automations and merges; fetches/verifies packages from config; passes os.Stderr for warnings
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
@@ -53,8 +53,8 @@ internal/
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
   config/                          pi.yaml parsing
-    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field, bare string support), RuntimesConfig + Load()
-    config_test.go                 21 tests
+    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field, bare string support), PackageEntry (with Source/As, string or object form), RuntimesConfig + Load()
+    config_test.go                 31 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(), toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
@@ -65,12 +65,12 @@ internal/
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
-    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
+    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, PackageFetch, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
-    display_test.go                30 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
+    display_test.go                34 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace, package fetch status)
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
-    discovery_test.go              29 tests (18 base + 6 builtin merge/prefix + 5 optional name tests)
+    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution
+    discovery_test.go              37 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
@@ -193,8 +193,17 @@ pi setup
   ├─ CLI (internal/cli)
   │    Parses args (--no-shell), gets CWD
   │
-  ├─ Project + Config + Discovery
-  │    Loads pi.yaml, discovers automations
+  ├─ Project + Config
+  │    Loads pi.yaml (including packages: block)
+  │
+  ├─ Package Fetch (internal/cli/discover.go + internal/cache)
+  │    For each packages: entry:
+  │      file: → verify directory exists on disk (warn if missing)
+  │      GitHub → cache.Fetch() (clone if not cached)
+  │    Status output: ↓/✓/✗/⚠ per package
+  │
+  ├─ Discovery (internal/discovery)
+  │    discoverAllWithConfig(): local .pi/ + packages + builtins → merged Result
   │
   ├─ Executor (internal/executor)
   │    Runs each setup entry sequentially
@@ -290,6 +299,23 @@ Makefile                               build, vet, test, test-matrix targets
 - Implementation: `buildShorthandStep()` in `automation.go` constructs a `stepRaw` from top-level keys; `UnmarshalYAML` expands it to a single-element `Steps` slice before validation — the rest of the system (executor, info, validate) sees a normal automation
 - Shorthand is additive — existing `steps:` syntax continues to work unchanged
 
+### External packages (`packages:` in `pi.yaml`)
+- Teams declare external automation sources in `pi.yaml → packages:`
+- Two source types: GitHub (`org/repo@version`) and local file system (`file:~/path` or `file:./relative`)
+- `PackageEntry` supports both simple string form and object form (`source:` + optional `as:` alias)
+- Aliases let you write `run: mytools/docker/up` instead of the full source path
+- `discoverAllWithConfig()` orchestrates the pipeline: discover local → fetch/verify packages → discover package automations → merge into result → merge builtins
+- GitHub packages are fetched via `cache.Cache` — SSH/token/HTTPS auth fallback, atomic writes
+- `file:` sources are verified to exist; missing ones print a warning but don't halt (non-fatal)
+- Relative `file:` paths are resolved relative to the project root
+- `discovery.Result.MergePackage()` discovers automations from each package's `.pi/` and merges them
+- Package automations that don't collide with local names are added to the main `Automations` map — accessible via plain names in `run:` steps
+- Resolution priority: local `.pi/` > package automations > builtins — local always wins with a shadow warning
+- Alias resolution: `refparser.Parse()` detects alias-prefixed paths when `knownAliases` is provided; `FindWithAliases()` auto-populates aliases from the Result's own map
+- `pi setup` shows package fetch status before running setup automations (↓ fetching, ✓ cached/found, ✗ failed, ⚠ not found)
+- All CLI commands (run, list, info, validate, doctor) use `discoverAllWithConfig()` to see package automations
+- Validation: duplicate aliases are a parse error; aliases with `/` are rejected; empty source is rejected
+
 ### GitHub package cache (`internal/cache`)
 - `Cache` struct holds configuration: `Root` (cache directory), `WarnWriter` (for mutable ref warnings), `PIVersion` (for version checks), `GitFunc` (injectable git executor), `GetenvFunc` (injectable env reader)
 - `DefaultCacheRoot()` returns `~/.pi/cache`
@@ -305,15 +331,15 @@ Makefile                               build, vet, test, test-matrix targets
 - `GitFunc` and `GetenvFunc` allow full test isolation without real git or environment variables
 
 ### Package boundaries
-- `config` knows only about `pi.yaml` structure
+- `config` knows only about `pi.yaml` structure; includes `PackageEntry` (source + optional alias), `PackageAliases()` helper
 - `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths
 - `cache` manages `~/.pi/cache/` — clones GitHub repos at specific versions, handles auth fallback, validates `pi-package.yaml`; depends on `gopkg.in/yaml.v3` for package YAML parsing; injectable `GitFunc`/`GetenvFunc` for testing
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)
-- `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`
+- `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`; `MergePackage()` discovers and merges package automations with alias tracking
 - `executor` runs automation steps; depends on `automation` (types) and `discovery` (for `run:` step resolution)
 - `project` handles finding the repo root (directory containing `pi.yaml`)
-- `cli` ties project + discovery + executor together
+- `cli` ties project + config + discovery + cache + executor together; `discoverAllWithConfig()` orchestrates package fetching and automation discovery
 
 ### Execution model
 - By default, all steps run with the repo root (directory containing `pi.yaml`) as their working directory. Steps can override this with `dir:`.
@@ -721,7 +747,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1031 (170 automation + 81 builtins + 32 cache + 81 CLI + 30 conditions + 21 config + 35 display + 29 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 204 integration)
+Total tests: 1062 (170 automation + 81 builtins + 32 cache + 81 CLI + 30 conditions + 31 config + 39 display + 37 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 213 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -773,6 +799,7 @@ tests/integration/
   validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
   first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
+  packages_test.go                9 tests — packages: list, run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)
 ```

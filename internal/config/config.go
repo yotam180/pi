@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"gopkg.in/yaml.v3"
@@ -34,11 +35,68 @@ type RuntimesConfig struct {
 	Manager   RuntimeManager `yaml:"manager"`
 }
 
+// PackageEntry represents one entry in the packages: list.
+// It can be either a simple string ("org/repo@v1.2") or an object with
+// source: and optional as: keys.
+type PackageEntry struct {
+	Source string `yaml:"source"`
+	As     string `yaml:"as"`
+}
+
+// UnmarshalYAML implements custom unmarshalling for PackageEntry so it can
+// accept both a plain string ("org/repo@v1.2") and an object ({source: ..., as: ...}).
+func (p *PackageEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		p.Source = value.Value
+		return nil
+	}
+
+	if value.Kind == yaml.MappingNode {
+		type packageAlias PackageEntry
+		var alias packageAlias
+		if err := value.Decode(&alias); err != nil {
+			return err
+		}
+		*p = PackageEntry(alias)
+		return nil
+	}
+
+	return fmt.Errorf("line %d: package entry must be a string or object", value.Line)
+}
+
+// IsFileSource returns true if the package source starts with "file:".
+func (p *PackageEntry) IsFileSource() bool {
+	return strings.HasPrefix(p.Source, "file:")
+}
+
+// FilePath returns the filesystem path for a file: source, with ~ expanded.
+// Returns empty string for non-file sources.
+func (p *PackageEntry) FilePath() string {
+	if !p.IsFileSource() {
+		return ""
+	}
+	path := strings.TrimPrefix(p.Source, "file:")
+	return expandTilde(path)
+}
+
+// expandTilde replaces a leading "~/" with the user's home directory.
+func expandTilde(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
 // ProjectConfig represents the top-level pi.yaml file.
 type ProjectConfig struct {
 	Project   string                `yaml:"project"`
 	Shortcuts map[string]Shortcut   `yaml:"shortcuts"`
 	Setup     []SetupEntry          `yaml:"setup"`
+	Packages  []PackageEntry        `yaml:"packages"`
 	Runtimes  *RuntimesConfig       `yaml:"runtimes"`
 }
 
@@ -149,9 +207,36 @@ func (c *ProjectConfig) validate(path string) error {
 		}
 	}
 
+	if err := c.validatePackages(path); err != nil {
+		return err
+	}
+
 	if c.Runtimes != nil {
 		if err := c.Runtimes.validate(path); err != nil {
 			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *ProjectConfig) validatePackages(path string) error {
+	aliases := make(map[string]int) // alias → index of first occurrence
+
+	for i, pkg := range c.Packages {
+		if pkg.Source == "" {
+			return fmt.Errorf("%s: packages[%d] has empty source", path, i)
+		}
+
+		if pkg.As != "" {
+			if prev, exists := aliases[pkg.As]; exists {
+				return fmt.Errorf("%s: packages[%d] alias %q duplicates packages[%d]", path, i, pkg.As, prev)
+			}
+			aliases[pkg.As] = i
+
+			if strings.Contains(pkg.As, "/") {
+				return fmt.Errorf("%s: packages[%d] alias %q must not contain \"/\"", path, i, pkg.As)
+			}
 		}
 	}
 
@@ -172,6 +257,18 @@ func (r *RuntimesConfig) validate(path string) error {
 	}
 
 	return nil
+}
+
+// PackageAliases returns a set of all package alias names declared in packages:.
+// Used by discovery to detect alias-prefixed automation references.
+func (c *ProjectConfig) PackageAliases() map[string]bool {
+	aliases := make(map[string]bool)
+	for _, pkg := range c.Packages {
+		if pkg.As != "" {
+			aliases[pkg.As] = true
+		}
+	}
+	return aliases
 }
 
 // EffectiveProvisionMode returns the provision mode, defaulting to "never".

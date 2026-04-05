@@ -1,0 +1,2 @@
+description: Stop containers (from package)
+bash: echo "docker down from package"

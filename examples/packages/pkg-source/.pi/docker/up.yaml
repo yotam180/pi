@@ -1,0 +1,2 @@
+description: Start containers (from package)
+bash: echo "docker up from package"

@@ -95,6 +95,27 @@ func (p *Printer) InstallStatus(icon, name, status, version string) {
 	}
 }
 
+// PackageFetch prints a package fetch status line with appropriate styling.
+func (p *Printer) PackageFetch(icon, source, status, detail string) {
+	var line string
+	if detail != "" {
+		line = fmt.Sprintf("  %s  %-35s %s (%s)\n", icon, source, status, detail)
+	} else {
+		line = fmt.Sprintf("  %s  %-35s %s\n", icon, source, status)
+	}
+
+	switch icon {
+	case "✗":
+		p.Red("%s", line)
+	case "✓":
+		p.Dim("%s", line)
+	case "↓":
+		p.Plain("%s", line)
+	default:
+		p.Plain("%s", line)
+	}
+}
+
 // SetupHeader prints a setup entry header line (e.g. "==> setup[0]: docker/up")
 // in dim style.
 func (p *Printer) SetupHeader(format string, a ...any) {

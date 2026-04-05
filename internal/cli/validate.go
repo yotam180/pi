@@ -80,7 +80,7 @@ func validateProject(root string) ValidationResult {
 		return result
 	}
 
-	disc, discErr := discoverAll(root)
+	disc, discErr := discoverAllWithConfig(root, cfg, nil)
 	if discErr != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf(".pi/: %s", discErr))
 		return result

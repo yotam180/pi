@@ -703,3 +703,262 @@ steps:
 		t.Errorf("expected warning to mention derived name 'build', got: %q", warnStr)
 	}
 }
+
+func TestMergePackage_Basic(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"),
+		makeAutomation("local", "Local automation"))
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Create a "package" directory with its own .pi/
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "docker", "up.yaml"), `
+description: Start containers (package)
+steps:
+  - bash: echo up
+`)
+	writeFile(t, filepath.Join(pkgDir, PiDir, "docker", "down.yaml"), `
+description: Stop containers (package)
+steps:
+  - bash: echo down
+`)
+
+	err = result.MergePackage("testorg/testpkg@v1.0", "mytools", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	names := result.Names()
+	if len(names) != 3 {
+		t.Fatalf("expected 3 automations, got %d: %v", len(names), names)
+	}
+
+	// Package automations accessible in main map
+	if _, ok := result.Automations["docker/up"]; !ok {
+		t.Error("missing 'docker/up' from package")
+	}
+	if _, ok := result.Automations["docker/down"]; !ok {
+		t.Error("missing 'docker/down' from package")
+	}
+	if !result.IsPackage("docker/up") {
+		t.Error("expected 'docker/up' to be marked as package")
+	}
+	if result.IsPackage("local") {
+		t.Error("expected 'local' NOT to be marked as package")
+	}
+}
+
+func TestMergePackage_LocalShadows(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "shared.yaml"), `
+description: Local version
+steps:
+  - bash: echo local
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "shared.yaml"), `
+description: Package version
+steps:
+  - bash: echo package
+`)
+
+	var warnings bytes.Buffer
+	err = result.MergePackage("testorg/testpkg@v1.0", "", pkgDir, &warnings)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	a := result.Automations["shared"]
+	if a.Description != "Local version" {
+		t.Errorf("expected local version to win, got: %q", a.Description)
+	}
+	if result.IsPackage("shared") {
+		t.Error("expected 'shared' NOT marked as package (local shadows)")
+	}
+	if !strings.Contains(warnings.String(), "shadowed") {
+		t.Errorf("expected shadow warning, got: %q", warnings.String())
+	}
+}
+
+func TestMergePackage_AliasResolution(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"), `
+description: Local
+steps:
+  - bash: echo local
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "docker", "up.yaml"), `
+description: Docker up (pkg)
+steps:
+  - bash: echo up
+`)
+
+	err = result.MergePackage("testorg/testpkg@v1.0", "mytools", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	aliases := result.KnownAliases()
+	if !aliases["mytools"] {
+		t.Error("expected 'mytools' in known aliases")
+	}
+
+	// FindWithAliases with alias prefix should resolve
+	a, err := result.FindWithAliases("mytools/docker/up", aliases)
+	if err != nil {
+		t.Fatalf("FindWithAliases('mytools/docker/up') error: %v", err)
+	}
+	if a.Description != "Docker up (pkg)" {
+		t.Errorf("expected 'Docker up (pkg)', got: %q", a.Description)
+	}
+}
+
+func TestMergePackage_FindLocal_FallsThrough(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "deploy.yaml"), `
+description: Deploy (pkg)
+steps:
+  - bash: echo deploy
+`)
+
+	err = result.MergePackage("testorg/pkg@v1.0", "", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	// Should find "deploy" via normal Find() since it's in the main Automations map
+	a, err := result.Find("deploy")
+	if err != nil {
+		t.Fatalf("Find('deploy') error: %v", err)
+	}
+	if a.Description != "Deploy (pkg)" {
+		t.Errorf("expected 'Deploy (pkg)', got: %q", a.Description)
+	}
+}
+
+func TestMergePackage_PackageSource(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "deploy.yaml"), `
+description: Deploy
+steps:
+  - bash: echo deploy
+`)
+
+	source := "testorg/pkg@v1.0"
+	err = result.MergePackage(source, "myalias", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	if result.PackageSource("deploy") != source {
+		t.Errorf("PackageSource('deploy') = %q, want %q", result.PackageSource("deploy"), source)
+	}
+	if result.PackageSource("nonexistent") != "" {
+		t.Errorf("PackageSource('nonexistent') = %q, want empty", result.PackageSource("nonexistent"))
+	}
+
+	packages := result.Packages()
+	if len(packages) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(packages))
+	}
+	if packages[0].Source != source {
+		t.Errorf("package source = %q, want %q", packages[0].Source, source)
+	}
+	if packages[0].Alias != "myalias" {
+		t.Errorf("package alias = %q, want %q", packages[0].Alias, "myalias")
+	}
+}
+
+func TestMergePackage_EmptyPackageDir(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	writeFile(t, filepath.Join(piDir, "local.yaml"), `
+description: Local
+steps:
+  - bash: echo local
+`)
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Package dir exists but has no .pi/
+	pkgDir := filepath.Join(dir, "empty-pkg")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	err = result.MergePackage("testorg/empty@v1.0", "", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage should succeed for empty package: %v", err)
+	}
+
+	if len(result.Automations) != 1 {
+		t.Errorf("expected 1 automation (unchanged), got %d", len(result.Automations))
+	}
+}
+
+func TestFindAlias_UnknownAlias(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// No packages merged, but ask for an alias ref
+	_, err = result.FindWithAliases("mytools/docker/up", map[string]bool{"mytools": true})
+	if err == nil {
+		t.Fatal("expected error for unknown alias")
+	}
+	if !strings.Contains(err.Error(), "not declared") {
+		t.Errorf("expected 'not declared' error, got: %v", err)
+	}
+}

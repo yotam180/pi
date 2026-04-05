@@ -85,7 +85,9 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		return err
 	}
 
-	result, err := discoverAll(root)
+	cfg, _ := config.Load(root)
+
+	result, err := discoverAllWithConfig(root, cfg, nil)
 	if err != nil {
 		return err
 	}
@@ -105,8 +107,7 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
 	}
 
-	cfg, cfgErr := config.Load(root)
-	if cfgErr == nil && cfg.EffectiveProvisionMode() != config.ProvisionNever {
+	if cfg != nil && cfg.EffectiveProvisionMode() != config.ProvisionNever {
 		exec.Provisioner = runtimes.NewProvisioner(cfg, stderr)
 	}
 

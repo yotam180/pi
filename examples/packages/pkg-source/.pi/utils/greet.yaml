@@ -1,0 +1,2 @@
+description: Greet from package
+bash: echo "greetings from the package"

@@ -1,0 +1,2 @@
+description: Local hello automation
+bash: echo "hello from local"

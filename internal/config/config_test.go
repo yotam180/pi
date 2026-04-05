@@ -517,3 +517,220 @@ shortcuts:
 		t.Errorf("dlogs-short.With[service] = %q, want %q", short.With["service"], "$1")
 	}
 }
+
+func TestLoad_PackagesSimpleString(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - yotam180/pi-common@v1.2
+  - other-org/other-pkg@v2.0
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Packages) != 2 {
+		t.Fatalf("packages count = %d, want 2", len(cfg.Packages))
+	}
+	if cfg.Packages[0].Source != "yotam180/pi-common@v1.2" {
+		t.Errorf("packages[0].Source = %q, want %q", cfg.Packages[0].Source, "yotam180/pi-common@v1.2")
+	}
+	if cfg.Packages[0].As != "" {
+		t.Errorf("packages[0].As = %q, want empty", cfg.Packages[0].As)
+	}
+	if cfg.Packages[1].Source != "other-org/other-pkg@v2.0" {
+		t.Errorf("packages[1].Source = %q, want %q", cfg.Packages[1].Source, "other-org/other-pkg@v2.0")
+	}
+}
+
+func TestLoad_PackagesObjectForm(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - source: yotam180/pi-common@v1.2
+  - source: file:~/my-automations
+    as: mytools
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Packages) != 2 {
+		t.Fatalf("packages count = %d, want 2", len(cfg.Packages))
+	}
+	if cfg.Packages[0].Source != "yotam180/pi-common@v1.2" {
+		t.Errorf("packages[0].Source = %q, want %q", cfg.Packages[0].Source, "yotam180/pi-common@v1.2")
+	}
+	if cfg.Packages[0].As != "" {
+		t.Errorf("packages[0].As = %q, want empty", cfg.Packages[0].As)
+	}
+	if cfg.Packages[1].Source != "file:~/my-automations" {
+		t.Errorf("packages[1].Source = %q, want %q", cfg.Packages[1].Source, "file:~/my-automations")
+	}
+	if cfg.Packages[1].As != "mytools" {
+		t.Errorf("packages[1].As = %q, want %q", cfg.Packages[1].As, "mytools")
+	}
+}
+
+func TestLoad_PackagesMixed(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - yotam180/pi-common@v1.2
+  - source: file:~/my-automations
+    as: mytools
+  - source: file:~/shared-automations
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Packages) != 3 {
+		t.Fatalf("packages count = %d, want 3", len(cfg.Packages))
+	}
+	if cfg.Packages[0].Source != "yotam180/pi-common@v1.2" {
+		t.Errorf("packages[0].Source = %q", cfg.Packages[0].Source)
+	}
+	if cfg.Packages[1].As != "mytools" {
+		t.Errorf("packages[1].As = %q, want %q", cfg.Packages[1].As, "mytools")
+	}
+	if cfg.Packages[2].As != "" {
+		t.Errorf("packages[2].As = %q, want empty", cfg.Packages[2].As)
+	}
+}
+
+func TestLoad_PackagesDuplicateAlias(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - source: file:~/aaa
+    as: tools
+  - source: file:~/bbb
+    as: tools
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for duplicate alias")
+	}
+	if !strings.Contains(err.Error(), "duplicates") {
+		t.Errorf("error should mention 'duplicates', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "tools") {
+		t.Errorf("error should mention 'tools', got: %v", err)
+	}
+}
+
+func TestLoad_PackagesEmptySource(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - ""
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for empty package source")
+	}
+	if !strings.Contains(err.Error(), "empty source") {
+		t.Errorf("error should mention 'empty source', got: %v", err)
+	}
+}
+
+func TestLoad_PackagesAliasWithSlash(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - source: file:~/stuff
+    as: my/tools
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for alias containing /")
+	}
+	if !strings.Contains(err.Error(), "must not contain") {
+		t.Errorf("error should mention must not contain, got: %v", err)
+	}
+}
+
+func TestLoad_NoPackagesBackwardCompat(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Packages) != 0 {
+		t.Errorf("packages should be empty, got %d", len(cfg.Packages))
+	}
+}
+
+func TestLoad_PackageAliases(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+packages:
+  - yotam180/pi-common@v1.2
+  - source: file:~/stuff
+    as: mytools
+  - source: file:~/other
+    as: shared
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	aliases := cfg.PackageAliases()
+	if len(aliases) != 2 {
+		t.Fatalf("aliases count = %d, want 2", len(aliases))
+	}
+	if !aliases["mytools"] {
+		t.Error("expected mytools in aliases")
+	}
+	if !aliases["shared"] {
+		t.Error("expected shared in aliases")
+	}
+	if aliases["pi-common"] {
+		t.Error("pi-common should not be in aliases (no as: field)")
+	}
+}
+
+func TestLoad_PackageIsFileSource(t *testing.T) {
+	pkg := PackageEntry{Source: "file:~/my-automations", As: "mytools"}
+	if !pkg.IsFileSource() {
+		t.Error("expected IsFileSource() = true")
+	}
+
+	pkg2 := PackageEntry{Source: "yotam180/pi-common@v1.2"}
+	if pkg2.IsFileSource() {
+		t.Error("expected IsFileSource() = false for GitHub source")
+	}
+}
+
+func TestLoad_PackageFilePath(t *testing.T) {
+	pkg := PackageEntry{Source: "file:/abs/path"}
+	if pkg.FilePath() != "/abs/path" {
+		t.Errorf("FilePath() = %q, want %q", pkg.FilePath(), "/abs/path")
+	}
+
+	pkg2 := PackageEntry{Source: "yotam180/pi-common@v1.2"}
+	if pkg2.FilePath() != "" {
+		t.Errorf("FilePath() = %q, want empty for GitHub source", pkg2.FilePath())
+	}
+}

@@ -487,13 +487,65 @@ bash: |
 
 ---
 
+## Packages (`packages:` in `pi.yaml`)
+
+Teams can declare external automation sources in `pi.yaml` using the `packages:` block. Package automations are discovered and merged into the project — they work just like local automations.
+
+```yaml
+packages:
+  # Simple GitHub package — most common case
+  - yotam180/pi-common@v1.2
+
+  # GitHub package with explicit source key (same as above, verbose form)
+  - source: yotam180/pi-common@v1.2
+
+  # Local folder source — for developing automations without push/clone cycle
+  - source: file:~/my-automations
+    as: mytools           # optional alias; enables `run: mytools/docker/up`
+
+  # Local folder without alias — reference with full file: prefix
+  - source: file:~/shared-automations
+
+  # Relative local path — resolved relative to project root
+  - source: file:./packages/shared
+    as: shared
+```
+
+### Source types
+
+| Source | Format | Caching |
+|--------|--------|---------|
+| GitHub | `org/repo@version` | Cached in `~/.pi/cache/`; fetched once |
+| File | `file:~/path` or `file:./relative` | Read directly from disk; no caching |
+
+### Aliases (`as:`)
+
+The `as:` key lets you write `run: mytools/docker/up` instead of referencing the full source. Aliases must be unique within a `pi.yaml`. An alias that collides with a local `.pi/` automation path emits a warning (local wins per resolution order).
+
+### `pi setup` integration
+
+Before running any setup automations, `pi setup` fetches all GitHub packages that aren't already cached. `file:` entries are verified to exist on disk (print a warning if not, but don't fail). The user sees:
+
+```
+  ==> Fetching packages...
+  ✓  yotam180/pi-common@v1.2          cached
+  ✓  file:~/my-automations            found  (alias: mytools)
+```
+
+### Package automations in `pi list` / `pi run`
+
+Package automations that don't collide with local names appear in `pi list` and are directly runnable via `pi run`. If a package has `docker/up`, you can `pi run docker/up` or `pi run mytools/docker/up` (via alias).
+
+---
+
 ## Automation Resolution
 
 When PI encounters an automation name, it resolves in this order:
 
 1. **Local** — `.pi/<name>.yaml` or `.pi/<name>/automation.yaml`
-2. **Built-in** — automations shipped with the PI binary (prefixed `pi:`)
-3. **Marketplace** — cached from GitHub, referenced as `org/package@version`
+2. **Package** — automations from declared `packages:` sources
+3. **Built-in** — automations shipped with the PI binary (prefixed `pi:`)
+4. **Marketplace** — cached from GitHub, referenced as `org/package@version`
 
 ### Built-in library (`pi:`)
 

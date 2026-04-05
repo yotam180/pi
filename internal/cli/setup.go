@@ -75,16 +75,22 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 	out := display.New(stdout)
 	stderrPrinter := display.New(stderr)
 
-	if len(cfg.Setup) == 0 && len(cfg.Shortcuts) == 0 {
-		fmt.Fprintln(stdout, "Nothing to set up (no setup entries or shortcuts in pi.yaml).")
+	if len(cfg.Setup) == 0 && len(cfg.Shortcuts) == 0 && len(cfg.Packages) == 0 {
+		fmt.Fprintln(stdout, "Nothing to set up (no setup entries, shortcuts, or packages in pi.yaml).")
 		return nil
 	}
 
+	// Fetch packages before running setup automations
+	if len(cfg.Packages) > 0 {
+		out.SetupHeader("==> Fetching packages...\n")
+	}
+
+	result, err := discoverAllWithConfig(root, cfg, stderr)
+	if err != nil {
+		return err
+	}
+
 	if len(cfg.Setup) > 0 {
-		result, err := discoverAll(root)
-		if err != nil {
-			return err
-		}
 
 		exec := &executor.Executor{
 			RepoRoot:       root,

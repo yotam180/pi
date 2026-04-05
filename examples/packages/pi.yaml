@@ -1,0 +1,11 @@
+project: packages-example
+
+packages:
+  - source: file:./pkg-source
+    as: mytools
+
+shortcuts:
+  local: local/hello
+
+setup:
+  - local/hello
