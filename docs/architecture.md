@@ -96,6 +96,11 @@ internal/
     parent_shell_test.go           6 tests — parent shell: writes to eval file, multiple steps append, mixed with normal, no eval file error, skipped by condition, AppendToParentEval
     validate_test.go               34 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, prependPathInEnv)
     predicates_test.go             12 tests (+ subtests covering all predicate types)
+  cache/                           GitHub package cache manager
+    cache.go                       Cache struct, Fetch(), PackagePath(), IsMutableRef(), cloneAndCache(), cloneRepo() (SSH/token/HTTPS fallback), execGit()
+    package_yaml.go                PackageYAML struct, checkPackageYAML(), versionSatisfies(); optional min_pi_version enforcement
+    cache_test.go                  17 tests (cache hit/miss, SSH/token/HTTPS auth order, mutable refs, atomic writes, repo files, private repo errors)
+    package_yaml_test.go           15 tests (absent/empty/satisfied/unsatisfied/dev/invalid YAML, v-prefix, integration with Fetch)
   refparser/                       Automation reference string parser
     refparser.go                   Parse(), AutomationRef, RefType (Local/Builtin/GitHub/File/Alias); pure string parsing — no I/O
     refparser_test.go              46 tests (local, builtin, github, file, alias, errors, round-trip, precedence)
@@ -285,9 +290,24 @@ Makefile                               build, vet, test, test-matrix targets
 - Implementation: `buildShorthandStep()` in `automation.go` constructs a `stepRaw` from top-level keys; `UnmarshalYAML` expands it to a single-element `Steps` slice before validation — the rest of the system (executor, info, validate) sees a normal automation
 - Shorthand is additive — existing `steps:` syntax continues to work unchanged
 
+### GitHub package cache (`internal/cache`)
+- `Cache` struct holds configuration: `Root` (cache directory), `WarnWriter` (for mutable ref warnings), `PIVersion` (for version checks), `GitFunc` (injectable git executor), `GetenvFunc` (injectable env reader)
+- `DefaultCacheRoot()` returns `~/.pi/cache`
+- `PackagePath(org, repo, version)` returns `<root>/github/<org>/<repo>/<version>/`
+- `Fetch(org, repo, version)` is the main entry point: checks cache hit first, clones on miss
+- Cache hit: `os.Stat()` the target directory — if exists, return immediately with no network call
+- Cache miss: `cloneAndCache()` → clone into temp dir → checkout version → remove `.git` → atomic `os.Rename()` to final path
+- Atomic writes: if any step fails, `defer os.RemoveAll(tmpDir)` ensures no partial cache entry remains
+- Auth fallback chain: SSH (`git@github.com:org/repo.git`) → HTTPS with `GITHUB_TOKEN` → plain HTTPS. Each attempt uses a fresh temp dir
+- Mutable refs (`main`, `master`, `HEAD`): date-stamped cache key (e.g. `main~20260405`) and warning to stderr
+- `pi-package.yaml`: optional file in package root; only `min_pi_version` field is checked. Dev builds skip the check
+- `versionSatisfies()` does component-wise numeric comparison with `v` prefix stripping
+- `GitFunc` and `GetenvFunc` allow full test isolation without real git or environment variables
+
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure
 - `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths
+- `cache` manages `~/.pi/cache/` — clones GitHub repos at specific versions, handles auth fallback, validates `pi-package.yaml`; depends on `gopkg.in/yaml.v3` for package YAML parsing; injectable `GitFunc`/`GetenvFunc` for testing
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)
 - `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`
@@ -701,7 +721,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 999 (170 automation + 81 builtins + 81 CLI + 30 conditions + 21 config + 35 display + 29 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 204 integration)
+Total tests: 1031 (170 automation + 81 builtins + 32 cache + 81 CLI + 30 conditions + 21 config + 35 display + 29 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 204 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
