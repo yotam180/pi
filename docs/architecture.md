@@ -56,7 +56,7 @@ internal/
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
-    validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; validates file-path step references exist on disk; reports all errors; exit 0/1
+    validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; validates file-path step references exist on disk; uses automation.WalkSteps for traversal; reports all errors; exit 0/1
     add.go                         pi add — validates source via refparser.Parse(); fetches GitHub packages into cache; calls config.AddPackage() to update pi.yaml; --as for aliases; idempotent (duplicate sources print "already in pi.yaml" and exit successfully)
     init.go                        pi init — creates pi.yaml + .pi/ directory; interactive prompt with inferred kebab-case name; --name and --yes flags; non-interactive when piped; initProject() reusable by other commands; idempotent (already-initialized prints project name and exits 0)
     completion.go                  pi completion — generates shell completion scripts (bash/zsh/fish/powershell) via Cobra's built-in generators; automationCompleter() — dynamic completion for automation names (used by run, info)
@@ -84,10 +84,12 @@ internal/
   automation/                      Individual automation YAML parsing
     automation.go                  Automation struct (with If, Env, Install, Requires, Inputs, GoFunc fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), IsGoFunc(), validate(), buildShorthandStep(); GoFunc field for Go-backed builtins; single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
+    walker.go                      StepLocation (Phase, Index, FirstIndex, IsScalar, InFirstBlock(), FormatPath()), StepVisitor, WalkSteps(), WalkStepsUntil() — visitor-pattern traversal of all steps in an automation (regular steps, first: sub-steps, install phases); used by cli/validate.go for run-step-ref and file-ref checks
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
     automation_test.go             33 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env, shorthand parent_shell and with)
     step_test.go                   73 tests (if/env/silent/parent_shell/dir/timeout/description/pipe fields, install block, first: block)
+    walker_test.go                 17 tests (regular steps, first: blocks, installer scalar/step-list, verify absent, early stop, FormatPath, field preservation)
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
@@ -486,7 +488,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure; includes `PackageEntry` (source + optional alias), `PackageAliases()` helper
-- `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths; `Load()`/`LoadFromBytes()` accept a `warnWriter io.Writer` parameter for deprecation warnings (no global state)
+- `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths; `Load()`/`LoadFromBytes()` accept a `warnWriter io.Writer` parameter for deprecation warnings (no global state); `WalkSteps()`/`WalkStepsUntil()` provide visitor-pattern traversal of all steps (used by `cli/validate.go` and future analysis passes)
 - `cache` manages `~/.pi/cache/` — clones GitHub repos at specific versions, handles auth fallback, validates `pi-package.yaml`; depends on `gopkg.in/yaml.v3` for package YAML parsing; injectable `GitFunc`/`GetenvFunc` for testing
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)
@@ -737,11 +739,21 @@ Makefile                               build, vet, test, test-matrix targets
 - Validation happens after input resolution but before step/install execution
 - `InstallHintFor()` is the exported version of `installHint()` for use by `pi doctor`
 
+### Step walker (`internal/automation/walker.go`)
+- `WalkSteps(a, fn)` visits every step in an automation: regular steps, `first:` block sub-steps (expanded inline), and install phase steps (test → run → verify order)
+- `WalkStepsUntil(a, fn)` is the early-stop variant — visitor returns `true` to stop walking
+- `StepLocation` encodes where the step lives: `Phase` ("" or "test"/"run"/"verify"), `Index`, `FirstIndex` (-1 when not in a `first:` block), `IsScalar` (for synthetic steps from scalar install phases)
+- `FormatPath(automationName)` on `StepLocation` produces human-readable location strings for error messages (e.g. `"my-auto: step[2]"`, `"my-auto: install.run step[0].first[1]"`, `"my-auto: install.test"`)
+- Scalar install phases generate a synthetic `Step{Type: StepTypeBash, Value: phase.Scalar}` so consumers don't need separate handling
+- Used by `cli/validate.go` for both run-step-ref and file-ref validation — eliminates duplicated traversal code
+- Pure traversal — no I/O, no side effects; visitors capture results externally
+
 ### Validate command (`pi validate`)
 - Statically validates all config and automation files without executing anything
 - Validation layers: (1) pi.yaml schema via `config.Load()`, (2) automation discovery via `discoverAll()`, (3) cross-reference checks, (4) file reference checks
 - Cross-reference checks: shortcuts → automations, setup entries → automations, `run:` steps → automations (including install phase steps)
 - File reference checks: when a step value looks like a file path (detected by `executor.IsFilePath()` — ends in `.sh`/`.py`/`.ts`, no newlines, no spaces), the path is resolved relative to the automation YAML file's directory and checked for existence on disk. Built-in automations are skipped (they use inline scripts only). Covers steps, `first:` block sub-steps, and install phase steps (including scalar install phases).
+- Both `validateRunStepRefs()` and `validateFileReferences()` use `automation.WalkSteps()` for traversal, with `StepLocation.FormatPath()` for error location formatting
 - Reports all errors (not just the first) with `✗` prefixed lines to stderr
 - Prints summary on success: `✓ Validated N automation(s), M shortcut(s), K setup entry(ies)`
 - Exit code 0 on success, 1 on validation errors (uses `*executor.ExitError{Code: 1}` for CLI exit handling)
@@ -1001,7 +1013,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1388 (170 automation + 141 builtins + 32 cache + 165 CLI [includes 11 completion, 13 init, 18 setup add, 32 info, 23 validate] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 281 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 31 semver + 27 shell + 277 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate])
+Total tests: 1405 (187 automation [170 base + 17 walker] + 141 builtins + 32 cache + 165 CLI [includes 11 completion, 13 init, 18 setup add, 32 info, 23 validate] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 281 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 31 semver + 27 shell + 277 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
