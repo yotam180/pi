@@ -1904,6 +1904,71 @@ steps:
 	}
 }
 
+func TestLoad_StepWithDir(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "dir-step.yaml", `
+name: build-in-subdir
+steps:
+  - bash: go build ./...
+    dir: src
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Dir != "src" {
+		t.Errorf("dir = %q, want %q", a.Steps[0].Dir, "src")
+	}
+}
+
+func TestLoad_StepWithoutDir(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-dir.yaml", `
+name: plain
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Dir != "" {
+		t.Errorf("dir should be empty, got %q", a.Steps[0].Dir)
+	}
+}
+
+func TestLoad_StepDirWithOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "dir-combo.yaml", `
+name: combo
+steps:
+  - bash: go test ./...
+    dir: src
+    env:
+      GOFLAGS: -race
+    silent: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Dir != "src" {
+		t.Errorf("dir = %q, want %q", a.Steps[0].Dir, "src")
+	}
+	if !a.Steps[0].Silent {
+		t.Error("expected silent = true")
+	}
+	if a.Steps[0].Env["GOFLAGS"] != "-race" {
+		t.Errorf("env[GOFLAGS] = %q, want %q", a.Steps[0].Env["GOFLAGS"], "-race")
+	}
+}
+
 func TestValidateVersionString(t *testing.T) {
 	tests := []struct {
 		input   string

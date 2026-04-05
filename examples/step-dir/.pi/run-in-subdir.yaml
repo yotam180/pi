@@ -1,0 +1,6 @@
+name: run-in-subdir
+description: Run a command in a subdirectory
+
+steps:
+  - bash: pwd
+    dir: subdir

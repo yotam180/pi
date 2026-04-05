@@ -133,6 +133,25 @@ steps:
 
 Environment variables are scoped to the step — they do not leak to subsequent steps. Step-level env vars override parent process env vars with the same name.
 
+### Working Directory (`dir:`)
+
+Steps can declare a `dir:` field to override the working directory for that step's execution. By default, all steps run in the project root (directory containing `pi.yaml`).
+
+```yaml
+steps:
+  - bash: go test ./...
+    dir: services/api
+
+  - bash: npm install
+    dir: frontend
+
+  - bash: echo "back in root"
+```
+
+The `dir:` path is resolved relative to the project root. Absolute paths are used as-is. The directory must exist at execution time — if it doesn't, PI reports a clear error.
+
+Working directories are per-step — each step independently resolves its own `dir:`, and steps without `dir:` always use the project root (no implicit carry-over from a previous step).
+
 ### Step Trace Lines
 
 By default, PI prints a trace line to stderr before executing each step:

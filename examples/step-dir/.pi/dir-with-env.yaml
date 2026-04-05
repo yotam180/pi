@@ -1,0 +1,8 @@
+name: dir-with-env
+description: Step with dir and env combined
+
+steps:
+  - bash: echo "$LABEL $(pwd)"
+    dir: subdir
+    env:
+      LABEL: working-in

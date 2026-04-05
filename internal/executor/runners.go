@@ -130,7 +130,7 @@ func (r *RunStepRunner) Run(ctx *RunContext) error {
 // Non-zero exit codes are returned as *ExitError. Other exec failures are returned as-is.
 func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	cmd := exec.Command(bin, args...)
-	cmd.Dir = ctx.RepoRoot
+	cmd.Dir = ctx.WorkDir
 	cmd.Stdout = ctx.Stdout
 	cmd.Stderr = ctx.Stderr
 	cmd.Stdin = ctx.Stdin

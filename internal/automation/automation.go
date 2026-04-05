@@ -192,6 +192,7 @@ type Step struct {
 	Env         map[string]string `yaml:"-"`
 	Silent      bool              `yaml:"-"`
 	ParentShell bool              `yaml:"-"`
+	Dir         string            `yaml:"-"`
 }
 
 // InstallPhase represents a phase (test, run, verify) in an install: block.
@@ -284,6 +285,7 @@ type stepRaw struct {
 	Env         map[string]string `yaml:"env"`
 	Silent      bool              `yaml:"silent"`
 	ParentShell bool              `yaml:"parent_shell"`
+	Dir         string            `yaml:"dir"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -402,6 +404,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		Env:         sr.Env,
 		Silent:      sr.Silent,
 		ParentShell: sr.ParentShell,
+		Dir:         sr.Dir,
 	}
 	if len(sr.With) > 0 {
 		if s.t != StepTypeRun {

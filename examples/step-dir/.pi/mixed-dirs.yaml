@@ -1,0 +1,8 @@
+name: mixed-dirs
+description: Steps with different working directories
+
+steps:
+  - bash: echo "root=$(pwd)"
+  - bash: echo "sub=$(pwd)"
+    dir: subdir
+  - bash: echo "back=$(pwd)"

@@ -29,6 +29,10 @@ type RunContext struct {
 	RepoRoot     string
 	RuntimePaths []string
 
+	// WorkDir is the resolved working directory for this step.
+	// Defaults to RepoRoot when the step has no dir: override.
+	WorkDir string
+
 	// Discovery is provided for run: steps that need to resolve other automations.
 	Discovery *discovery.Result
 

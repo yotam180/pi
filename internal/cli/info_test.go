@@ -281,6 +281,34 @@ steps:
 	}
 }
 
+func TestShowAutomationInfo_StepDir(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "with-dir.yaml"), []byte(`name: with-dir
+description: Steps with dir override
+steps:
+  - bash: go test ./...
+    dir: src
+  - bash: echo done
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "with-dir", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Step details:") {
+		t.Errorf("expected Step details section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[dir: src]") {
+		t.Errorf("expected dir annotation, got:\n%s", out)
+	}
+}
+
 func TestShowAutomationInfo_NoStepDetailsWithoutConditions(t *testing.T) {
 	root := setupInfoWorkspace(t)
 	var buf bytes.Buffer

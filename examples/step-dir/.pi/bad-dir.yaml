@@ -1,0 +1,6 @@
+name: bad-dir
+description: Step with a non-existent directory
+
+steps:
+  - bash: echo hello
+    dir: nonexistent-dir

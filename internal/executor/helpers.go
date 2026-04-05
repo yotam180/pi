@@ -69,6 +69,30 @@ func resolveFileStep(automationDir, value, lang string) (string, bool, error) {
 	return resolved, true, nil
 }
 
+// resolveStepDir resolves the working directory for a step. If stepDir is empty,
+// returns repoRoot. If stepDir is absolute, returns it as-is. Otherwise, joins
+// it with repoRoot. Returns an error if the resolved directory doesn't exist.
+func resolveStepDir(repoRoot, stepDir string) (string, error) {
+	if stepDir == "" {
+		return repoRoot, nil
+	}
+	dir := stepDir
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(repoRoot, dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("step dir %q does not exist (resolved to %s)", stepDir, dir)
+		}
+		return "", fmt.Errorf("checking step dir %q: %w", stepDir, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("step dir %q is not a directory (resolved to %s)", stepDir, dir)
+	}
+	return dir, nil
+}
+
 // prependPathInEnv finds the PATH entry in env and prepends the given dirs.
 func prependPathInEnv(env []string, dirs []string) []string {
 	prefix := strings.Join(dirs, string(os.PathListSeparator))

@@ -197,6 +197,12 @@ func (e *Executor) execStepSuppressed(a *automation.Automation, step automation.
 }
 
 func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+	if step.Dir != "" {
+		if _, err := resolveStepDir(e.RepoRoot, step.Dir); err != nil {
+			return fmt.Errorf("step[%d]: %w", index, err)
+		}
+	}
+
 	stdout := e.stdout()
 	if capturePipe {
 		buf := &bytes.Buffer{}
@@ -226,7 +232,15 @@ func (e *Executor) registry() *Registry {
 }
 
 // newRunContext builds a RunContext from the executor's current state.
+// If the step declares dir:, it must be resolved before calling this method
+// and the resolved path passed via workDir. If workDir is empty, RepoRoot is used.
 func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) *RunContext {
+	workDir := e.RepoRoot
+	if step.Dir != "" {
+		if resolved, err := resolveStepDir(e.RepoRoot, step.Dir); err == nil {
+			workDir = resolved
+		}
+	}
 	return &RunContext{
 		Automation:   a,
 		Step:         step,
@@ -237,6 +251,7 @@ func (e *Executor) newRunContext(a *automation.Automation, step automation.Step,
 		InputEnv:     inputEnv,
 		RepoRoot:     e.RepoRoot,
 		RuntimePaths: e.runtimePaths,
+		WorkDir:      workDir,
 		Discovery:    e.Discovery,
 		BuildEnv:     e.buildEnv,
 		RunAutomation: func(target *automation.Automation, args []string, withArgs map[string]string, targetStdout io.Writer, targetStdin io.Reader) error {
