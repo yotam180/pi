@@ -103,6 +103,41 @@ func resolveStepDir(repoRoot, stepDir string) (string, error) {
 	return dir, nil
 }
 
+// expandTraceVars expands environment variable references ($VAR and ${VAR})
+// in a step value string for trace display purposes. It uses a combined map
+// built from inputEnv, automation-level env, and step-level env.
+// Only variables present in the provided sources are expanded; references
+// to unknown variables pass through unchanged.
+func expandTraceVars(value string, inputEnv []string, automationEnv map[string]string, stepEnv map[string]string) string {
+	if !strings.ContainsAny(value, "$") {
+		return value
+	}
+
+	vars := make(map[string]string)
+	for _, entry := range inputEnv {
+		if idx := strings.IndexByte(entry, '='); idx > 0 {
+			vars[entry[:idx]] = entry[idx+1:]
+		}
+	}
+	for k, v := range automationEnv {
+		vars[k] = v
+	}
+	for k, v := range stepEnv {
+		vars[k] = v
+	}
+
+	if len(vars) == 0 {
+		return value
+	}
+
+	return os.Expand(value, func(key string) string {
+		if v, ok := vars[key]; ok {
+			return v
+		}
+		return "$" + key
+	})
+}
+
 // prependPathInEnv finds the PATH entry in env and prepends the given dirs.
 func prependPathInEnv(env []string, dirs []string) []string {
 	prefix := strings.Join(dirs, string(os.PathListSeparator))

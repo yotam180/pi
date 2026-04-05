@@ -162,3 +162,205 @@ func TestStepTrace_SilentPipeCapture(t *testing.T) {
 		t.Errorf("pipe should still work for silent steps, got: %q", stdoutOut)
 	}
 }
+
+func TestExpandTraceVars(t *testing.T) {
+	tests := []struct {
+		name           string
+		value          string
+		inputEnv       []string
+		automationEnv  map[string]string
+		stepEnv        map[string]string
+		want           string
+	}{
+		{
+			name:  "no variables",
+			value: "echo hello",
+			want:  "echo hello",
+		},
+		{
+			name:     "input var expanded",
+			value:    "cargo build --profile $PI_IN_PROFILE",
+			inputEnv: []string{"PI_IN_PROFILE=release"},
+			want:     "cargo build --profile release",
+		},
+		{
+			name:     "braced input var expanded",
+			value:    "cargo build --profile ${PI_IN_PROFILE}",
+			inputEnv: []string{"PI_IN_PROFILE=release"},
+			want:     "cargo build --profile release",
+		},
+		{
+			name:     "multiple input vars",
+			value:    "$PI_IN_CMD --flag $PI_IN_FLAG",
+			inputEnv: []string{"PI_IN_CMD=build", "PI_IN_FLAG=verbose"},
+			want:     "build --flag verbose",
+		},
+		{
+			name:          "automation env expanded",
+			value:         "go build -o $OUTPUT",
+			automationEnv: map[string]string{"OUTPUT": "bin/app"},
+			want:          "go build -o bin/app",
+		},
+		{
+			name:    "step env expanded",
+			value:   "echo $GREETING",
+			stepEnv: map[string]string{"GREETING": "world"},
+			want:    "echo world",
+		},
+		{
+			name:          "step env overrides automation env",
+			value:         "echo $MODE",
+			automationEnv: map[string]string{"MODE": "dev"},
+			stepEnv:       map[string]string{"MODE": "prod"},
+			want:          "echo prod",
+		},
+		{
+			name:  "unknown vars pass through",
+			value: "echo $HOME $UNKNOWN",
+			want:  "echo $HOME $UNKNOWN",
+		},
+		{
+			name:     "mixed known and unknown vars",
+			value:    "echo $HOME $PI_IN_PROFILE",
+			inputEnv: []string{"PI_IN_PROFILE=release"},
+			want:     "echo $HOME release",
+		},
+		{
+			name:  "no dollar sign returns unchanged",
+			value: "simple command",
+			want:  "simple command",
+		},
+		{
+			name:     "deprecated PI_INPUT_ prefix",
+			value:    "echo $PI_INPUT_VERSION",
+			inputEnv: []string{"PI_IN_VERSION=3.13", "PI_INPUT_VERSION=3.13"},
+			want:     "echo 3.13",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := expandTraceVars(tt.value, tt.inputEnv, tt.automationEnv, tt.stepEnv)
+			if got != tt.want {
+				t.Errorf("expandTraceVars() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStepTrace_InputVarsExpanded(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("build",
+		map[string]automation.InputSpec{
+			"profile": {Type: "string", Default: "dev"},
+		},
+		[]string{"profile"},
+		bashStep("echo build --profile $PI_IN_PROFILE"),
+	)
+
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, map[string]string{"profile": "release"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo build --profile release") {
+		t.Errorf("trace should show expanded variable, got: %q", got)
+	}
+	if strings.Contains(got, "$PI_IN_PROFILE") {
+		t.Errorf("trace should not show raw variable, got: %q", got)
+	}
+}
+
+func TestStepTrace_AutomationEnvExpanded(t *testing.T) {
+	dir := t.TempDir()
+	a := &automation.Automation{
+		Name:     "build",
+		Env:      map[string]string{"MY_OS": "linux", "MY_ARCH": "amd64"},
+		Steps:    []automation.Step{bashStep("echo build -o $MY_OS-$MY_ARCH")},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo build -o linux-amd64") {
+		t.Errorf("trace should show expanded automation env, got: %q", got)
+	}
+}
+
+func TestStepTrace_StepEnvExpanded(t *testing.T) {
+	dir := t.TempDir()
+	step := automation.Step{
+		Type:  automation.StepTypeBash,
+		Value: "echo $GREETING",
+		Env:   map[string]string{"GREETING": "world"},
+	}
+	a := newAutomation("test", step)
+
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo world") {
+		t.Errorf("trace should show expanded step env, got: %q", got)
+	}
+}
+
+func TestStepTrace_MultipleInputVarsExpanded(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("build",
+		map[string]automation.InputSpec{
+			"os":   {Type: "string", Default: "linux"},
+			"arch": {Type: "string", Default: "amd64"},
+		},
+		[]string{"os", "arch"},
+		bashStep("echo GOOS=$PI_IN_OS GOARCH=$PI_IN_ARCH"),
+	)
+
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, map[string]string{"os": "darwin", "arch": "arm64"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo GOOS=darwin GOARCH=arm64") {
+		t.Errorf("trace should show all expanded variables, got: %q", got)
+	}
+}
+
+func TestStepTrace_FirstBlockVarsExpanded(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("build",
+		map[string]automation.InputSpec{
+			"tool": {Type: "string", Default: "make"},
+		},
+		[]string{"tool"},
+		automation.Step{
+			Type: "",
+			First: []automation.Step{
+				bashStep("echo using $PI_IN_TOOL"),
+			},
+		},
+	)
+
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, map[string]string{"tool": "cmake"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo using cmake") {
+		t.Errorf("first: block trace should show expanded variable, got: %q", got)
+	}
+}

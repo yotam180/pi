@@ -189,7 +189,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		}
 
 		if step.ParentShell {
-			if err := e.execParentShell(step); err != nil {
+			if err := e.execParentShell(a, step, inputEnv); err != nil {
 				return fmt.Errorf("automation %q step[%d]: %w", a.Name, i, err)
 			}
 			continue
@@ -197,7 +197,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		suppress := step.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(step.Type), step.Value)
+			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, inputEnv, a.Env, step.Env))
 		}
 
 		isPipeSrc := step.Pipe && i < len(a.Steps)-1
@@ -235,7 +235,7 @@ func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step
 
 		// Found our match — execute this sub-step
 		if sub.ParentShell {
-			if err := e.execParentShell(sub); err != nil {
+			if err := e.execParentShell(a, sub, inputEnv); err != nil {
 				return fmt.Errorf("automation %q step[%d].first[%d]: %w", a.Name, index, j, err)
 			}
 			return nil
@@ -243,7 +243,7 @@ func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step
 
 		suppress := sub.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(sub.Type), sub.Value)
+			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, inputEnv, a.Env, sub.Env))
 		}
 
 		if suppress {
@@ -412,12 +412,12 @@ func (e *Executor) popCall() {
 
 // execParentShell writes a parent_shell step's command to the eval file
 // instead of executing it. The calling shell wrapper sources the file after PI exits.
-func (e *Executor) execParentShell(step automation.Step) error {
+func (e *Executor) execParentShell(a *automation.Automation, step automation.Step, inputEnv []string) error {
 	if e.ParentEvalFile == "" {
 		e.printer().Warn("  ⚠  parent_shell step skipped: not running inside a PI shell wrapper. Run 'pi shell' to install shell integration.\n")
 		return nil
 	}
-	e.printer().StepTrace("parent", step.Value)
+	e.printer().StepTrace("parent", expandTraceVars(step.Value, inputEnv, a.Env, step.Env))
 	return AppendToParentEval(e.ParentEvalFile, step.Value)
 }
 
