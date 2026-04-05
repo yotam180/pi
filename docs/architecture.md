@@ -35,7 +35,7 @@ internal/
     discover.go                    discoverAll() / discoverAllWithConfig() — discovers local + package + built-in automations and merges; fetches/verifies packages from config; passes os.Stderr for warnings; newOnDemandFetcher() — creates on-demand GitHub package fetch callback with per-invocation dedup and advisory output; printOnDemandAdvisory() — prints fetch status and pi.yaml snippet to stderr
     discover_test.go               4 tests (advisory output format, nil writer, fetch status text, down arrow icon)
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
-    list.go                        pi list — discovers and prints automations with [built-in] markers
+    list.go                        pi list — discovers and prints automations with SOURCE column; --all flag shows grouped package sections; --builtins/-b flag includes pi:* automations; automationSource() resolves source indicator per automation
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
@@ -46,7 +46,7 @@ internal/
     discover_test.go               on-demand fetch advisory tests (4 tests)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
-    list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
+    list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (18 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, and automation-level env display)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
@@ -139,17 +139,22 @@ pi run docker/up
 ```
 
 ```
-pi list
+pi list [--all] [--builtins]
   │
   ├─ CLI (internal/cli)
-  │    Parses args, gets CWD
+  │    Parses args (--all, --builtins), gets CWD
   │
   ├─ Project (internal/project)
   │    Walks up from CWD to find pi.yaml → repo root path
   │
+  ├─ Config (internal/config)
+  │    Loads pi.yaml → ProjectConfig (packages, shortcuts)
+  │
   └─ Discovery (internal/discovery + internal/builtins)
-       discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
-       Names() → sorted list → formatted table with [built-in] markers
+       discoverAllWithConfig(): local .pi/ + packages + builtins → merged Result
+       Names() → sorted list → formatted table with SOURCE column
+       Filters: builtins hidden by default (--builtins shows them)
+       --all: appends grouped package sections via printPackageAutomations()
 ```
 
 ```
@@ -634,7 +639,7 @@ Makefile                               build, vet, test, test-matrix targets
 - `internal/builtins.Discover()` walks the embedded FS, parses YAML files with `automation.LoadFromBytes()`, and returns a `*discovery.Result`
 - `cli.discoverAll()` discovers local automations, then calls `result.MergeBuiltins()` to incorporate built-ins
 - Precedence: local automations shadow built-ins with the same name. `Find("hello")` returns local if it exists, otherwise built-in. `Find("pi:hello")` always returns the built-in regardless of local shadowing
-- `pi list` marks built-in automations (not shadowed) with `[built-in]` in the DESCRIPTION column
+- `pi list` hides built-in automations by default; `--builtins` / `-b` flag includes them with `[built-in]` in the SOURCE column
 - `run:` steps can reference `pi:hello` to explicitly call built-in automations
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
@@ -707,7 +712,10 @@ Makefile                               build, vet, test, test-matrix targets
 - Unknown predicates produce an error listing all valid prefixes
 
 ### CLI output
-- `pi list` uses `text/tabwriter` for aligned columns (NAME, DESCRIPTION)
+- `pi list` uses `text/tabwriter` for aligned columns (NAME, SOURCE, DESCRIPTION, INPUTS)
+- SOURCE column shows `[workspace]` for local, `[built-in]` for builtins, alias or source string for packages
+- `--all` / `-a` appends grouped sections per declared package with `──` separator headers
+- `--builtins` / `-b` includes `pi:*` automations (hidden by default for cleaner output)
 - Automations without descriptions show `-` as placeholder
 - Empty project (no automations) shows a friendly message, not an error
 - `pi run` with unknown automation lists available automations in the error
@@ -759,7 +767,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1078 (170 automation + 81 builtins + 32 cache + 85 CLI + 30 conditions + 31 config + 39 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 219 integration)
+Total tests: 1083 (170 automation + 81 builtins + 32 cache + 89 CLI + 30 conditions + 31 config + 39 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 220 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -797,7 +805,7 @@ tests/integration/
   inputs_test.go                  9 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, info env var prefix, list INPUTS column
   info_test.go                    4 tests — info command: basic automation, with inputs, not-found, no args
   conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
-  builtins_test.go                25 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs)
+  builtins_test.go                26 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs), builtins hidden by default
   installer_schema_test.go        11 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, built-in installer
   requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
   doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
@@ -811,7 +819,7 @@ tests/integration/
   validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
   first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
-  packages_test.go                9 tests — packages: list, run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
+  packages_test.go                11 tests — packages: list (SOURCE column), list --all (grouped sections), run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
   on_demand_test.go               6 tests — on-demand fetch: file: ref never on-demand, GitHub ref undeclared shows advisory, declared package no advisory, cached package silent, file: missing path clear error, advisory to stderr
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)

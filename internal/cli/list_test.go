@@ -40,7 +40,7 @@ steps:
 func TestListAutomations_Success(t *testing.T) {
 	root := setupListWorkspace(t)
 	var buf bytes.Buffer
-	err := listAutomations(root, &buf)
+	err := listAutomations(root, &buf, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -48,6 +48,9 @@ func TestListAutomations_Success(t *testing.T) {
 	out := buf.String()
 	if !strings.Contains(out, "NAME") {
 		t.Error("expected header with NAME")
+	}
+	if !strings.Contains(out, "SOURCE") {
+		t.Error("expected header with SOURCE")
 	}
 	if !strings.Contains(out, "DESCRIPTION") {
 		t.Error("expected header with DESCRIPTION")
@@ -61,12 +64,15 @@ func TestListAutomations_Success(t *testing.T) {
 	if !strings.Contains(out, "Say hello") {
 		t.Error("expected description in output")
 	}
+	if !strings.Contains(out, "[workspace]") {
+		t.Error("expected [workspace] source indicator")
+	}
 }
 
 func TestListAutomations_NoDescription(t *testing.T) {
 	root := setupListWorkspace(t)
 	var buf bytes.Buffer
-	err := listAutomations(root, &buf)
+	err := listAutomations(root, &buf, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,18 +88,36 @@ func TestListAutomations_NoDescription(t *testing.T) {
 	}
 }
 
-func TestListAutomations_NoLocalShowsBuiltins(t *testing.T) {
+func TestListAutomations_BuiltinsHiddenByDefault(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
 
 	var buf bytes.Buffer
-	err := listAutomations(root, &buf)
+	err := listAutomations(root, &buf, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "[built-in]") {
+		t.Errorf("expected built-in automations hidden by default, got: %s", out)
+	}
+	if !strings.Contains(out, "No automations found") {
+		t.Errorf("expected no automations message when builtins hidden, got: %s", out)
+	}
+}
+
+func TestListAutomations_BuiltinsShownWithFlag(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+
+	var buf bytes.Buffer
+	err := listAutomations(root, &buf, false, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	out := buf.String()
 	if !strings.Contains(out, "[built-in]") {
-		t.Errorf("expected built-in automations to appear, got: %s", out)
+		t.Errorf("expected built-in automations to appear with --builtins, got: %s", out)
 	}
 }
 
@@ -103,7 +127,7 @@ func TestListAutomations_FromSubdirectory(t *testing.T) {
 	os.MkdirAll(sub, 0o755)
 
 	var buf bytes.Buffer
-	err := listAutomations(sub, &buf)
+	err := listAutomations(sub, &buf, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,7 +139,7 @@ func TestListAutomations_FromSubdirectory(t *testing.T) {
 func TestListAutomations_NoPiYaml(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer
-	err := listAutomations(dir, &buf)
+	err := listAutomations(dir, &buf, false, false)
 	if err == nil {
 		t.Fatal("expected error when no pi.yaml found")
 	}
@@ -150,7 +174,7 @@ steps:
 `), 0o644)
 
 	var buf bytes.Buffer
-	err := listAutomations(root, &buf)
+	err := listAutomations(root, &buf, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -167,7 +191,7 @@ steps:
 func TestListAutomations_Sorted(t *testing.T) {
 	root := setupListWorkspace(t)
 	var buf bytes.Buffer
-	err := listAutomations(root, &buf)
+	err := listAutomations(root, &buf, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -180,5 +204,131 @@ func TestListAutomations_Sorted(t *testing.T) {
 	if dockerIdx > helloIdx || helloIdx > noDescIdx {
 		t.Errorf("expected sorted order docker/up < hello < no-desc, got indices: docker/up=%d hello=%d no-desc=%d",
 			dockerIdx, helloIdx, noDescIdx)
+	}
+}
+
+func TestListAutomations_WorkspaceSource(t *testing.T) {
+	root := setupListWorkspace(t)
+	var buf bytes.Buffer
+	err := listAutomations(root, &buf, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "hello") && strings.Contains(line, "Say hello") {
+			if !strings.Contains(line, "[workspace]") {
+				t.Errorf("expected [workspace] source for hello, line: %s", line)
+			}
+		}
+	}
+}
+
+func TestListAutomations_PackageSource(t *testing.T) {
+	root := t.TempDir()
+
+	// Create pi.yaml with a file: package
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte(`project: test
+packages:
+  - source: file:./mypkg
+    as: tools
+`), 0o644)
+
+	// Create local automation
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "local.yaml"), []byte(`description: Local auto
+bash: echo local
+`), 0o644)
+
+	// Create package with automation
+	pkgPiDir := filepath.Join(root, "mypkg", ".pi")
+	os.MkdirAll(pkgPiDir, 0o755)
+	os.WriteFile(filepath.Join(pkgPiDir, "from-pkg.yaml"), []byte(`description: From package
+bash: echo pkg
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := listAutomations(root, &buf, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+
+	// Local should show [workspace]
+	if !strings.Contains(out, "[workspace]") {
+		t.Errorf("expected [workspace] for local automation, got:\n%s", out)
+	}
+
+	// Package automation should show alias
+	if !strings.Contains(out, "from-pkg") {
+		t.Errorf("expected from-pkg in output, got:\n%s", out)
+	}
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "from-pkg") {
+			if !strings.Contains(line, "tools") {
+				t.Errorf("expected 'tools' alias as source for from-pkg, line: %s", line)
+			}
+		}
+	}
+}
+
+func TestListAutomations_AllFlag(t *testing.T) {
+	root := t.TempDir()
+
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte(`project: test
+packages:
+  - source: file:./mypkg
+    as: tools
+`), 0o644)
+
+	// Create local automation
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "local.yaml"), []byte(`description: Local auto
+bash: echo local
+`), 0o644)
+
+	// Create package with automation (including one that shadows local and one that doesn't)
+	pkgPiDir := filepath.Join(root, "mypkg", ".pi")
+	os.MkdirAll(pkgPiDir, 0o755)
+	os.WriteFile(filepath.Join(pkgPiDir, "pkg-only.yaml"), []byte(`description: Only in package
+bash: echo pkg
+`), 0o644)
+	os.WriteFile(filepath.Join(pkgPiDir, "another.yaml"), []byte(`description: Another pkg auto
+bash: echo another
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := listAutomations(root, &buf, true, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+
+	// Should have the main table
+	if !strings.Contains(out, "local") {
+		t.Errorf("expected local in output, got:\n%s", out)
+	}
+
+	// Should have package section header
+	if !strings.Contains(out, "file:./mypkg") {
+		t.Errorf("expected package header in --all output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "alias: tools") {
+		t.Errorf("expected alias in package header, got:\n%s", out)
+	}
+
+	// Should show all package automations in the grouped section
+	if !strings.Contains(out, "pkg-only") {
+		t.Errorf("expected pkg-only in --all output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "another") {
+		t.Errorf("expected another in --all output, got:\n%s", out)
 	}
 }

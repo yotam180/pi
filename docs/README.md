@@ -597,7 +597,9 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | `pi shell`                    | Install shortcut functions into the current shell config |
 | `pi shell uninstall`          | Remove shortcuts for the current project                 |
 | `pi shell list`               | List all installed shortcut files across all projects    |
-| `pi list`                     | List all available automations in the project            |
+| `pi list`                     | List all available automations with SOURCE column        |
+| `pi list --all`               | Include all automations from declared packages, grouped  |
+| `pi list --builtins`          | Include built-in (`pi:*`) automations in the list        |
 | `pi doctor`                   | Check requirement health for all automations             |
 | `pi validate`                 | Statically validate all config and automation files      |
 | `pi version`                  | Print the PI version                                     |

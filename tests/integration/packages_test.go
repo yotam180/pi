@@ -17,12 +17,19 @@ func TestPackages_List(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0\n%s", code, out)
 	}
 
-	// Should show local automation
+	// Should show local automation with [workspace] source
 	if !strings.Contains(out, "local/hello") {
 		t.Errorf("expected local/hello in list, got:\n%s", out)
 	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "local/hello") {
+			if !strings.Contains(line, "[workspace]") {
+				t.Errorf("expected [workspace] source for local/hello, got:\n%s", line)
+			}
+		}
+	}
 
-	// Should show package automations
+	// Should show package automations with alias source
 	if !strings.Contains(out, "docker/up") {
 		t.Errorf("expected docker/up from package in list, got:\n%s", out)
 	}
@@ -31,6 +38,43 @@ func TestPackages_List(t *testing.T) {
 	}
 	if !strings.Contains(out, "utils/greet") {
 		t.Errorf("expected utils/greet from package in list, got:\n%s", out)
+	}
+
+	// Package automations should show alias as source
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "docker/up") && !strings.HasPrefix(strings.TrimSpace(line), "NAME") {
+			if !strings.Contains(line, "mytools") {
+				t.Errorf("expected 'mytools' alias source for docker/up, got:\n%s", line)
+			}
+		}
+	}
+
+	// SOURCE column should be present
+	if !strings.Contains(out, "SOURCE") {
+		t.Errorf("expected SOURCE column header, got:\n%s", out)
+	}
+}
+
+func TestPackages_ListAll(t *testing.T) {
+	out, code := runPi(t, packagesDir(), "list", "--all")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s", code, out)
+	}
+
+	// Should have package section header
+	if !strings.Contains(out, "file:./pkg-source") {
+		t.Errorf("expected package header in --all output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "alias: mytools") {
+		t.Errorf("expected alias in package section header, got:\n%s", out)
+	}
+
+	// Should show all package automations in grouped section
+	if !strings.Contains(out, "docker/up") {
+		t.Errorf("expected docker/up in --all output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "utils/greet") {
+		t.Errorf("expected utils/greet in --all output, got:\n%s", out)
 	}
 }
 

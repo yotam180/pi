@@ -8,12 +8,26 @@ import (
 
 func TestBuiltins_List_ShowsBuiltinMarker(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "basic")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
 	if !strings.Contains(out, "[built-in]") {
-		t.Errorf("expected [built-in] marker in list output, got:\n%s", out)
+		t.Errorf("expected [built-in] source marker in list output, got:\n%s", out)
+	}
+}
+
+func TestBuiltins_List_HiddenByDefault(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "basic")
+	out, code := runPi(t, dir, "list")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if strings.Contains(out, "[built-in]") {
+		t.Errorf("expected no [built-in] marker in default list output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[workspace]") {
+		t.Errorf("expected [workspace] source in list output, got:\n%s", out)
 	}
 }
 
@@ -77,13 +91,13 @@ func TestBuiltins_InfoWithPiPrefix(t *testing.T) {
 
 func TestBuiltins_ListShadowed(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "hello") && strings.Contains(line, "[built-in]") {
-			t.Errorf("expected local 'hello' to NOT have [built-in] marker, got:\n%s", line)
+			t.Errorf("expected local 'hello' to NOT have [built-in] source marker, got:\n%s", line)
 		}
 	}
 }
@@ -115,20 +129,20 @@ func TestBuiltins_PiPrefixNotFound(t *testing.T) {
 
 func TestBuiltins_DockerAutomationsInList(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
 	for _, name := range []string{"docker/up", "docker/down", "docker/logs"} {
 		if !strings.Contains(out, name) {
-			t.Errorf("expected %q in list output, got:\n%s", name, out)
+			t.Errorf("expected %q in list --builtins output, got:\n%s", name, out)
 		}
 	}
 }
 
 func TestBuiltins_DockerAutomationsMarkedBuiltIn(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -141,7 +155,7 @@ func TestBuiltins_DockerAutomationsMarkedBuiltIn(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+			t.Errorf("expected %q to have [built-in] source in list output, got:\n%s", name, out)
 		}
 	}
 }
@@ -173,8 +187,19 @@ func TestBuiltins_DockerRunStepResolvesBuiltin(t *testing.T) {
 	if !strings.Contains(out, "call-docker-up") {
 		t.Errorf("expected call-docker-up in list output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "docker/up") {
-		t.Errorf("expected docker/up built-in in list output, got:\n%s", out)
+
+	// docker/up is a built-in — verify it appears with --builtins
+	out, code = runPi(t, dir, "list", "--builtins")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "docker/up") {
+			if !strings.Contains(line, "[built-in]") {
+				t.Errorf("expected docker/up to have [built-in] source, got:\n%s", line)
+			}
+			break
+		}
 	}
 }
 
@@ -194,7 +219,7 @@ func TestBuiltins_DockerRunStepInfoResolvesBuiltin(t *testing.T) {
 
 func TestBuiltins_InstallerAutomationsMarkedBuiltIn(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -207,7 +232,7 @@ func TestBuiltins_InstallerAutomationsMarkedBuiltIn(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+			t.Errorf("expected %q to have [built-in] source in list output, got:\n%s", name, out)
 		}
 	}
 }
@@ -284,7 +309,7 @@ func TestBuiltins_InstallTsxIdempotent(t *testing.T) {
 
 func TestBuiltins_InstallerListShowsInputsColumn(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -300,20 +325,20 @@ func TestBuiltins_InstallerListShowsInputsColumn(t *testing.T) {
 
 func TestBuiltins_DevToolAutomationsInList(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
 	for _, name := range []string{"cursor/install-extensions", "git/install-hooks"} {
 		if !strings.Contains(out, name) {
-			t.Errorf("expected %q in list output, got:\n%s", name, out)
+			t.Errorf("expected %q in list --builtins output, got:\n%s", name, out)
 		}
 	}
 }
 
 func TestBuiltins_DevToolAutomationsMarkedBuiltIn(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -326,7 +351,7 @@ func TestBuiltins_DevToolAutomationsMarkedBuiltIn(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected %q to have [built-in] marker in list output, got:\n%s", name, out)
+			t.Errorf("expected %q to have [built-in] source in list output, got:\n%s", name, out)
 		}
 	}
 }
@@ -380,7 +405,7 @@ func TestBuiltins_DevToolInfoShowsInputs(t *testing.T) {
 
 func TestBuiltins_DevToolListShowsInputsColumn(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
-	out, code := runPi(t, dir, "list")
+	out, code := runPi(t, dir, "list", "--builtins")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
