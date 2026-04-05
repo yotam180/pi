@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/conditions"
@@ -595,14 +596,20 @@ func (a *Automation) ResolveInputs(withArgs map[string]string, positionalArgs []
 }
 
 // InputEnvVars converts resolved input values to PI_INPUT_<NAME> env var format.
+// Keys are sorted alphabetically for deterministic output.
 func InputEnvVars(resolved map[string]string) []string {
 	if len(resolved) == 0 {
 		return nil
 	}
+	keys := make([]string, 0, len(resolved))
+	for k := range resolved {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
 	vars := make([]string, 0, len(resolved))
-	for k, v := range resolved {
+	for _, k := range keys {
 		envKey := "PI_INPUT_" + strings.ToUpper(strings.ReplaceAll(k, "-", "_"))
-		vars = append(vars, envKey+"="+v)
+		vars = append(vars, envKey+"="+resolved[k])
 	}
 	return vars
 }

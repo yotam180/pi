@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -39,8 +40,15 @@ func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []stri
 	if len(inputEnv) > 0 {
 		env = append(env, inputEnv...)
 	}
-	for k, v := range stepEnv {
-		env = append(env, k+"="+v)
+	if len(stepEnv) > 0 {
+		envKeys := make([]string, 0, len(stepEnv))
+		for k := range stepEnv {
+			envKeys = append(envKeys, k)
+		}
+		sort.Strings(envKeys)
+		for _, k := range envKeys {
+			env = append(env, k+"="+stepEnv[k])
+		}
 	}
 	return env
 }

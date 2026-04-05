@@ -55,11 +55,11 @@ internal/
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, Silent, ParentShell, and Dir fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             87 tests
+    automation_test.go             88 tests
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
-    display_test.go                35 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
+    display_test.go                30 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
@@ -68,7 +68,7 @@ internal/
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution; resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry
-    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection; step-level dir: resolution
+    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
@@ -80,18 +80,18 @@ internal/
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
     install_test.go                11 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure, step list with conditionals, with inputs, automation-level if
-    step_env_test.go               8 tests — step-level env: bash/python, multiple vars, parent override, nil env inheritance, per-step isolation, buildEnv with step env, buildEnv with all three
+    step_env_test.go               9 tests — step-level env: bash/python, multiple vars, parent override, nil env inheritance, per-step isolation, buildEnv with step env, buildEnv with all three, buildEnv step env deterministic order
     step_dir_test.go               10 tests — step-level dir: bash inline/absolute/default, missing dir error, not-a-dir error, python step, per-step isolation, mixed with no dir, combined with env, resolveStepDir unit tests
     step_trace_test.go             6 tests — step trace lines, silent step suppression, loud override, silent still executes, silent pipe capture
     parent_shell_test.go           6 tests — parent shell: writes to eval file, multiple steps append, mixed with normal, no eval file error, skipped by condition, AppendToParentEval
-    validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv with step env, prependPathInEnv)
-    predicates_test.go             11 tests (+ subtests covering all predicate types)
+    validate_test.go               34 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, prependPathInEnv)
+    predicates_test.go             12 tests (+ subtests covering all predicate types)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
   runtimes/                        Sandboxed runtime provisioning
     runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
-    runtimes_test.go               17 tests
+    runtimes_test.go               16 tests
   shell/                           Shell shortcut file generation and management
     shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function
     shell_test.go                  16 tests
@@ -249,7 +249,7 @@ Makefile                               build, vet, test, test-matrix targets
 - TypeScript requires `tsx` in PATH; clear error with install hint (`npm install -g tsx`) if not found
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
-- Adding a new step type: (1) register the `StepType` constant in `automation.go` and add it to `supportedStepTypes`/`implementedStepTypes`, (2) implement `StepRunner` in `runners.go` (using `resolveFileStep()` for file-path handling and `runStepCommand()` for execution), (3) register it in `NewDefaultRegistry()` in `runner_iface.go` — no changes to `executor.go` needed
+- Adding a new step type: (1) register the `StepType` constant in `automation.go` and add it to `validStepTypes`, (2) implement `StepRunner` in `runners.go` (using `resolveFileStep()` for file-path handling and `runStepCommand()` for execution), (3) register it in `NewDefaultRegistry()` in `runner_iface.go` — no changes to `executor.go` needed
 
 ### Installer automation lifecycle (`install:` block)
 - Automations can use `install:` instead of `steps:` — the two are mutually exclusive
@@ -422,7 +422,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Input keys are stored in declaration order (`InputKeys []string`) for positional mapping
 - `ResolveInputs()` on `Automation` validates and resolves inputs from either `--with` flags or positional args (mixing is an error)
 - Resolved values are injected as `PI_INPUT_<NAME>` environment variables (uppercased, hyphens become underscores)
-- `appendInputEnv()` merges input env vars with the current process environment (returns nil when no inputs, inheriting parent env)
+- `InputEnvVars()` converts resolved inputs to `PI_INPUT_*` env vars in sorted key order
 - `run:` steps support `with:` to pass named inputs to the called automation
 - `pi run --with key=value` is a repeatable flag parsed by `parseWithFlags()`
 - `pi.yaml` shortcuts support `with:` mapping with `$1`, `$2` positional references
@@ -460,7 +460,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Only `python` and `node` are known runtimes — `command:` requirements are never provisioned
 - Integration point: `Executor.Provisioner` field — when set, `ValidateRequirements()` calls `tryProvision()` for failed runtime requirements
 - PATH scoping: `buildEnv()` prepends provisioned bin directories to PATH for all step executions via `prependPathInEnv()`
-- `appendInputEnv()` is preserved for backward compatibility but step execution now uses `buildEnv()` which handles both input env vars and runtime paths
+- `buildEnv()` handles input env vars, provisioned runtime PATH, and step-level env vars; step env keys are iterated in sorted order for deterministic behavior
 - Mise backend: calls `mise install <runtime>@<version>`, then `mise where` to find the install path, symlinks binaries into the managed directory
 - Direct backend: downloads from official CDN (nodejs.org for node, python-build-standalone for python), extracts tar.gz, places binaries
 - `Provisioner.PromptFunc` controls interactive "ask" mode — nil means non-interactive (skip provisioning)
@@ -558,7 +558,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 636 (87 automation + 42 builtins + 60 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 161 executor [across 13 test files] + 4 project + 16 runtimes + 16 shell + 149 integration)
+Total tests: 638 (88 automation + 42 builtins + 60 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 162 executor [across 13 test files] + 4 project + 16 runtimes + 16 shell + 149 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

@@ -186,6 +186,37 @@ func TestBuildEnv_WithStepEnv(t *testing.T) {
 	}
 }
 
+func TestBuildEnv_StepEnvDeterministicOrder(t *testing.T) {
+	exec := &Executor{
+		RepoRoot: t.TempDir(),
+	}
+
+	stepEnv := map[string]string{
+		"ZEBRA":  "z",
+		"ALPHA":  "a",
+		"MIDDLE": "m",
+	}
+
+	for i := 0; i < 20; i++ {
+		env := exec.buildEnv(nil, stepEnv)
+		if env == nil {
+			t.Fatal("expected non-nil env")
+		}
+		var stepVars []string
+		for _, e := range env {
+			if e == "ALPHA=a" || e == "MIDDLE=m" || e == "ZEBRA=z" {
+				stepVars = append(stepVars, e)
+			}
+		}
+		if len(stepVars) != 3 {
+			t.Fatalf("iteration %d: expected 3 step vars, got %d", i, len(stepVars))
+		}
+		if stepVars[0] != "ALPHA=a" || stepVars[1] != "MIDDLE=m" || stepVars[2] != "ZEBRA=z" {
+			t.Errorf("iteration %d: step env vars not in sorted order: %v", i, stepVars)
+		}
+	}
+}
+
 func TestBuildEnv_WithAllThree(t *testing.T) {
 	exec := &Executor{
 		RepoRoot:     t.TempDir(),

@@ -603,6 +603,33 @@ func TestInputEnvVars_HyphenToUnderscore(t *testing.T) {
 	}
 }
 
+func TestInputEnvVars_DeterministicOrder(t *testing.T) {
+	input := map[string]string{
+		"zebra":   "z",
+		"alpha":   "a",
+		"middle":  "m",
+		"beta":    "b",
+	}
+	for i := 0; i < 20; i++ {
+		vars := InputEnvVars(input)
+		if len(vars) != 4 {
+			t.Fatalf("expected 4 vars, got %d", len(vars))
+		}
+		if vars[0] != "PI_INPUT_ALPHA=a" {
+			t.Errorf("iteration %d: expected PI_INPUT_ALPHA=a at [0], got %s", i, vars[0])
+		}
+		if vars[1] != "PI_INPUT_BETA=b" {
+			t.Errorf("iteration %d: expected PI_INPUT_BETA=b at [1], got %s", i, vars[1])
+		}
+		if vars[2] != "PI_INPUT_MIDDLE=m" {
+			t.Errorf("iteration %d: expected PI_INPUT_MIDDLE=m at [2], got %s", i, vars[2])
+		}
+		if vars[3] != "PI_INPUT_ZEBRA=z" {
+			t.Errorf("iteration %d: expected PI_INPUT_ZEBRA=z at [3], got %s", i, vars[3])
+		}
+	}
+}
+
 // --- if: field tests ---
 
 func TestLoad_StepWithIf(t *testing.T) {
