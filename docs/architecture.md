@@ -39,6 +39,7 @@ internal/
     list.go                        pi list — discovers and prints automations with SOURCE column; --all flag shows grouped package sections; --builtins/-b flag includes pi:* automations; automationSource() resolves source indicator per automation
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations; stepAnnotations() shared helper for building annotation slices from step fields
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE; uses ProjectContext for resolution and executor construction
+    setup_add.go                   pi setup add — appends setup entries to pi.yaml; short-form tool resolution (python → pi:install-python); --version, --if, --source, --groups flags; key=value positional args; idempotent duplicate detection; auto-init when no pi.yaml
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
@@ -55,6 +56,7 @@ internal/
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (21 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests)
+    setup_add_test.go              pi setup add tests (13 tests — bare string, short-form expansion, pi: prefix, if flag, key=value, invalid key=value, duplicate, no pi.yaml yes, no pi.yaml non-interactive, local automation, source flag, groups flag, combined flags)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
@@ -64,8 +66,8 @@ internal/
   config/                          pi.yaml parsing
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field, bare string support), PackageEntry (with Source/As, string or object form), RuntimesConfig + Load()
     config_test.go                 31 tests
-    writer.go                      AddPackage() — reads pi.yaml, detects duplicates (DuplicatePackageError), insertPackageEntry() appends to packages: or creates the block; line-based raw string manipulation preserves unrelated file content
-    writer_test.go                 14 tests (GitHub/file add, alias, duplicate, append, create block, missing pi.yaml, preserve content, multiple adds, format entry, insert entry, duplicate error, existing block with following content)
+    writer.go                      AddPackage() — reads pi.yaml, detects duplicates (DuplicatePackageError), insertPackageEntry() appends to packages: or creates the block; AddSetupEntry() — reads pi.yaml, detects duplicates (DuplicateSetupEntryError), insertSetupEntry() appends to setup: or creates the block; FormatSetupEntry() renders setup entries as YAML; line-based raw string manipulation preserves unrelated file content
+    writer_test.go                 33 tests (14 package + 19 setup: GitHub/file add, alias, duplicate, append, create block, missing pi.yaml, preserve content, multiple adds, format entry, insert entry, duplicate error, existing block with following content)
   automation/                      Individual automation YAML parsing
     automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
@@ -416,6 +418,21 @@ Makefile                               build, vet, test, test-matrix targets
 - `initProject(root, name, stdout)` is the exported core logic — writes the files and prints confirmation; callable from other commands (e.g. `pi setup add` when no project exists)
 - "Next steps" block shown on both success and already-initialized paths: suggests `pi setup add`, `pi shell`, `pi run`
 - Output uses `display.Printer` for consistent styling: green for "Initialized project", dim for file creation lines and next steps
+
+### `pi setup add` command (`internal/cli/setup_add.go`, `internal/config/writer.go`)
+- `pi setup add <name> [key=value ...] [--version <v>] [--if <expr>] [--source <path>] [--groups <list>] [--yes]`
+- Short-form tool name resolution via `setupAddKnownTools` map: `python` → `pi:install-python`, `pi:go` → `pi:install-go`, etc.
+- Resolution advisory: when a short-form expansion happens, prints `Resolved '<input>' → <expanded>` (philosophy principle 6: explain the magic)
+- YAML output: bare string form when no modifiers, object form (`run:` + `if:` + `with:`) when modifiers are present
+- `--version`, `--source`, `--groups` flags populate `with:` entries; `--if` sets the condition
+- Positional `key=value` arguments add additional `with:` entries (e.g. `file=.pi/cursor/extensions.txt`)
+- Idempotent: if the exact entry already exists (same run, same if, same with map), prints "Already in pi.yaml" and exits 0
+- Same run with different with: values is not a duplicate (allows e.g. two Python versions)
+- No pi.yaml: offers to initialize the project first; `--yes` or non-interactive auto-accepts; declined exits 1
+- Uses `initProject()` from `init.go` for project initialization — same output and behavior as `pi init`
+- Uses `config.AddSetupEntry()` for file manipulation — same line-based approach as `config.AddPackage()`
+- `config.FormatSetupEntry()` renders entries for both confirmation output and file insertion
+- `config.DuplicateSetupEntryError` type enables the CLI to distinguish duplicates from real errors
 
 ### `pi add` command (`internal/cli/add.go`, `internal/config/writer.go`)
 - `pi add <source> [--as <alias>]` is the ergonomic entry point for declaring a package dependency
@@ -889,7 +906,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1172 (170 automation + 81 builtins + 32 cache + 130 CLI [includes 11 completion, 13 init] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 247 integration [includes 8 completion, 8 init])
+Total tests: 1215 (170 automation + 81 builtins + 32 cache + 143 CLI [includes 11 completion, 13 init, 13 setup add] + 30 conditions + 64 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 258 integration [includes 8 completion, 8 init, 11 setup add])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -922,6 +939,7 @@ tests/integration/
   helpers_test.go                 Runtime skip guards: requirePython, requireNode, requireTsx
   add_test.go                     8 tests — pi add: file source, file with alias, idempotent, no version error, no args, creates packages block, appends to existing, invalid source
   init_test.go                    8 tests — pi init: creates project files, --yes flag, already initialized, .pi exists, next steps, non-interactive fallback, created project is valid, already-initialized next steps
+  setup_add_test.go               11 tests — pi setup add: bare string, short-form resolution, if flag, idempotent duplicate, key=value args, no pi.yaml auto-init, local automation, multiple adds, no args, pi: prefix expansion, preserves existing content
   basic_test.go                   7 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, from subdirectory
   docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
   pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)

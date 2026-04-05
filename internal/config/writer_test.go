@@ -334,3 +334,415 @@ shortcuts:
 		t.Errorf("shortcuts preserved = %d, want 1", len(cfg.Shortcuts))
 	}
 }
+
+// --- AddSetupEntry tests ---
+
+func TestAddSetupEntry_BareString(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", "project: test\n")
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-uv" {
+		t.Errorf("run = %q, want %q", cfg.Setup[0].Run, "pi:install-uv")
+	}
+}
+
+func TestAddSetupEntry_WithVersion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", "project: test\n")
+
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		With: map[string]string{"version": "3.13"},
+	}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-python" {
+		t.Errorf("run = %q, want %q", cfg.Setup[0].Run, "pi:install-python")
+	}
+	if cfg.Setup[0].With["version"] != "3.13" {
+		t.Errorf("with.version = %q, want %q", cfg.Setup[0].With["version"], "3.13")
+	}
+}
+
+func TestAddSetupEntry_WithIf(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", "project: test\n")
+
+	entry := SetupEntry{
+		Run: "pi:install-homebrew",
+		If:  "os.macos",
+	}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].If != "os.macos" {
+		t.Errorf("if = %q, want %q", cfg.Setup[0].If, "os.macos")
+	}
+}
+
+func TestAddSetupEntry_WithIfAndVersion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", "project: test\n")
+
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		If:   "os.macos",
+		With: map[string]string{"version": "3.13"},
+	}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-python" {
+		t.Errorf("run = %q", cfg.Setup[0].Run)
+	}
+	if cfg.Setup[0].If != "os.macos" {
+		t.Errorf("if = %q", cfg.Setup[0].If)
+	}
+	if cfg.Setup[0].With["version"] != "3.13" {
+		t.Errorf("with.version = %q", cfg.Setup[0].With["version"])
+	}
+}
+
+func TestAddSetupEntry_Duplicate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - pi:install-uv
+`)
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected DuplicateSetupEntryError")
+	}
+
+	dup, ok := err.(*DuplicateSetupEntryError)
+	if !ok {
+		t.Fatalf("expected *DuplicateSetupEntryError, got %T: %v", err, err)
+	}
+	if dup.Run != "pi:install-uv" {
+		t.Errorf("dup.Run = %q, want %q", dup.Run, "pi:install-uv")
+	}
+}
+
+func TestAddSetupEntry_DuplicateWithVersion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - run: pi:install-python
+    with:
+      version: "3.13"
+`)
+
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		With: map[string]string{"version": "3.13"},
+	}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected DuplicateSetupEntryError")
+	}
+	if _, ok := err.(*DuplicateSetupEntryError); !ok {
+		t.Fatalf("expected *DuplicateSetupEntryError, got %T: %v", err, err)
+	}
+}
+
+func TestAddSetupEntry_SameRunDifferentVersion_NotDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - run: pi:install-python
+    with:
+      version: "3.12"
+`)
+
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		With: map[string]string{"version": "3.13"},
+	}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+	if len(cfg.Setup) != 2 {
+		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	}
+}
+
+func TestAddSetupEntry_AppendsToExistingBlock(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+
+setup:
+  - setup/install-deps
+`)
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 2 {
+		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "setup/install-deps" {
+		t.Errorf("setup[0].Run = %q", cfg.Setup[0].Run)
+	}
+	if cfg.Setup[1].Run != "pi:install-uv" {
+		t.Errorf("setup[1].Run = %q", cfg.Setup[1].Run)
+	}
+}
+
+func TestAddSetupEntry_CreatesSetupBlock(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+
+shortcuts:
+  up: docker/up
+`)
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "setup:") {
+		t.Error("file should contain 'setup:'")
+	}
+	if !strings.Contains(content, "pi:install-uv") {
+		t.Error("file should contain the added setup entry")
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if len(cfg.Shortcuts) != 1 {
+		t.Errorf("shortcuts count = %d, want 1 (preserved)", len(cfg.Shortcuts))
+	}
+}
+
+func TestAddSetupEntry_PreservesExistingContent(t *testing.T) {
+	dir := t.TempDir()
+	original := `project: my-project
+
+shortcuts:
+  up: docker/up
+  down: docker/down
+
+packages:
+  - org/pkg@v1.0
+`
+	writeFile(t, dir, "pi.yaml", original)
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "project: my-project") {
+		t.Error("project should be preserved")
+	}
+	if !strings.Contains(content, "up: docker/up") {
+		t.Error("shortcuts should be preserved")
+	}
+	if !strings.Contains(content, "org/pkg@v1.0") {
+		t.Error("packages should be preserved")
+	}
+}
+
+func TestAddSetupEntry_MultipleAdds(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", "project: test\n")
+
+	entries := []SetupEntry{
+		{Run: "pi:install-homebrew", If: "os.macos"},
+		{Run: "pi:install-uv"},
+		{Run: "pi:install-python", With: map[string]string{"version": "3.13"}},
+	}
+
+	for i, entry := range entries {
+		if err := AddSetupEntry(dir, entry); err != nil {
+			t.Fatalf("add %d failed: %v", i, err)
+		}
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 3 {
+		t.Fatalf("setup count = %d, want 3", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-homebrew" {
+		t.Errorf("setup[0].Run = %q", cfg.Setup[0].Run)
+	}
+	if cfg.Setup[1].Run != "pi:install-uv" {
+		t.Errorf("setup[1].Run = %q", cfg.Setup[1].Run)
+	}
+	if cfg.Setup[2].Run != "pi:install-python" {
+		t.Errorf("setup[2].Run = %q", cfg.Setup[2].Run)
+	}
+}
+
+func TestAddSetupEntry_MissingPiYaml(t *testing.T) {
+	dir := t.TempDir()
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected error for missing pi.yaml")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error should mention 'not found', got: %v", err)
+	}
+}
+
+func TestFormatSetupEntry_BareString(t *testing.T) {
+	entry := SetupEntry{Run: "pi:install-uv"}
+	got := FormatSetupEntry(entry)
+	want := "  - pi:install-uv"
+	if got != want {
+		t.Errorf("FormatSetupEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatSetupEntry_WithVersion(t *testing.T) {
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		With: map[string]string{"version": "3.13"},
+	}
+	got := FormatSetupEntry(entry)
+	if !strings.Contains(got, "run: pi:install-python") {
+		t.Errorf("should contain run:, got: %q", got)
+	}
+	if !strings.Contains(got, "with:") {
+		t.Errorf("should contain with:, got: %q", got)
+	}
+	if !strings.Contains(got, `version: "3.13"`) {
+		t.Errorf("should contain version, got: %q", got)
+	}
+}
+
+func TestFormatSetupEntry_WithIf(t *testing.T) {
+	entry := SetupEntry{
+		Run: "pi:install-homebrew",
+		If:  "os.macos",
+	}
+	got := FormatSetupEntry(entry)
+	if !strings.Contains(got, "run: pi:install-homebrew") {
+		t.Errorf("should contain run:, got: %q", got)
+	}
+	if !strings.Contains(got, "if: os.macos") {
+		t.Errorf("should contain if:, got: %q", got)
+	}
+}
+
+func TestDuplicateSetupEntryError_Message(t *testing.T) {
+	err := &DuplicateSetupEntryError{Run: "pi:install-uv"}
+	got := err.Error()
+	if !strings.Contains(got, "pi:install-uv") {
+		t.Errorf("error should contain run value, got: %s", got)
+	}
+	if !strings.Contains(got, "already declared") {
+		t.Errorf("error should say 'already declared', got: %s", got)
+	}
+}
+
+func TestAddSetupEntry_ExistingBlockWithFollowingContent(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+
+setup:
+  - setup/install-deps
+
+shortcuts:
+  up: docker/up
+`)
+
+	entry := SetupEntry{Run: "pi:install-uv"}
+	if err := AddSetupEntry(dir, entry); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("failed to reload: %v", err)
+	}
+
+	if len(cfg.Setup) != 2 {
+		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	}
+	if cfg.Setup[1].Run != "pi:install-uv" {
+		t.Errorf("setup[1].Run = %q, want %q", cfg.Setup[1].Run, "pi:install-uv")
+	}
+	if len(cfg.Shortcuts) != 1 {
+		t.Errorf("shortcuts preserved = %d, want 1", len(cfg.Shortcuts))
+	}
+}

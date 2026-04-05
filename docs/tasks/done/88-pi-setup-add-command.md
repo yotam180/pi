@@ -4,7 +4,7 @@
 feature
 
 ## Status
-todo
+done
 
 ## Priority
 high
@@ -18,19 +18,19 @@ Add a `pi setup add` command that appends an entry to the `setup:` block in `pi.
 Read `docs/philosophy.md` before implementing. The entire design philosophy of this command is intent-first: the developer should be able to guess the right command and get it right most of the time.
 
 ## Acceptance Criteria
-- [ ] `pi setup add pi:install-python --version 3.13` appends `- run: pi:install-python\n  with:\n    version: "3.13"` to `setup:` in `pi.yaml`
-- [ ] Short-form tool names are accepted and expanded: `python` → `pi:install-python`, `node` → `pi:install-node`, `go` → `pi:install-go`, `rust` → `pi:install-rust`, `ruby` → `pi:install-ruby`, `uv` → `pi:install-uv`, `tsx` → `pi:install-tsx`, `homebrew` → `pi:install-homebrew`, `terraform` → `pi:install-terraform`, `kubectl` → `pi:install-kubectl`, `helm` → `pi:install-helm`, `pnpm` → `pi:install-pnpm`, `bun` → `pi:install-bun`, `deno` → `pi:install-deno`, `aws-cli` → `pi:install-aws-cli`
-- [ ] `pi:<tool>` prefix works too: `pi:python` → `pi:install-python`
-- [ ] `--version <v>` flag sets `with: version: "<v>"`
-- [ ] `--if <expr>` flag adds `if: <expr>` (forces object form even without `with:`)
-- [ ] `--source <path>` flag sets `with: source: "<path>"`
-- [ ] `--groups <list>` flag sets `with: groups: "<list>"`
-- [ ] Generic `key=value` arguments set `with: key: "value"` entries
-- [ ] If `pi.yaml` doesn't exist: prints "No pi.yaml found." and offers `pi init` flow (with confirm prompt); if confirmed, initializes the project and then adds the entry
-- [ ] If the entry already exists verbatim: prints "already in pi.yaml" and exits 0 (idempotent)
-- [ ] Prints a confirmation of what was added: `Added pi:install-python (version: 3.13) to setup.`
-- [ ] When a short-form expansion happens, prints a note: `Resolved 'python' → pi:install-python`
-- [ ] `go build ./...` and `go test ./...` pass
+- [x] `pi setup add pi:install-python --version 3.13` appends `- run: pi:install-python\n  with:\n    version: "3.13"` to `setup:` in `pi.yaml`
+- [x] Short-form tool names are accepted and expanded: `python` → `pi:install-python`, `node` → `pi:install-node`, `go` → `pi:install-go`, `rust` → `pi:install-rust`, `ruby` → `pi:install-ruby`, `uv` → `pi:install-uv`, `tsx` → `pi:install-tsx`, `homebrew` → `pi:install-homebrew`, `terraform` → `pi:install-terraform`, `kubectl` → `pi:install-kubectl`, `helm` → `pi:install-helm`, `pnpm` → `pi:install-pnpm`, `bun` → `pi:install-bun`, `deno` → `pi:install-deno`, `aws-cli` → `pi:install-aws-cli`
+- [x] `pi:<tool>` prefix works too: `pi:python` → `pi:install-python`
+- [x] `--version <v>` flag sets `with: version: "<v>"`
+- [x] `--if <expr>` flag adds `if: <expr>` (forces object form even without `with:`)
+- [x] `--source <path>` flag sets `with: source: "<path>"`
+- [x] `--groups <list>` flag sets `with: groups: "<list>"`
+- [x] Generic `key=value` arguments set `with: key: "value"` entries
+- [x] If `pi.yaml` doesn't exist: prints "No pi.yaml found." and offers `pi init` flow (with confirm prompt); if confirmed, initializes the project and then adds the entry
+- [x] If the entry already exists verbatim: prints "already in pi.yaml" and exits 0 (idempotent)
+- [x] Prints a confirmation of what was added: shows the rendered YAML entry
+- [x] When a short-form expansion happens, prints a note: `Resolved 'python' → pi:install-python`
+- [x] `go build ./...` and `go test ./...` pass
 
 ## Implementation Notes
 
@@ -205,18 +205,20 @@ pi setup add pi:cursor/install-extensions file=.pi/cursor/extensions.txt
 ```
 
 ## Subtasks
-- [ ] Add `setup add` subcommand in `internal/cli/setup_add.go`
-- [ ] Implement `setupAddKnownTools` resolution table
-- [ ] Implement YAML entry generation (all cases)
-- [ ] Implement `AddSetupEntry()` in `internal/config/writer.go`
-- [ ] Implement duplicate detection for setup entries
-- [ ] Implement no-pi.yaml → init flow (reuse `initProject` from task 87)
-- [ ] Wire `--version`, `--if`, `--source`, `--groups`, `--yes` flags
-- [ ] Parse `key=value` positional arguments
-- [ ] Print resolution advisory when short-form expansion happens
-- [ ] Unit tests for `AddSetupEntry()`
-- [ ] Integration tests in `tests/integration/setup_add_test.go`
-- [ ] Update `docs/README.md` CLI reference table
+- [x] Add `setup add` subcommand in `internal/cli/setup_add.go`
+- [x] Implement `setupAddKnownTools` resolution table
+- [x] Implement YAML entry generation (all cases)
+- [x] Implement `AddSetupEntry()` in `internal/config/writer.go`
+- [x] Implement duplicate detection for setup entries
+- [x] Implement no-pi.yaml → init flow (reuse `initProject` from task 87)
+- [x] Wire `--version`, `--if`, `--source`, `--groups`, `--yes` flags
+- [x] Parse `key=value` positional arguments
+- [x] Print resolution advisory when short-form expansion happens
+- [x] Unit tests for `AddSetupEntry()` (19 tests in writer_test.go)
+- [x] CLI unit tests in `internal/cli/setup_add_test.go` (13 tests)
+- [x] Integration tests in `tests/integration/setup_add_test.go` (11 tests)
+- [x] Update `docs/README.md` CLI reference table
+- [x] Update `docs/architecture.md`
 
 ## Blocked By
 87-pi-init-command (needs `initProject` function from that task)
