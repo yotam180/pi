@@ -140,6 +140,74 @@ steps:
 	}
 }
 
+func TestValidate_InstallerScalarFileRefBroken(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), "project: test\n")
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "install-tool.yaml"), `description: Install tool
+install:
+  test: check.sh
+  run: install.sh
+  version: tool --version
+`)
+
+	_, stderr, code := runPiSplit(t, dir, "validate")
+	if code != 1 {
+		t.Fatalf("expected exit 1 for broken installer file refs, got %d", code)
+	}
+	if !strings.Contains(stderr, "check.sh") {
+		t.Errorf("expected error for check.sh, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "install.sh") {
+		t.Errorf("expected error for install.sh, got: %s", stderr)
+	}
+}
+
+func TestValidate_InstallerScalarFileRefValid(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), "project: test\n")
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "install-tool.yaml"), `description: Install tool
+install:
+  test: check.sh
+  run: install.sh
+  version: tool --version
+`)
+	writeFile(t, filepath.Join(piDir, "check.sh"), "#!/bin/bash\ncommand -v tool\n")
+	writeFile(t, filepath.Join(piDir, "install.sh"), "#!/bin/bash\nbrew install tool\n")
+
+	stdout, _, code := runPiSplit(t, dir, "validate")
+	if code != 0 {
+		t.Fatalf("expected exit 0 for valid installer file refs, got %d", code)
+	}
+	if !strings.Contains(stdout, "✓") {
+		t.Errorf("expected success, got: %s", stdout)
+	}
+}
+
+func TestValidate_InstallerInlineScriptsNotFlagged(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), "project: test\n")
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "install-tool.yaml"), `description: Install tool
+install:
+  test: command -v tool >/dev/null 2>&1
+  run: brew install tool
+  version: tool --version
+`)
+
+	stdout, _, code := runPiSplit(t, dir, "validate")
+	if code != 0 {
+		t.Fatalf("expected exit 0 for inline installer scripts, got %d", code)
+	}
+	if !strings.Contains(stdout, "✓") {
+		t.Errorf("expected success, got: %s", stdout)
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

@@ -394,3 +394,165 @@ steps:
 		t.Errorf("expected 2 errors, got: %s", errOut)
 	}
 }
+
+func TestValidate_InstallerScalarFileRef_Broken(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: check.sh
+  run: install.sh
+  version: tool --version
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken installer scalar file refs")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "check.sh") {
+		t.Errorf("expected error for check.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install.sh") {
+		t.Errorf("expected error for install.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install.test") {
+		t.Errorf("expected error to mention install.test context, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install.run") {
+		t.Errorf("expected error to mention install.run context, got: %s", errOut)
+	}
+}
+
+func TestValidate_InstallerScalarFileRef_Valid(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: check.sh
+  run: install.sh
+  version: tool --version
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "check.sh"), []byte("#!/bin/bash\ncommand -v tool\n"), 0755)
+	os.WriteFile(filepath.Join(piDir, "install.sh"), []byte("#!/bin/bash\nbrew install tool\n"), 0755)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_InstallerStepListFileRef_Broken(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test:
+    - bash: check.sh
+  run:
+    - bash: install.sh
+  version: tool --version
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken installer step-list file refs")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "check.sh") {
+		t.Errorf("expected error for check.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install.sh") {
+		t.Errorf("expected error for install.sh, got: %s", errOut)
+	}
+}
+
+func TestValidate_InstallerFirstBlockFileRef_Broken(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: command -v tool
+  run:
+    - first:
+        - bash: install-mac.sh
+          if: os.macos
+        - bash: install-linux.sh
+          if: os.linux
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken file refs in installer first: block")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "install-mac.sh") {
+		t.Errorf("expected error for install-mac.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install-linux.sh") {
+		t.Errorf("expected error for install-linux.sh, got: %s", errOut)
+	}
+}
+
+func TestValidate_InstallerVerifyPhaseFileRef(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: command -v tool
+  run: brew install tool
+  verify: verify.sh
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken verify file ref")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "verify.sh") {
+		t.Errorf("expected error for verify.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install.verify") {
+		t.Errorf("expected error to mention install.verify context, got: %s", errOut)
+	}
+}
+
+func TestValidate_InstallerInlineScriptNotFlagged(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: command -v tool >/dev/null 2>&1
+  run: brew install tool
+  version: tool --version | head -1
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success for inline installer scripts, got: %s", stdout.String())
+	}
+}

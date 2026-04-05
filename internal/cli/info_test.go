@@ -510,3 +510,277 @@ func TestShowAutomationInfo_NoStepDetailsWithoutConditions(t *testing.T) {
 		t.Errorf("expected no Step details for steps without conditions, got:\n%s", buf.String())
 	}
 }
+
+func TestPrintInstallDetail_ScalarPhases(t *testing.T) {
+	inst := &automation.InstallSpec{
+		Test:    automation.InstallPhase{IsScalar: true, Scalar: "command -v brew >/dev/null 2>&1"},
+		Run:     automation.InstallPhase{IsScalar: true, Scalar: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`},
+		Version: "brew --version | head -1 | awk '{print $2}'",
+	}
+
+	var buf bytes.Buffer
+	printInstallDetail(inst, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "Install lifecycle:") {
+		t.Errorf("expected 'Install lifecycle:' header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "test: command -v brew >/dev/null 2>&1") {
+		t.Errorf("expected test scalar shown, got:\n%s", out)
+	}
+	if !strings.Contains(out, "run: /bin/bash") {
+		t.Errorf("expected run scalar shown (truncated), got:\n%s", out)
+	}
+	if !strings.Contains(out, "verify: (re-runs test)") {
+		t.Errorf("expected default verify message, got:\n%s", out)
+	}
+	if !strings.Contains(out, "version: brew --version") {
+		t.Errorf("expected version command shown, got:\n%s", out)
+	}
+}
+
+func TestPrintInstallDetail_StepListPhases(t *testing.T) {
+	inst := &automation.InstallSpec{
+		Test: automation.InstallPhase{
+			Steps: []automation.Step{
+				{Type: automation.StepTypeBash, Value: "python3 --version"},
+				{Type: automation.StepTypeRun, Value: "pi:version-satisfies"},
+			},
+		},
+		Run: automation.InstallPhase{
+			Steps: []automation.Step{
+				{Type: automation.StepTypeBash, Value: "mise install python@3.13"},
+			},
+		},
+		Version: "python3 --version 2>&1 | awk '{print $2}'",
+	}
+
+	var buf bytes.Buffer
+	printInstallDetail(inst, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "test: 2 step(s)") {
+		t.Errorf("expected 'test: 2 step(s)', got:\n%s", out)
+	}
+	if !strings.Contains(out, "run: 1 step(s)") {
+		t.Errorf("expected 'run: 1 step(s)', got:\n%s", out)
+	}
+	if !strings.Contains(out, "verify: (re-runs test)") {
+		t.Errorf("expected default verify, got:\n%s", out)
+	}
+}
+
+func TestPrintInstallDetail_WithExplicitVerify(t *testing.T) {
+	inst := &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "which node"},
+		Run:  automation.InstallPhase{IsScalar: true, Scalar: "brew install node"},
+		Verify: &automation.InstallPhase{
+			IsScalar: true,
+			Scalar:   "node --version",
+		},
+		Version: "node --version | sed 's/^v//'",
+	}
+
+	var buf bytes.Buffer
+	printInstallDetail(inst, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "verify: node --version") {
+		t.Errorf("expected explicit verify shown, got:\n%s", out)
+	}
+	if strings.Contains(out, "re-runs test") {
+		t.Errorf("expected no 're-runs test' when verify is explicit, got:\n%s", out)
+	}
+}
+
+func TestPrintInstallDetail_NoVersion(t *testing.T) {
+	inst := &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "which tool"},
+		Run:  automation.InstallPhase{IsScalar: true, Scalar: "brew install tool"},
+	}
+
+	var buf bytes.Buffer
+	printInstallDetail(inst, &buf)
+	out := buf.String()
+
+	if strings.Contains(out, "version:") {
+		t.Errorf("expected no version line when empty, got:\n%s", out)
+	}
+}
+
+func TestPrintInstallDetail_LongScalarTruncated(t *testing.T) {
+	longCmd := strings.Repeat("a", 100)
+	inst := &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: longCmd},
+		Run:  automation.InstallPhase{IsScalar: true, Scalar: "echo ok"},
+	}
+
+	var buf bytes.Buffer
+	printInstallDetail(inst, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "...") {
+		t.Errorf("expected truncation marker for long scalar, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_InstallerType(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install a tool
+install:
+  test: command -v tool
+  run: brew install tool
+  version: tool --version
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "install-tool", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Type:         installer") {
+		t.Errorf("expected 'Type: installer', got:\n%s", out)
+	}
+	if !strings.Contains(out, "Install lifecycle:") {
+		t.Errorf("expected install lifecycle section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "test: command -v tool") {
+		t.Errorf("expected test phase, got:\n%s", out)
+	}
+	if !strings.Contains(out, "run: brew install tool") {
+		t.Errorf("expected run phase, got:\n%s", out)
+	}
+}
+
+func TestPrintFirstBlockDetail_BasicBlock(t *testing.T) {
+	step := automation.Step{
+		First: []automation.Step{
+			{Type: automation.StepTypeBash, Value: "mise install go", If: "command.mise"},
+			{Type: automation.StepTypeBash, Value: "brew install go", If: "command.brew"},
+			{Type: automation.StepTypeBash, Value: "echo 'no installer found' && exit 1"},
+		},
+	}
+
+	var buf bytes.Buffer
+	printFirstBlockDetail(0, step, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "1. first") {
+		t.Errorf("expected '1. first' header, got:\n%s", out)
+	}
+	if !strings.Contains(out, "a. bash: mise install go") {
+		t.Errorf("expected sub-step a, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[if: command.mise]") {
+		t.Errorf("expected if annotation on sub-step a, got:\n%s", out)
+	}
+	if !strings.Contains(out, "b. bash: brew install go") {
+		t.Errorf("expected sub-step b, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[if: command.brew]") {
+		t.Errorf("expected if annotation on sub-step b, got:\n%s", out)
+	}
+	if !strings.Contains(out, "c. bash: echo 'no installer found'") {
+		t.Errorf("expected fallback sub-step c, got:\n%s", out)
+	}
+}
+
+func TestPrintFirstBlockDetail_WithBlockAnnotations(t *testing.T) {
+	step := automation.Step{
+		If:   "os.linux",
+		Pipe: true,
+		First: []automation.Step{
+			{Type: automation.StepTypeBash, Value: "cat /etc/os-release"},
+		},
+	}
+
+	var buf bytes.Buffer
+	printFirstBlockDetail(2, step, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "3. first  [if: os.linux; pipe]") {
+		t.Errorf("expected block-level annotations, got:\n%s", out)
+	}
+}
+
+func TestPrintFirstBlockDetail_WithDescription(t *testing.T) {
+	step := automation.Step{
+		Description: "Pick the right installer",
+		First: []automation.Step{
+			{Type: automation.StepTypeBash, Value: "brew install go", Description: "Use Homebrew"},
+		},
+	}
+
+	var buf bytes.Buffer
+	printFirstBlockDetail(0, step, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "Pick the right installer") {
+		t.Errorf("expected block description, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Use Homebrew") {
+		t.Errorf("expected sub-step description, got:\n%s", out)
+	}
+}
+
+func TestPrintFirstBlockDetail_SubStepAnnotations(t *testing.T) {
+	step := automation.Step{
+		First: []automation.Step{
+			{
+				Type:       automation.StepTypeBash,
+				Value:      "go test ./...",
+				Dir:        "src",
+				Timeout:    30_000_000_000,
+				TimeoutRaw: "30s",
+				Silent:     true,
+				Env:        map[string]string{"FOO": "bar"},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printFirstBlockDetail(0, step, &buf)
+	out := buf.String()
+
+	if !strings.Contains(out, "[silent; dir: src; timeout: 30s; env: FOO]") {
+		t.Errorf("expected sub-step annotations, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_FirstBlockInSteps(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "multi-install.yaml"), []byte(`description: Install Go
+steps:
+  - first:
+      - bash: mise install go
+        if: command.mise
+      - bash: brew install go
+        if: command.brew
+  - bash: echo done
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "multi-install", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Step details:") {
+		t.Errorf("expected Step details section for first: block, got:\n%s", out)
+	}
+	if !strings.Contains(out, "1. first") {
+		t.Errorf("expected first block in step details, got:\n%s", out)
+	}
+	if !strings.Contains(out, "a. bash: mise install go") {
+		t.Errorf("expected sub-step a, got:\n%s", out)
+	}
+}
