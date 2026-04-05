@@ -56,8 +56,14 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, Silent, ParentShell, Dir, Timeout, and Description fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             103 tests
+    automation.go                  Automation struct (with If, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate()
+    step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description), stepRaw, toStep(), InstallPhase, InstallSpec, validateSteps(), validateInstall(), validateInstallPhase()
+    inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
+    requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
+    automation_test.go             14 tests (core load, validate, basic step parsing)
+    step_test.go                   53 tests (if/env/silent/parent_shell/dir/timeout/description fields, install block)
+    inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
+    requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
