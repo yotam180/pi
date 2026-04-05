@@ -1,7 +1,7 @@
 # Documentation Website
 
 ## Status
-todo
+in_progress
 
 ## Priority
 high
@@ -47,7 +47,7 @@ The key pedagogical decision: start with short forms. A first-time developer sho
 ## Success Criteria
 - [ ] `cd website && npm run build` completes without errors
 - [ ] GitHub Actions workflow deploys the site to GitHub Pages on push to `main`
-- [ ] Landing page has install command with copy button, feature summary, and link to docs
+- [x] Landing page has install command with copy button, feature summary, and link to docs
 - [ ] Getting Started Quick Start uses short-form syntax first, reveals full form later with explanation
 - [ ] Every CLI command listed in `docs/README.md` has a corresponding reference page entry
 - [ ] Every YAML field and step modifier listed in `docs/README.md` has a documented reference entry

@@ -1,6 +1,381 @@
 ---
-// Custom landing page — content will be built in task 80.
-// For now, redirect to the docs introduction page.
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
 ---
 
-<meta http-equiv="refresh" content="0;url=/getting-started/introduction/" />
+<StarlightPage
+	frontmatter={{
+		title: 'PI',
+		template: 'splash',
+		hero: {
+			title: 'Replace your <code>shell_shortcuts.sh</code>',
+			tagline: 'Structured, polyglot, shareable developer automations that live in your repo. Write YAML, run from anywhere, share across teams.',
+			actions: [
+				{ text: 'Get Started', link: '/getting-started/introduction/', icon: 'right-arrow' },
+				{ text: 'View on GitHub', link: 'https://github.com/yotam180/pi', icon: 'external', variant: 'minimal' },
+			],
+		},
+	}}
+>
+
+<div class="landing">
+
+	<!-- Install command -->
+	<section class="install-section">
+		<div class="install-box">
+			<code class="install-command" id="install-cmd">brew install yotam180/pi/pi</code>
+			<button class="copy-btn" id="copy-btn" aria-label="Copy install command">
+				<span class="copy-icon" id="copy-icon">⧉</span>
+			</button>
+		</div>
+		<p class="install-alt">
+			or download from <a href="https://github.com/yotam180/pi/releases">GitHub Releases</a>
+		</p>
+	</section>
+
+	<!-- Feature tiles -->
+	<section class="features">
+		<div class="feature-grid">
+			<div class="feature-card">
+				<h3>Polyglot by default</h3>
+				<p>Steps in bash, Python, or TypeScript. Mix languages freely within a single automation.</p>
+			</div>
+			<div class="feature-card">
+				<h3>Lives in your repo</h3>
+				<p>Automations are YAML files in <code>.pi/</code>. Version-controlled, PR-reviewed, shared with the team.</p>
+			</div>
+			<div class="feature-card">
+				<h3>Shell shortcuts, zero setup</h3>
+				<p><code>pi shell</code> turns any automation into a terminal command. Works from anywhere in your terminal.</p>
+			</div>
+			<div class="feature-card">
+				<h3>Shareable packages</h3>
+				<p>Publish automations to GitHub. Teams add them with <code>pi add org/repo@v1</code>. One command.</p>
+			</div>
+		</div>
+	</section>
+
+	<!-- Code example -->
+	<section class="example-section">
+		<h2>What it looks like</h2>
+		<div class="example-grid">
+			<div class="example-block">
+				<div class="example-header">.pi/docker/up.yaml</div>
+				<pre><code>{`description: Start the development environment
+
+steps:
+  - bash: docker compose up -d
+    description: Start containers
+
+  - bash: ./scripts/wait-for-db.sh
+    description: Wait for the database
+
+  - bash: echo "Ready at http://localhost:3000"`}</code></pre>
+			</div>
+			<div class="example-block">
+				<div class="example-header">pi.yaml</div>
+				<pre><code>{`project: my-app
+
+shortcuts:
+  up:   docker/up
+  down: docker/down
+  logs: docker/logs`}</code></pre>
+			</div>
+			<div class="example-block example-terminal">
+				<div class="example-header">Terminal</div>
+				<pre><code><span class="prompt">$</span> pi shell       <span class="comment"># install shortcuts once</span>
+<span class="prompt">$</span> up             <span class="comment"># works from anywhere, forever</span>
+  → bash: docker compose up -d
+  → bash: ./scripts/wait-for-db.sh
+  → bash: echo "Ready at http://localhost:3000"
+Ready at http://localhost:3000</code></pre>
+			</div>
+		</div>
+	</section>
+
+	<!-- Step types -->
+	<section class="step-types-section">
+		<h2>One automation, any language</h2>
+		<p class="section-subtitle">Chain steps in different languages. Each step runs in its own process — no polyglot runtime needed.</p>
+		<div class="step-types-grid">
+			<div class="step-type">
+				<code>bash:</code>
+				<span>Shell scripts, inline or file</span>
+			</div>
+			<div class="step-type">
+				<code>python:</code>
+				<span>Python scripts, inline or file</span>
+			</div>
+			<div class="step-type">
+				<code>typescript:</code>
+				<span>TypeScript via tsx, inline or file</span>
+			</div>
+			<div class="step-type">
+				<code>run:</code>
+				<span>Compose automations together</span>
+			</div>
+		</div>
+	</section>
+
+	<!-- Short form demo -->
+	<section class="short-form-section">
+		<h2>Start simple</h2>
+		<p class="section-subtitle">Single-step automations skip the ceremony. Add structure when you need it.</p>
+		<div class="example-grid two-col">
+			<div class="example-block">
+				<div class="example-header">.pi/test.yaml</div>
+				<pre><code>{`description: Run the test suite
+bash: go test ./...`}</code></pre>
+			</div>
+			<div class="example-block">
+				<div class="example-header">.pi/build.yaml</div>
+				<pre><code>{`description: Cross-compile for Linux
+bash: go build -o bin/app ./...
+env:
+  GOOS: linux
+  GOARCH: amd64`}</code></pre>
+			</div>
+		</div>
+	</section>
+
+	<!-- Footer -->
+	<footer class="landing-footer">
+		<p>
+			<a href="https://github.com/yotam180/pi">GitHub</a>
+			<span class="sep">·</span>
+			<a href="/getting-started/introduction/">Docs</a>
+			<span class="sep">·</span>
+			<a href="/reference/cli/">CLI Reference</a>
+		</p>
+		<p class="footer-note">Built with <a href="https://starlight.astro.build">Astro Starlight</a></p>
+	</footer>
+</div>
+
+</StarlightPage>
+
+<script>
+	const btn = document.getElementById('copy-btn');
+	const icon = document.getElementById('copy-icon');
+	btn?.addEventListener('click', () => {
+		navigator.clipboard.writeText('brew install yotam180/pi/pi').then(() => {
+			if (icon) {
+				icon.textContent = '✓';
+				setTimeout(() => { icon.textContent = '⧉'; }, 1500);
+			}
+		});
+	});
+</script>
+
+<style>
+	.landing {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding: 0 1.5rem;
+	}
+
+	/* Install command */
+	.install-section {
+		text-align: center;
+		margin: 1rem 0 3rem;
+	}
+	.install-box {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		background: var(--sl-color-gray-6, #1a1a2e);
+		border: 1px solid var(--sl-color-gray-5, #2a2a3e);
+		border-radius: 0.5rem;
+		padding: 0.75rem 1rem;
+		font-size: 1.1rem;
+	}
+	.install-command {
+		font-family: var(--sl-font-mono, ui-monospace, monospace);
+		color: var(--sl-color-green-high, #4ade80);
+		background: none;
+		border: none;
+		padding: 0;
+	}
+	.copy-btn {
+		background: none;
+		border: none;
+		color: var(--sl-color-gray-3, #888);
+		cursor: pointer;
+		font-size: 1.2rem;
+		padding: 0.25rem;
+		line-height: 1;
+		transition: color 0.15s;
+	}
+	.copy-btn:hover {
+		color: var(--sl-color-white, #fff);
+	}
+	.install-alt {
+		margin-top: 0.75rem;
+		font-size: 0.9rem;
+		color: var(--sl-color-gray-3, #888);
+	}
+	.install-alt a {
+		color: var(--sl-color-text-accent, #818cf8);
+	}
+
+	/* Features */
+	.features {
+		margin: 3rem 0;
+	}
+	.feature-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+		gap: 1.5rem;
+	}
+	.feature-card {
+		background: var(--sl-color-gray-6, #1a1a2e);
+		border: 1px solid var(--sl-color-gray-5, #2a2a3e);
+		border-radius: 0.75rem;
+		padding: 1.5rem;
+	}
+	.feature-card h3 {
+		margin: 0 0 0.5rem;
+		font-size: 1.1rem;
+		color: var(--sl-color-white, #fff);
+	}
+	.feature-card p {
+		margin: 0;
+		font-size: 0.95rem;
+		color: var(--sl-color-gray-2, #aaa);
+		line-height: 1.5;
+	}
+	.feature-card code {
+		background: var(--sl-color-gray-5, #2a2a3e);
+		padding: 0.1em 0.35em;
+		border-radius: 0.25rem;
+		font-size: 0.9em;
+	}
+
+	/* Example section */
+	.example-section, .short-form-section, .step-types-section {
+		margin: 4rem 0;
+	}
+	.example-section h2, .short-form-section h2, .step-types-section h2 {
+		text-align: center;
+		font-size: 1.75rem;
+		margin-bottom: 0.5rem;
+	}
+	.section-subtitle {
+		text-align: center;
+		color: var(--sl-color-gray-2, #aaa);
+		margin-bottom: 2rem;
+		font-size: 1.05rem;
+	}
+	.example-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+		gap: 1.25rem;
+	}
+	.example-grid.two-col {
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		max-width: 52rem;
+		margin: 0 auto;
+	}
+	.example-block {
+		background: var(--sl-color-gray-6, #1a1a2e);
+		border: 1px solid var(--sl-color-gray-5, #2a2a3e);
+		border-radius: 0.75rem;
+		overflow: hidden;
+	}
+	.example-header {
+		background: var(--sl-color-gray-5, #2a2a3e);
+		padding: 0.5rem 1rem;
+		font-size: 0.8rem;
+		font-family: var(--sl-font-mono, ui-monospace, monospace);
+		color: var(--sl-color-gray-2, #aaa);
+		border-bottom: 1px solid var(--sl-color-gray-5, #2a2a3e);
+	}
+	.example-block pre {
+		margin: 0;
+		padding: 1rem;
+		font-size: 0.85rem;
+		line-height: 1.6;
+		overflow-x: auto;
+	}
+	.example-block code {
+		font-family: var(--sl-font-mono, ui-monospace, monospace);
+		background: none;
+		padding: 0;
+		border: none;
+	}
+	.example-terminal .prompt {
+		color: var(--sl-color-green-high, #4ade80);
+	}
+	.example-terminal .comment {
+		color: var(--sl-color-gray-3, #666);
+	}
+
+	/* Step types */
+	.step-types-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+		gap: 1rem;
+		max-width: 56rem;
+		margin: 0 auto;
+	}
+	.step-type {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 1.25rem;
+		background: var(--sl-color-gray-6, #1a1a2e);
+		border: 1px solid var(--sl-color-gray-5, #2a2a3e);
+		border-radius: 0.75rem;
+		text-align: center;
+	}
+	.step-type code {
+		font-size: 1.1rem;
+		color: var(--sl-color-text-accent, #818cf8);
+		background: none;
+		border: none;
+		padding: 0;
+	}
+	.step-type span {
+		font-size: 0.9rem;
+		color: var(--sl-color-gray-2, #aaa);
+	}
+
+	/* Footer */
+	.landing-footer {
+		margin-top: 5rem;
+		padding: 2rem 0;
+		text-align: center;
+		border-top: 1px solid var(--sl-color-gray-5, #2a2a3e);
+	}
+	.landing-footer a {
+		color: var(--sl-color-text-accent, #818cf8);
+		text-decoration: none;
+	}
+	.landing-footer a:hover {
+		text-decoration: underline;
+	}
+	.landing-footer .sep {
+		margin: 0 0.75rem;
+		color: var(--sl-color-gray-4, #555);
+	}
+	.footer-note {
+		margin-top: 0.75rem;
+		font-size: 0.85rem;
+		color: var(--sl-color-gray-3, #888);
+	}
+
+	/* Responsive */
+	@media (max-width: 640px) {
+		.feature-grid {
+			grid-template-columns: 1fr;
+		}
+		.example-grid {
+			grid-template-columns: 1fr;
+		}
+		.step-types-grid {
+			grid-template-columns: repeat(2, 1fr);
+		}
+		.install-box {
+			font-size: 0.95rem;
+		}
+	}
+</style>
