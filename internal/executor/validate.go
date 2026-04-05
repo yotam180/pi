@@ -113,6 +113,13 @@ func (e *Executor) tryProvision(req automation.Requirement) (*runtimes.Provision
 
 // checkRequirement checks a single requirement against the runtime environment.
 func checkRequirement(req automation.Requirement, env *RuntimeEnv) CheckResult {
+	return checkRequirementImpl(req, env, false)
+}
+
+// checkRequirementImpl is the shared implementation for requirement checking.
+// When alwaysDetectVersion is true, version detection runs even without a
+// min-version constraint (used by pi doctor to display detected versions).
+func checkRequirementImpl(req automation.Requirement, env *RuntimeEnv, alwaysDetectVersion bool) CheckResult {
 	cmdName := req.Name
 	if req.Kind == automation.RequirementRuntime {
 		cmdName = runtimeCommand(req.Name)
@@ -127,7 +134,8 @@ func checkRequirement(req automation.Requirement, env *RuntimeEnv) CheckResult {
 		}
 	}
 
-	if req.MinVersion == "" {
+	needVersion := req.MinVersion != "" || alwaysDetectVersion
+	if !needVersion {
 		return CheckResult{
 			Requirement: req,
 			Satisfied:   true,
@@ -135,6 +143,15 @@ func checkRequirement(req automation.Requirement, env *RuntimeEnv) CheckResult {
 	}
 
 	detected := detectVersion(cmdName, env)
+
+	if req.MinVersion == "" {
+		return CheckResult{
+			Requirement:     req,
+			Satisfied:       true,
+			DetectedVersion: detected,
+		}
+	}
+
 	if detected == "" {
 		return CheckResult{
 			Requirement: req,
@@ -318,60 +335,5 @@ func InstallHintFor(req automation.Requirement) string {
 // version even when no minimum version constraint is set. This is used by
 // `pi doctor` to show the detected version for satisfied requirements.
 func CheckRequirementForDoctor(req automation.Requirement, env *RuntimeEnv) CheckResult {
-	cmdName := req.Name
-	if req.Kind == automation.RequirementRuntime {
-		cmdName = runtimeCommand(req.Name)
-	}
-
-	_, err := env.LookPath(cmdName)
-	if err != nil {
-		return CheckResult{
-			Requirement: req,
-			Satisfied:   false,
-			Error:       "not found",
-		}
-	}
-
-	detected := detectVersion(cmdName, env)
-
-	if req.MinVersion == "" {
-		return CheckResult{
-			Requirement:     req,
-			Satisfied:       true,
-			DetectedVersion: detected,
-		}
-	}
-
-	if detected == "" {
-		return CheckResult{
-			Requirement: req,
-			Satisfied:   false,
-			Error:       fmt.Sprintf("installed but unable to detect version (tried %s --version)", cmdName),
-		}
-	}
-
-	cmp, err := compareVersions(detected, req.MinVersion)
-	if err != nil {
-		return CheckResult{
-			Requirement:     req,
-			Satisfied:       false,
-			DetectedVersion: detected,
-			Error:           fmt.Sprintf("version parse error: %v", err),
-		}
-	}
-
-	if cmp < 0 {
-		return CheckResult{
-			Requirement:     req,
-			Satisfied:       false,
-			DetectedVersion: detected,
-			Error:           fmt.Sprintf("found %s but need >= %s", detected, req.MinVersion),
-		}
-	}
-
-	return CheckResult{
-		Requirement:     req,
-		Satisfied:       true,
-		DetectedVersion: detected,
-	}
+	return checkRequirementImpl(req, env, true)
 }

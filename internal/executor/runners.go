@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -14,26 +13,19 @@ import (
 func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	var cmdArgs []string
 
-	if isFilePath(step.Value) {
-		resolved := resolveScriptPath(a.Dir(), step.Value)
-		if _, err := os.Stat(resolved); err != nil {
-			return fmt.Errorf("bash script file not found: %s (resolved from %q relative to %s)", resolved, step.Value, a.Dir())
-		}
+	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "bash")
+	if err != nil {
+		return err
+	}
+	if isFile {
 		cmdArgs = append([]string{resolved}, args...)
 	} else {
 		cmdArgs = append([]string{"-c", step.Value, "--"}, args...)
 	}
 
-	cmd := exec.Command("bash", cmdArgs...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = stdout
-	cmd.Stderr = e.stderr()
-	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv, step.Env)
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
+	if err := e.runCommand("bash", cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+		if _, ok := err.(*ExitError); ok {
+			return err
 		}
 		return fmt.Errorf("running bash step: %w", err)
 	}
@@ -44,26 +36,19 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 	pythonBin := e.resolvePythonBin()
 
 	var cmdArgs []string
-	if isFilePath(step.Value) {
-		resolved := resolveScriptPath(a.Dir(), step.Value)
-		if _, err := os.Stat(resolved); err != nil {
-			return fmt.Errorf("python script file not found: %s (resolved from %q relative to %s)", resolved, step.Value, a.Dir())
-		}
+	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "python")
+	if err != nil {
+		return err
+	}
+	if isFile {
 		cmdArgs = append([]string{resolved}, args...)
 	} else {
 		cmdArgs = append([]string{"-c", step.Value}, args...)
 	}
 
-	cmd := exec.Command(pythonBin, cmdArgs...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = stdout
-	cmd.Stderr = e.stderr()
-	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv, step.Env)
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
+	if err := e.runCommand(pythonBin, cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+		if _, ok := err.(*ExitError); ok {
+			return err
 		}
 		if isCommandNotFound(err) {
 			return fmt.Errorf("python3 not found in PATH — install Python 3 or activate a virtualenv")
@@ -84,21 +69,19 @@ func (e *Executor) resolvePythonBin() string {
 
 func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
 	var cmdArgs []string
-	var tmpFile string
 
-	if isFilePath(step.Value) {
-		resolved := resolveScriptPath(a.Dir(), step.Value)
-		if _, err := os.Stat(resolved); err != nil {
-			return fmt.Errorf("typescript file not found: %s (resolved from %q relative to %s)", resolved, step.Value, a.Dir())
-		}
+	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "typescript")
+	if err != nil {
+		return err
+	}
+	if isFile {
 		cmdArgs = append([]string{resolved}, args...)
 	} else {
 		tmp, err := os.CreateTemp("", "pi-ts-*.ts")
 		if err != nil {
 			return fmt.Errorf("creating temp file for typescript step: %w", err)
 		}
-		tmpFile = tmp.Name()
-		defer os.Remove(tmpFile)
+		defer os.Remove(tmp.Name())
 
 		if _, err := tmp.WriteString(step.Value); err != nil {
 			tmp.Close()
@@ -106,19 +89,12 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 		}
 		tmp.Close()
 
-		cmdArgs = append([]string{tmpFile}, args...)
+		cmdArgs = append([]string{tmp.Name()}, args...)
 	}
 
-	cmd := exec.Command("tsx", cmdArgs...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = stdout
-	cmd.Stderr = e.stderr()
-	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv, step.Env)
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
+	if err := e.runCommand("tsx", cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+		if _, ok := err.(*ExitError); ok {
+			return err
 		}
 		if isCommandNotFound(err) {
 			return fmt.Errorf("tsx not found in PATH — install it with: npm install -g tsx")

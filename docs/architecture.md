@@ -65,10 +65,10 @@ internal/
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile field), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation
-    runners.go                     Step runner implementations: execBash(), execPython(), execTypeScript(), execRun(), resolvePythonBin(), isCommandNotFound()
+    runners.go                     Step runner implementations: execBash(), execPython(), execTypeScript(), execRun(), resolvePythonBin(), isCommandNotFound(); all runners delegate to runCommand() for command execution
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), execScriptSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer
-    helpers.go                     Shared utilities: isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection
-    validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
+    helpers.go                     Shared utilities: runCommand() (common command execution substrate), resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection
+    validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               109 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env + 7 step-trace/silent/loud + 7 parent-shell)
     validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv with step env, prependPathInEnv)
@@ -222,6 +222,8 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Execution model
 - All steps run with the repo root (directory containing `pi.yaml`) as their working directory
+- Common execution substrate: `runCommand()` in `helpers.go` handles `exec.Command` setup (Dir, Env, Stdout, Stderr, Stdin) and error wrapping (`*ExitError` for non-zero exits). All language runners delegate to this.
+- File-path resolution: `resolveFileStep()` in `helpers.go` combines `isFilePath()` + `resolveScriptPath()` + existence check into a single call, eliminating per-runner duplication
 - Bash inline steps: `bash -c "<script>" -- [args...]` — args available as `$1`, `$2`, etc.
 - Bash file steps: `bash <resolved_path> [args...]` — file path resolved relative to the automation YAML file's directory
 - Python inline steps: `python3 -c "<script>" [args...]` — args available as `sys.argv[1:]`
@@ -232,6 +234,7 @@ Makefile                               build, vet, test, test-matrix targets
 - TypeScript requires `tsx` in PATH; clear error with install hint (`npm install -g tsx`) if not found
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
+- Adding a new step type: register the `StepType` in `automation.go`, add the runner function in `runners.go` (using `resolveFileStep()` for file-path handling and `runCommand()` for execution), and add the case in `execStep()` in `executor.go`
 
 ### Installer automation lifecycle (`install:` block)
 - Automations can use `install:` instead of `steps:` — the two are mutually exclusive
@@ -350,7 +353,7 @@ Makefile                               build, vet, test, test-matrix targets
 ### Pre-execution requirement validation
 - Before executing any steps, `RunWithInputs()` calls `ValidateRequirements()` on the automation
 - If any requirement is not satisfied, execution stops immediately with a formatted error table and exit code 1
-- `checkRequirement()` handles a single requirement: PATH lookup via `LookPath()`, then optional version check
+- `checkRequirementImpl(req, env, alwaysDetectVersion)` is the shared core: PATH lookup via `LookPath()`, optional version detection and comparison. `checkRequirement()` (normal execution) and `CheckRequirementForDoctor()` (always-detect) both delegate to it.
 - Runtime requirements map names to commands: `python` → `python3`, `node` → `node`
 - Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`; falls back to `<cmd> version` (no `--`) when `--version` fails or produces no version string (needed for `go version` etc.)
 - Handles all common version output formats: `Python 3.13.0`, `v20.11.0`, `jq-1.7.1`, `docker version 24.0.5`
@@ -359,7 +362,6 @@ Makefile                               build, vet, test, test-matrix targets
 - Formatted error output shows automation name, missing requirements with version info, and install hints
 - Testability: `RuntimeEnv.ExecOutput` field allows mocking `--version` calls without real command execution
 - Validation happens after input resolution but before step/install execution
-- `CheckRequirementForDoctor()` is the exported variant that always detects version (even without constraints) for `pi doctor`
 - `InstallHintFor()` is the exported version of `installHint()` for use by `pi doctor`
 
 ### Doctor command (`pi doctor`)
