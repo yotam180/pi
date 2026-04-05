@@ -129,6 +129,48 @@ func TestRunWithInputs_NoInputsPassesArgsThrough(t *testing.T) {
 	}
 }
 
+func TestRunWithInputs_ShortPrefixEnvVarsInjected(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"name": {Description: "who"},
+		},
+		[]string{"name"},
+		bashStep(`echo "hello $PI_IN_NAME"`),
+	)
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, map[string]string{"name": "world"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "hello world" {
+		t.Errorf("output = %q, want %q", got, "hello world")
+	}
+}
+
+func TestRunWithInputs_BothPrefixesAvailable(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"val": {},
+		},
+		[]string{"val"},
+		bashStep(`echo "$PI_IN_VAL:$PI_INPUT_VAL"`),
+	)
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, map[string]string{"val": "42"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "42:42" {
+		t.Errorf("output = %q, want %q (both prefixes should resolve)", got, "42:42")
+	}
+}
+
 func TestRunWithInputs_RunStepWithWith(t *testing.T) {
 	dir := t.TempDir()
 	inner := automationWithInputs("inner",

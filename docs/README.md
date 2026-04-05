@@ -347,11 +347,11 @@ inputs:
 
 install:
   test:
-    - bash: python3 --version 2>&1 | grep -q "Python $PI_INPUT_VERSION"
+    - bash: python3 --version 2>&1 | grep -q "Python $PI_IN_VERSION"
   run:
-    - bash: mise install "python@$PI_INPUT_VERSION" && mise use "python@$PI_INPUT_VERSION"
+    - bash: mise install "python@$PI_IN_VERSION" && mise use "python@$PI_IN_VERSION"
       if: command.mise
-    - bash: brew install "python@$PI_INPUT_VERSION"
+    - bash: brew install "python@$PI_IN_VERSION"
       if: command.brew and not command.mise
   version: python3 --version 2>&1 | awk '{print $2}'
 ```

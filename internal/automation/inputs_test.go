@@ -270,11 +270,17 @@ func TestInputEnvVars(t *testing.T) {
 	for _, v := range vars {
 		found[v] = true
 	}
+	if !found["PI_IN_SERVICE=api"] {
+		t.Error("missing PI_IN_SERVICE=api")
+	}
 	if !found["PI_INPUT_SERVICE=api"] {
-		t.Error("missing PI_INPUT_SERVICE=api")
+		t.Error("missing PI_INPUT_SERVICE=api (deprecated)")
+	}
+	if !found["PI_IN_TAIL=200"] {
+		t.Error("missing PI_IN_TAIL=200")
 	}
 	if !found["PI_INPUT_TAIL=200"] {
-		t.Error("missing PI_INPUT_TAIL=200")
+		t.Error("missing PI_INPUT_TAIL=200 (deprecated)")
 	}
 }
 
@@ -287,8 +293,18 @@ func TestInputEnvVars_Empty(t *testing.T) {
 
 func TestInputEnvVars_HyphenToUnderscore(t *testing.T) {
 	vars := InputEnvVars(map[string]string{"my-input": "val"})
-	if len(vars) != 1 || vars[0] != "PI_INPUT_MY_INPUT=val" {
-		t.Errorf("expected PI_INPUT_MY_INPUT=val, got: %v", vars)
+	if len(vars) != 2 {
+		t.Fatalf("expected 2 vars (PI_IN_ + PI_INPUT_), got: %v", vars)
+	}
+	found := make(map[string]bool)
+	for _, v := range vars {
+		found[v] = true
+	}
+	if !found["PI_IN_MY_INPUT=val"] {
+		t.Error("missing PI_IN_MY_INPUT=val")
+	}
+	if !found["PI_INPUT_MY_INPUT=val"] {
+		t.Error("missing PI_INPUT_MY_INPUT=val (deprecated)")
 	}
 }
 
@@ -301,20 +317,23 @@ func TestInputEnvVars_DeterministicOrder(t *testing.T) {
 	}
 	for i := 0; i < 20; i++ {
 		vars := InputEnvVars(input)
-		if len(vars) != 4 {
-			t.Fatalf("expected 4 vars, got %d", len(vars))
+		if len(vars) != 8 {
+			t.Fatalf("expected 8 vars (4 PI_IN_ + 4 PI_INPUT_), got %d", len(vars))
 		}
-		if vars[0] != "PI_INPUT_ALPHA=a" {
-			t.Errorf("iteration %d: expected PI_INPUT_ALPHA=a at [0], got %s", i, vars[0])
+		expected := []string{
+			"PI_IN_ALPHA=a",
+			"PI_INPUT_ALPHA=a",
+			"PI_IN_BETA=b",
+			"PI_INPUT_BETA=b",
+			"PI_IN_MIDDLE=m",
+			"PI_INPUT_MIDDLE=m",
+			"PI_IN_ZEBRA=z",
+			"PI_INPUT_ZEBRA=z",
 		}
-		if vars[1] != "PI_INPUT_BETA=b" {
-			t.Errorf("iteration %d: expected PI_INPUT_BETA=b at [1], got %s", i, vars[1])
-		}
-		if vars[2] != "PI_INPUT_MIDDLE=m" {
-			t.Errorf("iteration %d: expected PI_INPUT_MIDDLE=m at [2], got %s", i, vars[2])
-		}
-		if vars[3] != "PI_INPUT_ZEBRA=z" {
-			t.Errorf("iteration %d: expected PI_INPUT_ZEBRA=z at [3], got %s", i, vars[3])
+		for j, want := range expected {
+			if vars[j] != want {
+				t.Errorf("iteration %d: expected %s at [%d], got %s", i, want, j, vars[j])
+			}
 		}
 	}
 }

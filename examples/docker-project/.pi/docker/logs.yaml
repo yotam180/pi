@@ -13,7 +13,7 @@ inputs:
 
 steps:
   - bash: |
-      echo "Showing logs for: $PI_INPUT_SERVICE (last $PI_INPUT_TAIL lines)"
+      echo "Showing logs for: $PI_IN_SERVICE (last $PI_IN_TAIL lines)"
       echo "[api]      2024-01-15 10:00:01 Server started on :8080"
       echo "[api]      2024-01-15 10:00:02 Connected to database"
       echo "[postgres] 2024-01-15 10:00:00 Database ready"

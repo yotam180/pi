@@ -11,14 +11,14 @@ install:
     - bash: |
         CURRENT=$(rustc --version 2>/dev/null | awk '{print $2}')
         MAJOR_MINOR=$(echo "$CURRENT" | cut -d. -f1,2)
-        [ "$MAJOR_MINOR" = "$PI_INPUT_VERSION" ]
+        [ "$MAJOR_MINOR" = "$PI_IN_VERSION" ]
 
   run:
     - bash: |
         if command -v rustup >/dev/null 2>&1; then
-          rustup install "$PI_INPUT_VERSION" && rustup default "$PI_INPUT_VERSION"
+          rustup install "$PI_IN_VERSION" && rustup default "$PI_IN_VERSION"
         else
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$PI_INPUT_VERSION"
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$PI_IN_VERSION"
           . "$HOME/.cargo/env"
         fi
 

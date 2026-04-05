@@ -76,7 +76,7 @@ internal/
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execInstallFirstBlock(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases
-    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
+    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_IN_* + PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
@@ -85,7 +85,7 @@ internal/
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
     pipe_test.go                   10 tests — pipe: true: bash→bash, bash→python, python→bash, three-step chain, failure propagation, stderr passthrough, run step piping, multiline data
-    inputs_test.go                 7 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, args passthrough, run step with with
+    inputs_test.go                 9 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, args passthrough, short prefix, both prefixes, run step with with
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
     install_test.go                11 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure, step list with conditionals, with inputs, automation-level if
@@ -397,7 +397,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Step-level environment variables (`env:` on steps)
 - Steps can declare an `env:` mapping of key-value pairs to inject into the step's execution environment
-- `env:` vars are merged into the process environment after PI_INPUT_* vars and provisioned runtime PATH
+- `env:` vars are merged into the process environment after PI_IN_*/PI_INPUT_* vars and provisioned runtime PATH
 - Step-level env vars do not leak between steps — each step gets a fresh copy of the process environment plus its own `env:` overlay
 - Steps without `env:` inherit the parent process environment as before (backward compatible)
 - Step-level env vars override parent env vars with the same name (last-writer-wins since they're appended)
@@ -411,7 +411,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Automation-level env does not propagate to sub-automations invoked via `run:` — each nested `Run()` uses only that automation’s declared automation env (and inputs), not the caller’s
 - Single-step shorthand: a top-level `env:` beside `bash:` / `python:` / `typescript:` / `run:` is automation-level env (not a per-step-only modifier); semantics match multi-step automations
 - `pi info` prints an `Env:` line listing automation-level keys in sorted order when present
-- `buildEnv()` in `helpers.go` takes three env layers: `inputEnv` (PI_INPUT_*), `automationEnv`, and `stepEnv` — merged in that order before subprocess execution
+- `buildEnv()` in `helpers.go` takes three env layers: `inputEnv` (PI_IN_* + PI_INPUT_*), `automationEnv`, and `stepEnv` — merged in that order before subprocess execution
 
 ### Step working directory (`dir:` on steps)
 - Steps can declare a `dir:` field to override the working directory for that step's execution
@@ -554,8 +554,9 @@ Makefile                               build, vet, test, test-matrix targets
 - `IsRequired()` defaults to true when no default value is provided and `required` is not explicitly set
 - Input keys are stored in declaration order (`InputKeys []string`) for positional mapping
 - `ResolveInputs()` on `Automation` validates and resolves inputs from either `--with` flags or positional args (mixing is an error)
-- Resolved values are injected as `PI_INPUT_<NAME>` environment variables (uppercased, hyphens become underscores)
-- `InputEnvVars()` converts resolved inputs to `PI_INPUT_*` env vars in sorted key order
+- Resolved values are injected as both `PI_IN_<NAME>` (canonical) and `PI_INPUT_<NAME>` (deprecated) environment variables (uppercased, hyphens become underscores)
+- `InputEnvVars()` converts resolved inputs to `PI_IN_*` + `PI_INPUT_*` env vars in sorted key order; both prefixes are always set for backward compatibility
+- `pi info` shows `→ $PI_IN_<NAME>` next to each input spec
 - `run:` steps support `with:` to pass named inputs to the called automation
 - `pi run --with key=value` is a repeatable flag parsed by `parseWithFlags()`
 - `pi.yaml` shortcuts support `with:` mapping with `$1`, `$2` positional references
@@ -691,7 +692,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 819 (140 automation + 42 builtins + 75 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 189 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 186 integration)
+Total tests: 822 (140 automation + 42 builtins + 75 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 191 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 187 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -726,7 +727,7 @@ tests/integration/
   docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
   pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)
   version_test.go                 3 tests — version: --version flag, version subcommand, flag and subcommand match
-  inputs_test.go                  8 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, list INPUTS column
+  inputs_test.go                  9 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, info env var prefix, list INPUTS column
   info_test.go                    4 tests — info command: basic automation, with inputs, not-found, no args
   conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
   builtins_test.go                25 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs)

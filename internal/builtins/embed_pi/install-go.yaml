@@ -11,12 +11,12 @@ install:
     - bash: |
         CURRENT=$(go version 2>/dev/null | awk '{print $3}' | sed 's/^go//')
         MAJOR_MINOR=$(echo "$CURRENT" | cut -d. -f1,2)
-        [ "$MAJOR_MINOR" = "$PI_INPUT_VERSION" ]
+        [ "$MAJOR_MINOR" = "$PI_IN_VERSION" ]
 
   run:
-    - bash: mise install "go@$PI_INPUT_VERSION" && mise use "go@$PI_INPUT_VERSION"
+    - bash: mise install "go@$PI_IN_VERSION" && mise use "go@$PI_IN_VERSION"
       if: command.mise
-    - bash: brew install "go@$PI_INPUT_VERSION"
+    - bash: brew install "go@$PI_IN_VERSION"
       if: command.brew and not command.mise
     - bash: |
         echo "no suitable installer found (tried mise, brew)" >&2

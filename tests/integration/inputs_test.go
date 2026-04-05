@@ -88,6 +88,20 @@ func TestInputs_RunStepWithWith(t *testing.T) {
 	}
 }
 
+func TestInputs_InfoShowsEnvVarPrefix(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "inputs")
+	out, code := runPi(t, dir, "info", "greet")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "$PI_IN_NAME") {
+		t.Errorf("expected $PI_IN_NAME in info output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "$PI_IN_GREETING") {
+		t.Errorf("expected $PI_IN_GREETING in info output, got:\n%s", out)
+	}
+}
+
 func TestInputs_List_ShowsInputs(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
 	out, code := runPi(t, dir, "list")

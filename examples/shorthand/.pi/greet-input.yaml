@@ -1,5 +1,5 @@
 description: Greet with a name
-bash: echo "Hello, $PI_INPUT_NAME!"
+bash: echo "Hello, $PI_IN_NAME!"
 inputs:
   name:
     type: string

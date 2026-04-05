@@ -98,7 +98,9 @@ func (a *Automation) ResolveInputs(withArgs map[string]string, positionalArgs []
 	return resolved, nil
 }
 
-// InputEnvVars converts resolved input values to PI_INPUT_<NAME> env var format.
+// InputEnvVars converts resolved input values to env var format.
+// Both PI_IN_<NAME> (canonical) and PI_INPUT_<NAME> (deprecated) are set
+// for each input to maintain backward compatibility.
 // Keys are sorted alphabetically for deterministic output.
 func InputEnvVars(resolved map[string]string) []string {
 	if len(resolved) == 0 {
@@ -109,10 +111,12 @@ func InputEnvVars(resolved map[string]string) []string {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	vars := make([]string, 0, len(resolved))
+	vars := make([]string, 0, len(resolved)*2)
 	for _, k := range keys {
-		envKey := "PI_INPUT_" + strings.ToUpper(strings.ReplaceAll(k, "-", "_"))
-		vars = append(vars, envKey+"="+resolved[k])
+		suffix := strings.ToUpper(strings.ReplaceAll(k, "-", "_"))
+		val := resolved[k]
+		vars = append(vars, "PI_IN_"+suffix+"="+val)
+		vars = append(vars, "PI_INPUT_"+suffix+"="+val)
 	}
 	return vars
 }

@@ -11,12 +11,12 @@ install:
     - bash: |
         CURRENT=$(node --version 2>/dev/null | sed 's/^v//')
         MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-        [ "$MAJOR" = "$PI_INPUT_VERSION" ]
+        [ "$MAJOR" = "$PI_IN_VERSION" ]
 
   run:
-    - bash: mise install "node@$PI_INPUT_VERSION" && mise use "node@$PI_INPUT_VERSION"
+    - bash: mise install "node@$PI_IN_VERSION" && mise use "node@$PI_IN_VERSION"
       if: command.mise
-    - bash: brew install "node@$PI_INPUT_VERSION"
+    - bash: brew install "node@$PI_IN_VERSION"
       if: command.brew and not command.mise
     - bash: |
         echo "no suitable installer found (tried mise, brew)" >&2

@@ -362,19 +362,19 @@ func TestDiscover_InstallPythonAcceptsVersionInput(t *testing.T) {
 	}
 	testPhase := a.Install.Test
 	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
-			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
+			t.Error("expected test phase to reference PI_IN_VERSION")
 		}
 	} else if len(testPhase.Steps) > 0 {
 		found := false
 		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+			if strings.Contains(s.Value, "PI_IN_VERSION") {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+			t.Error("expected test phase steps to reference PI_IN_VERSION")
 		}
 	}
 }
@@ -405,19 +405,19 @@ func TestDiscover_InstallNodeAcceptsVersionInput(t *testing.T) {
 	}
 	testPhase := a.Install.Test
 	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
-			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
+			t.Error("expected test phase to reference PI_IN_VERSION")
 		}
 	} else if len(testPhase.Steps) > 0 {
 		found := false
 		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+			if strings.Contains(s.Value, "PI_IN_VERSION") {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+			t.Error("expected test phase steps to reference PI_IN_VERSION")
 		}
 	}
 }
@@ -448,19 +448,19 @@ func TestDiscover_InstallGoAcceptsVersionInput(t *testing.T) {
 	}
 	testPhase := a.Install.Test
 	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
-			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
+			t.Error("expected test phase to reference PI_IN_VERSION")
 		}
 	} else if len(testPhase.Steps) > 0 {
 		found := false
 		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+			if strings.Contains(s.Value, "PI_IN_VERSION") {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+			t.Error("expected test phase steps to reference PI_IN_VERSION")
 		}
 	}
 }
@@ -491,19 +491,19 @@ func TestDiscover_InstallRustAcceptsVersionInput(t *testing.T) {
 	}
 	testPhase := a.Install.Test
 	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_INPUT_VERSION") {
-			t.Error("expected test phase to reference PI_INPUT_VERSION")
+		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
+			t.Error("expected test phase to reference PI_IN_VERSION")
 		}
 	} else if len(testPhase.Steps) > 0 {
 		found := false
 		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_INPUT_VERSION") {
+			if strings.Contains(s.Value, "PI_IN_VERSION") {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Error("expected test phase steps to reference PI_INPUT_VERSION")
+			t.Error("expected test phase steps to reference PI_IN_VERSION")
 		}
 	}
 }
@@ -750,8 +750,8 @@ func TestDiscover_CursorInstallExtensionsUsesInput(t *testing.T) {
 
 	a := result.Automations["cursor/install-extensions"]
 	script := a.Steps[0].Value
-	if !strings.Contains(script, "PI_INPUT_EXTENSIONS") {
-		t.Error("expected script to use PI_INPUT_EXTENSIONS env var")
+	if !strings.Contains(script, "PI_IN_EXTENSIONS") {
+		t.Error("expected script to use PI_IN_EXTENSIONS env var")
 	}
 }
 
@@ -871,8 +871,8 @@ func TestDiscover_GitInstallHooksUsesInput(t *testing.T) {
 
 	a := result.Automations["git/install-hooks"]
 	script := a.Steps[0].Value
-	if !strings.Contains(script, "PI_INPUT_SOURCE") {
-		t.Error("expected script to use PI_INPUT_SOURCE env var")
+	if !strings.Contains(script, "PI_IN_SOURCE") {
+		t.Error("expected script to use PI_IN_SOURCE env var")
 	}
 }
 

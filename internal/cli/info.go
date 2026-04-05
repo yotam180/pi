@@ -249,7 +249,8 @@ func printInputSpec(name string, spec automation.InputSpec, out io.Writer) {
 	}
 
 	meta := strings.Join(parts, ", ")
-	fmt.Fprintf(out, "  %s (%s)\n", name, meta)
+	envName := "PI_IN_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+	fmt.Fprintf(out, "  %s (%s) → $%s\n", name, meta, envName)
 
 	if spec.Description != "" {
 		fmt.Fprintf(out, "      %s\n", spec.Description)

@@ -8,6 +8,6 @@ inputs:
     description: Path to the marker file
 
 install:
-  test: test -f "$PI_INPUT_PATH"
-  run: touch "$PI_INPUT_PATH"
+  test: test -f "$PI_IN_PATH"
+  run: touch "$PI_IN_PATH"
   version: echo "1.0.0"

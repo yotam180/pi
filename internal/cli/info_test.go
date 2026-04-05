@@ -107,17 +107,17 @@ func TestShowAutomationInfo_WithInputs(t *testing.T) {
 	if !strings.Contains(out, "Inputs:") {
 		t.Errorf("expected Inputs header, got:\n%s", out)
 	}
-	if !strings.Contains(out, "service (string, required)") {
-		t.Errorf("expected required input, got:\n%s", out)
+	if !strings.Contains(out, "service (string, required) → $PI_IN_SERVICE") {
+		t.Errorf("expected required input with env var, got:\n%s", out)
 	}
 	if !strings.Contains(out, "The service to target") {
 		t.Errorf("expected input description, got:\n%s", out)
 	}
-	if !strings.Contains(out, `tail (string, optional, default: "200")`) {
-		t.Errorf("expected optional input with default, got:\n%s", out)
+	if !strings.Contains(out, `tail (string, optional, default: "200") → $PI_IN_TAIL`) {
+		t.Errorf("expected optional input with default and env var, got:\n%s", out)
 	}
-	if !strings.Contains(out, "verbose (string, optional)") {
-		t.Errorf("expected optional input without default, got:\n%s", out)
+	if !strings.Contains(out, "verbose (string, optional) → $PI_IN_VERBOSE") {
+		t.Errorf("expected optional input without default with env var, got:\n%s", out)
 	}
 }
 
