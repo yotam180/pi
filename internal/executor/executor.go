@@ -44,7 +44,7 @@ type Executor struct {
 	// used to detect circular run: dependencies.
 	callStack []string
 
-	// lastPipeBuffer holds captured stdout from the last pipe_to:next step.
+	// lastPipeBuffer holds captured stdout from the last pipe: true step.
 	lastPipeBuffer *bytes.Buffer
 
 	// RuntimeEnv overrides the default runtime environment for predicate resolution.
@@ -83,7 +83,7 @@ func (e *ExitError) Error() string {
 
 // Run executes all steps of the given automation in order.
 // args are passed to bash steps as $1, $2, etc., or mapped to declared inputs.
-// When a step declares pipe_to: next, its stdout is captured and fed as stdin
+// When a step declares pipe: true, its stdout is captured and fed as stdin
 // to the following step.
 func (e *Executor) Run(a *automation.Automation, args []string) error {
 	return e.RunWithInputs(a, args, nil)
@@ -138,7 +138,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 				return fmt.Errorf("automation %q step[%d] if: %w", a.Name, i, err)
 			}
 			if skip {
-				if step.PipeTo == "next" && i < len(a.Steps)-1 {
+				if step.Pipe && i < len(a.Steps)-1 {
 					if pipedInput != nil {
 						buf := &bytes.Buffer{}
 						if _, err := io.Copy(buf, pipedInput); err != nil {
@@ -154,7 +154,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		}
 
 		if step.IsFirst() {
-			isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
+			isPipeSrc := step.Pipe && i < len(a.Steps)-1
 			if err := e.execFirstBlock(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
 				return err
 			}
@@ -177,7 +177,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 			e.printer().StepTrace(string(step.Type), step.Value)
 		}
 
-		isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
+		isPipeSrc := step.Pipe && i < len(a.Steps)-1
 		if suppress {
 			if err := e.execStepSuppressed(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
 				return err

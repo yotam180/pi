@@ -3,6 +3,6 @@ description: Pipe JSON data through a TypeScript formatter file
 
 steps:
   - run: data/generate
-    pipe_to: next
+    pipe: true
 
   - typescript: format.ts

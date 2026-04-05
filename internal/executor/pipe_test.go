@@ -145,7 +145,7 @@ func TestPipe_LastStepPipeToNextIsNoop(t *testing.T) {
 	dir := t.TempDir()
 	a := newAutomation("test",
 		pipedBashStep("echo piped-first"),
-		automation.Step{Type: automation.StepTypeBash, Value: "echo last-step", PipeTo: "next"},
+		automation.Step{Type: automation.StepTypeBash, Value: "echo last-step", Pipe: true},
 	)
 	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
 

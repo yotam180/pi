@@ -7,7 +7,7 @@ steps:
       echo "alice,95"
       echo "bob,87"
       echo "charlie,92"
-    pipe_to: next
+    pipe: true
 
   - python: |
       import sys, json
@@ -18,7 +18,7 @@ steps:
           values = line.split(",")
           records.append(dict(zip(header, values)))
       print(json.dumps(records))
-    pipe_to: next
+    pipe: true
 
   - typescript: |
       const input = require("fs").readFileSync("/dev/stdin", "utf-8");

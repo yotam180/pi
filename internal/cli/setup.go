@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
@@ -53,6 +54,9 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 }
 
 func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
+	automation.WarnWriter = stderr
+	defer func() { automation.WarnWriter = nil }()
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getting working directory: %w", err)

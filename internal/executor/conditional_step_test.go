@@ -156,8 +156,8 @@ func TestConditionalStep_MixedConditionalAndUnconditional(t *testing.T) {
 func TestConditionalStep_PipeSkipped_PassesThrough(t *testing.T) {
 	dir := t.TempDir()
 	a := newAutomation("test",
-		automation.Step{Type: automation.StepTypeBash, Value: "echo hello", PipeTo: "next"},
-		automation.Step{Type: automation.StepTypeBash, Value: "tr a-z A-Z", PipeTo: "next", If: "os.linux"},
+		automation.Step{Type: automation.StepTypeBash, Value: "echo hello", Pipe: true},
+		automation.Step{Type: automation.StepTypeBash, Value: "tr a-z A-Z", Pipe: true, If: "os.linux"},
 		bashStep("cat"),
 	)
 	exec, stdout, _ := newExecutorWithEnv(dir, newDiscovery(nil), fakeRuntimeEnv("darwin"))
@@ -176,7 +176,7 @@ func TestConditionalStep_PipeSkipped_PassesThrough(t *testing.T) {
 func TestConditionalStep_PipeSkipped_NoPriorPipe(t *testing.T) {
 	dir := t.TempDir()
 	a := newAutomation("test",
-		automation.Step{Type: automation.StepTypeBash, Value: "echo skipped-source", PipeTo: "next", If: "os.linux"},
+		automation.Step{Type: automation.StepTypeBash, Value: "echo skipped-source", Pipe: true, If: "os.linux"},
 		bashStep("echo fallback"),
 	)
 	exec, stdout, _ := newExecutorWithEnv(dir, newDiscovery(nil), fakeRuntimeEnv("darwin"))
@@ -194,9 +194,9 @@ func TestConditionalStep_PipeSkipped_NoPriorPipe(t *testing.T) {
 func TestConditionalStep_PipeSkipped_MultipleSkipped(t *testing.T) {
 	dir := t.TempDir()
 	a := newAutomation("test",
-		automation.Step{Type: automation.StepTypeBash, Value: "echo data", PipeTo: "next"},
-		automation.Step{Type: automation.StepTypeBash, Value: "tr a-z A-Z", PipeTo: "next", If: "os.linux"},
-		automation.Step{Type: automation.StepTypeBash, Value: "rev", PipeTo: "next", If: "os.windows"},
+		automation.Step{Type: automation.StepTypeBash, Value: "echo data", Pipe: true},
+		automation.Step{Type: automation.StepTypeBash, Value: "tr a-z A-Z", Pipe: true, If: "os.linux"},
+		automation.Step{Type: automation.StepTypeBash, Value: "rev", Pipe: true, If: "os.windows"},
 		bashStep("cat"),
 	)
 	exec, stdout, _ := newExecutorWithEnv(dir, newDiscovery(nil), fakeRuntimeEnv("darwin"))

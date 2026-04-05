@@ -84,7 +84,7 @@ description: Stream container logs through the log formatter
 
 steps:
   - bash: docker-compose logs -f --tail 200
-    pipe_to: next
+    pipe: true
 
   - python: logs-formatted.py     # path relative to this automation file
 ```
@@ -123,7 +123,7 @@ steps:
   - bash: go test ./...
 ```
 
-All step types work as shorthands: `bash:`, `python:`, `typescript:`, `run:`. Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe_to:`) can be used alongside the shorthand key at the top level:
+All step types work as shorthands: `bash:`, `python:`, `typescript:`, `run:`. Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe:`) can be used alongside the shorthand key at the top level:
 
 ```yaml
 # .pi/build-linux.yaml
@@ -149,7 +149,9 @@ Having both a top-level step key and `steps:` (or `install:`) in the same file i
 | `typescript` | Inline script or a `.ts` file path (run via `tsx`)     |
 | `run`        | Call another automation by name (local or marketplace) |
 
-Steps can pass data to the next step using `pipe_to: next`. Full inter-step communication (env, named outputs) is planned for a future iteration.
+Steps can pass data to the next step using `pipe: true`. Full inter-step communication (env, named outputs) is planned for a future iteration.
+
+> **Deprecation:** `pipe_to: next` is the legacy form and still works, but emits a deprecation warning. Use `pipe: true` instead.
 
 ### Step Description (`description:`)
 
@@ -159,7 +161,7 @@ Steps can declare an optional `description:` field to document what the step doe
 steps:
   - bash: docker-compose logs -f --tail 200
     description: Stream container logs
-    pipe_to: next
+    pipe: true
 
   - python: logs-formatted.py
     description: Format and filter log output
@@ -223,7 +225,7 @@ The value is a Go-style duration string (e.g., `30s`, `5m`, `1h30m`). Timeout mu
 
 Timeout works with all subprocess step types (`bash`, `python`, `typescript`). It cannot be used on `run:` steps (set timeouts on the target automation's own steps instead) or `parent_shell` steps (they don't execute as subprocesses).
 
-Timeout is compatible with all other step fields: `env:`, `dir:`, `silent:`, `if:`, and `pipe_to`. When a step with `if:` is skipped, no timeout applies. When a step with `silent: true` times out, the timeout error still propagates.
+Timeout is compatible with all other step fields: `env:`, `dir:`, `silent:`, `if:`, and `pipe: true`. When a step with `if:` is skipped, no timeout applies. When a step with `silent: true` times out, the timeout error still propagates.
 
 ### Step Trace Lines
 
@@ -249,7 +251,7 @@ steps:
   - bash: go build -o dist/app ./...
 ```
 
-The silent step still executes — only its output is suppressed. Piped data (`pipe_to: next`) still flows through silent steps.
+The silent step still executes — only its output is suppressed. Piped data (`pipe: true`) still flows through silent steps.
 
 ### Loud Mode (`--loud`)
 
@@ -280,7 +282,7 @@ When `parent_shell: true` is set:
 
 **Requirements**:
 - Only valid on `bash` steps
-- Cannot be combined with `pipe_to`
+- Cannot be combined with `pipe: true`
 - Works automatically when invoked via a PI shell shortcut or the global `pi()` wrapper (both set `PI_PARENT_EVAL_FILE`)
 - If `PI_PARENT_EVAL_FILE` is not set (raw binary call without the shell wrapper), the step is skipped with a warning: run `pi shell` to install shell integration
 
@@ -359,7 +361,7 @@ steps:
 
 Supported predicates: `os.macos`, `os.linux`, `os.windows`, `os.arch.arm64`, `os.arch.amd64`, `env.<NAME>`, `command.<name>`, `file.exists("<path>")`, `dir.exists("<path>")`, `shell.zsh`, `shell.bash`. Combine with `and`, `or`, `not`, and parentheses.
 
-When a step with `pipe_to: next` is skipped, any piped data passes through to the next step unchanged.
+When a step with `pipe: true` is skipped, any piped data passes through to the next step unchanged.
 
 ### First-Match Blocks (`first:`)
 
@@ -381,7 +383,7 @@ This replaces the common pattern of compounding negation chains (`if: command.br
 
 `first:` is a generic step-level construct usable anywhere a step appears: in `steps:`, in `install.run:`, in `install.test:`. It is not specific to installers.
 
-At the block level, `first:` supports `description:`, `if:` (to conditionally skip the entire block), and `pipe_to: next` (to pipe the matched sub-step's output). Sub-steps inside `first:` support all normal step fields: `env:`, `dir:`, `timeout:`, `silent:`.
+At the block level, `first:` supports `description:`, `if:` (to conditionally skip the entire block), and `pipe: true` (to pipe the matched sub-step's output). Sub-steps inside `first:` support all normal step fields: `env:`, `dir:`, `timeout:`, `silent:`.
 
 If all sub-steps have `if:` conditions and none match, the block is silently skipped (consistent with how a skipped `if:` step behaves). Nested `first:` blocks are not allowed.
 

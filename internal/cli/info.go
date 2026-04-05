@@ -109,7 +109,7 @@ func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
 func printStepsDetail(steps []automation.Step, out io.Writer) {
 	hasDetails := false
 	for _, s := range steps {
-		if s.IsFirst() || s.If != "" || len(s.Env) > 0 || s.Silent || s.ParentShell || s.Dir != "" || s.Timeout > 0 || s.Description != "" {
+		if s.IsFirst() || s.If != "" || len(s.Env) > 0 || s.Silent || s.ParentShell || s.Dir != "" || s.Timeout > 0 || s.Description != "" || s.Pipe {
 			hasDetails = true
 			break
 		}
@@ -128,6 +128,9 @@ func printStepsDetail(steps []automation.Step, out io.Writer) {
 		var annotations []string
 		if s.If != "" {
 			annotations = append(annotations, fmt.Sprintf("if: %s", s.If))
+		}
+		if s.Pipe {
+			annotations = append(annotations, "pipe")
 		}
 		if s.Silent {
 			annotations = append(annotations, "silent")
@@ -165,6 +168,9 @@ func printFirstBlockDetail(index int, step automation.Step, out io.Writer) {
 	var annotations []string
 	if step.If != "" {
 		annotations = append(annotations, fmt.Sprintf("if: %s", step.If))
+	}
+	if step.Pipe {
+		annotations = append(annotations, "pipe")
 	}
 	if len(annotations) > 0 {
 		fmt.Fprintf(out, "  %d. %s  [%s]\n", index+1, header, strings.Join(annotations, "; "))

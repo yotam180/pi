@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
@@ -76,6 +77,9 @@ func parseWithFlags(flags []string) (map[string]string, error) {
 
 // runAutomation resolves and executes an automation. Extracted for testability.
 func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent, loud bool, stdout, stderr io.Writer) error {
+	automation.WarnWriter = stderr
+	defer func() { automation.WarnWriter = nil }()
+
 	root, err := project.FindRoot(startDir)
 	if err != nil {
 		return err

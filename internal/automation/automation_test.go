@@ -91,11 +91,11 @@ steps:
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("step[0].PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
-	if a.Steps[1].PipeTo != "" {
-		t.Errorf("step[1].PipeTo = %q, want empty", a.Steps[1].PipeTo)
+	if a.Steps[1].Pipe {
+		t.Error("step[1].Pipe = true, want false")
 	}
 }
 
@@ -480,8 +480,25 @@ pipe_to: next
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("pipe_to = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
+	}
+}
+
+func TestLoad_ShorthandWithPipeTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-pipe-true.yaml", `
+description: Pipe output
+bash: echo "data"
+pipe: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 

@@ -45,11 +45,11 @@ func typescriptStep(value string) automation.Step {
 }
 
 func pipedBashStep(value string) automation.Step {
-	return automation.Step{Type: automation.StepTypeBash, Value: value, PipeTo: "next"}
+	return automation.Step{Type: automation.StepTypeBash, Value: value, Pipe: true}
 }
 
 func pipedPythonStep(value string) automation.Step {
-	return automation.Step{Type: automation.StepTypePython, Value: value, PipeTo: "next"}
+	return automation.Step{Type: automation.StepTypePython, Value: value, Pipe: true}
 }
 
 func bashStepIf(value, cond string) automation.Step {

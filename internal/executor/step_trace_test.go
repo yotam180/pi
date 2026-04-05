@@ -141,7 +141,7 @@ func TestStepTrace_SilentPipeCapture(t *testing.T) {
 		Type:   automation.StepTypeBash,
 		Value:  "echo piped-data",
 		Silent: true,
-		PipeTo: "next",
+		Pipe: true,
 	}
 	receiver := bashStep("cat")
 	a := newAutomation("test", silentPiped, receiver)

@@ -15,7 +15,7 @@ func firstStep(subSteps ...automation.Step) automation.Step {
 }
 
 func firstStepPiped(subSteps ...automation.Step) automation.Step {
-	return automation.Step{First: subSteps, PipeTo: "next"}
+	return automation.Step{First: subSteps, Pipe: true}
 }
 
 func firstStepIf(cond string, subSteps ...automation.Step) automation.Step {

@@ -68,6 +68,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		Timeout    string            `yaml:"timeout"`
 		Silent     bool              `yaml:"silent"`
 		PipeTo     string            `yaml:"pipe_to"`
+		Pipe       *bool             `yaml:"pipe"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -105,6 +106,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		shorthand.Timeout = raw.Timeout
 		shorthand.Silent = raw.Silent
 		shorthand.PipeTo = raw.PipeTo
+		shorthand.Pipe = raw.Pipe
 		step, err := shorthand.toStep(0)
 		if err != nil {
 			return err

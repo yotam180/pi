@@ -3,10 +3,10 @@ description: Pipe passes through a skipped step
 
 steps:
   - bash: echo "hello world"
-    pipe_to: next
+    pipe: true
 
   - bash: tr a-z A-Z
-    pipe_to: next
+    pipe: true
     if: os.windows
 
   - bash: cat

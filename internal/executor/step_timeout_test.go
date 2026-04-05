@@ -93,7 +93,7 @@ func TestStep_Timeout_StopsExecution(t *testing.T) {
 func TestStep_Timeout_WithPipeTo(t *testing.T) {
 	dir := t.TempDir()
 	step := bashStepWithTimeout(`echo "piped data"`, 5*time.Second)
-	step.PipeTo = "next"
+	step.Pipe = true
 	a := newAutomation("pipe-timeout",
 		step,
 		bashStep(`cat`),

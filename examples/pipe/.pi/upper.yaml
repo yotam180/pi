@@ -3,6 +3,6 @@ description: Echo a message and pipe it to uppercase
 
 steps:
   - bash: echo "hello from pipe"
-    pipe_to: next
+    pipe: true
 
   - bash: tr a-z A-Z

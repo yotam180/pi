@@ -3,6 +3,6 @@ description: Read stdin and format it into a numbered box using a Python script 
 
 steps:
   - bash: printf "alpha\nbeta\ngamma\ndelta"
-    pipe_to: next
+    pipe: true
 
   - python: transform.py

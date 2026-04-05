@@ -2,6 +2,7 @@ package automation
 
 import (
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/vyper-tooling/pi/internal/conditions"
@@ -35,7 +36,7 @@ func (s StepType) IsValid() bool {
 type Step struct {
 	Type        StepType          `yaml:"-"`
 	Value       string            `yaml:"-"`
-	PipeTo      string            `yaml:"pipe_to"`
+	Pipe        bool              `yaml:"-"`
 	With        map[string]string `yaml:"-"`
 	If          string            `yaml:"-"`
 	Env         map[string]string `yaml:"-"`
@@ -57,14 +58,20 @@ func (s Step) IsFirst() bool {
 	return s.First != nil
 }
 
+// WarnWriter is the writer used for deprecation warnings during YAML parsing.
+// Set this before loading automations to capture warnings. Defaults to nil (no warnings).
+var WarnWriter io.Writer
+
 // stepRaw is the intermediate representation used during YAML unmarshalling.
 // Each step is a mapping that may contain one of the step type keys, or a first: block.
+// Piping is expressed as pipe: true and/or deprecated pipe_to: next; resolvePipe() normalizes them.
 type stepRaw struct {
 	Bash        *string           `yaml:"bash"`
 	Run         *string           `yaml:"run"`
 	Python      *string           `yaml:"python"`
 	TypeScript  *string           `yaml:"typescript"`
 	PipeTo      string            `yaml:"pipe_to"`
+	Pipe        *bool             `yaml:"pipe"`
 	With        map[string]string `yaml:"with"`
 	If          string            `yaml:"if"`
 	Env         map[string]string `yaml:"env"`
@@ -127,10 +134,15 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		return Step{}, fmt.Errorf("step[%d]: unknown step type %q", index, s.t)
 	}
 
+	pipe, err := sr.resolvePipe(index)
+	if err != nil {
+		return Step{}, err
+	}
+
 	step := Step{
 		Type:        s.t,
 		Value:       s.v,
-		PipeTo:      sr.PipeTo,
+		Pipe:        pipe,
 		If:          sr.If,
 		Env:         sr.Env,
 		Silent:      sr.Silent,
@@ -148,8 +160,8 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		if s.t != StepTypeBash {
 			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' is only valid on 'bash' steps", index)
 		}
-		if sr.PipeTo != "" {
-			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' cannot be combined with 'pipe_to'", index)
+		if pipe {
+			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' cannot be combined with 'pipe'", index)
 		}
 	}
 	if sr.Timeout != "" {
@@ -211,9 +223,14 @@ func (sr *stepRaw) toFirstStep(index int) (Step, error) {
 		subSteps = append(subSteps, s)
 	}
 
+	pipe, err := sr.resolvePipe(index)
+	if err != nil {
+		return Step{}, err
+	}
+
 	return Step{
 		First:       subSteps,
-		PipeTo:      sr.PipeTo,
+		Pipe:        pipe,
 		If:          sr.If,
 		Description: sr.Description,
 	}, nil
@@ -263,6 +280,35 @@ type InstallSpec struct {
 // HasVerify returns true if an explicit verify phase was declared.
 func (s *InstallSpec) HasVerify() bool {
 	return s.Verify != nil
+}
+
+// resolvePipe normalises pipe_to: next (deprecated) and pipe: true into a single bool.
+func (sr *stepRaw) resolvePipe(index int) (bool, error) {
+	hasPipeTo := sr.PipeTo != ""
+	hasPipe := sr.Pipe != nil
+
+	if hasPipeTo && hasPipe {
+		return false, fmt.Errorf("step[%d]: cannot specify both 'pipe' and 'pipe_to' (use 'pipe: true')", index)
+	}
+
+	if hasPipeTo {
+		if sr.PipeTo != "next" {
+			return false, fmt.Errorf("step[%d]: pipe_to must be \"next\", got %q", index, sr.PipeTo)
+		}
+		if WarnWriter != nil {
+			fmt.Fprintf(WarnWriter, "warning: step[%d]: 'pipe_to: next' is deprecated, use 'pipe: true'\n", index)
+		}
+		return true, nil
+	}
+
+	if hasPipe {
+		if !*sr.Pipe {
+			return false, nil
+		}
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // validateSteps checks that all steps in a slice have valid types and if: expressions.

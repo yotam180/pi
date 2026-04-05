@@ -1,6 +1,7 @@
 package automation
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -90,8 +91,8 @@ steps:
 	if a.Steps[0].If != "os.macos" {
 		t.Errorf("step[0].If = %q, want %q", a.Steps[0].If, "os.macos")
 	}
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("step[0].PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 
@@ -200,8 +201,8 @@ steps:
 	if a.Steps[0].If != "os.macos" {
 		t.Errorf("If = %q, want %q", a.Steps[0].If, "os.macos")
 	}
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 
@@ -842,8 +843,8 @@ steps:
 	if err == nil {
 		t.Fatal("expected error for parent_shell with pipe_to")
 	}
-	if !strings.Contains(err.Error(), "pipe_to") {
-		t.Errorf("error should mention pipe_to, got: %v", err)
+	if !strings.Contains(err.Error(), "pipe") {
+		t.Errorf("error should mention pipe, got: %v", err)
 	}
 }
 
@@ -1186,8 +1187,8 @@ steps:
 	if a.Steps[0].Timeout.Seconds() != 5 {
 		t.Errorf("timeout = %v, want 5s", a.Steps[0].Timeout)
 	}
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("pipe_to = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 
@@ -1335,8 +1336,8 @@ steps:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a.Steps[0].PipeTo != "next" {
-		t.Errorf("PipeTo = %q, want %q", a.Steps[0].PipeTo, "next")
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 
@@ -1535,6 +1536,154 @@ steps:
 	}
 	if a.Steps[2].Type != StepTypeBash {
 		t.Errorf("step[2] should be bash, got %s", a.Steps[2].Type)
+	}
+}
+
+// --- pipe: true tests ---
+
+func TestLoad_PipeTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-true.yaml", `
+description: Pipe true test
+steps:
+  - bash: echo data
+    pipe: true
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
+	}
+	if a.Steps[1].Pipe {
+		t.Error("step[1].Pipe = true, want false")
+	}
+}
+
+func TestLoad_PipeFalseExplicit(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-false.yaml", `
+description: Pipe false test
+steps:
+  - bash: echo data
+    pipe: false
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = true, want false")
+	}
+}
+
+func TestLoad_PipeToNextDeprecationWarning(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-deprecated.yaml", `
+description: Deprecated pipe_to
+steps:
+  - bash: echo data
+    pipe_to: next
+  - bash: cat
+`)
+
+	warn := &bytes.Buffer{}
+	WarnWriter = warn
+	defer func() { WarnWriter = nil }()
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
+	}
+	if !strings.Contains(warn.String(), "deprecated") {
+		t.Errorf("expected deprecation warning, got: %q", warn.String())
+	}
+}
+
+func TestLoad_PipeAndPipeTo_Error(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-both.yaml", `
+description: Both pipe and pipe_to
+steps:
+  - bash: echo data
+    pipe: true
+    pipe_to: next
+  - bash: cat
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error when both pipe and pipe_to are specified")
+	}
+	if !strings.Contains(err.Error(), "cannot specify both") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_PipeToInvalidValue_Error(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-bad.yaml", `
+description: Bad pipe_to value
+steps:
+  - bash: echo data
+    pipe_to: all
+  - bash: cat
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid pipe_to value")
+	}
+	if !strings.Contains(err.Error(), `pipe_to must be "next"`) {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_ParentShellWithPipeTrue_Error(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad-pipe-parent.yaml", `
+description: Invalid parent_shell with pipe
+steps:
+  - bash: echo test
+    parent_shell: true
+    pipe: true
+  - bash: cat
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for parent_shell with pipe")
+	}
+	if !strings.Contains(err.Error(), "pipe") {
+		t.Errorf("error should mention pipe, got: %v", err)
+	}
+}
+
+func TestLoad_FirstBlock_WithPipeTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-pipe-true.yaml", `
+description: Piped first
+steps:
+  - first:
+      - bash: echo data
+    pipe: true
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !a.Steps[0].Pipe {
+		t.Error("step[0].Pipe = false, want true")
 	}
 }
 

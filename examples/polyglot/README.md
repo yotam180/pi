@@ -1,13 +1,13 @@
 # Polyglot PI Example
 
-Demonstrates mixing bash, Python, and TypeScript steps with pipe support (`pipe_to: next`).
+Demonstrates mixing bash, Python, and TypeScript steps with pipe support (`pipe: true`).
 
 ## Automations
 
 | Name | Description | Features Shown |
 |------|-------------|----------------|
 | `text/reverse` | Reverse a string | Inline Python step, argument passing |
-| `text/transform` | Format text into a numbered box | `.py` file step (script beside automation), `pipe_to: next` |
+| `text/transform` | Format text into a numbered box | `.py` file step (script beside automation), `pipe: true` |
 | `data/generate` | Generate JSON data | Inline TypeScript step |
 | `data/format` | Format a leaderboard from JSON | `.ts` file step, `run:` step piped to TypeScript |
 | `pipeline/etl` | CSV → JSON → formatted output | Three-step pipe chain: bash → Python → TypeScript |
