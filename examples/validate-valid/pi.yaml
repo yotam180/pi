@@ -1,0 +1,8 @@
+project: validate-valid
+
+shortcuts:
+  greet: hello
+  build: build
+
+setup:
+  - run: hello

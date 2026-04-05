@@ -1,0 +1,5 @@
+name: broken-chain
+description: Has a run step pointing to a missing automation
+steps:
+  - bash: echo "step 1"
+  - run: ghost-automation

@@ -433,6 +433,7 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | `pi shell list`               | List all installed shortcut files across all projects    |
 | `pi list`                     | List all available automations in the project            |
 | `pi doctor`                   | Check requirement health for all automations             |
+| `pi validate`                 | Statically validate all config and automation files      |
 | `pi version`                  | Print the PI version                                     |
 | `pi --version`                | Same as `pi version`                                     |
 | `pi add org/package@version`  | Download and cache a marketplace automation              |

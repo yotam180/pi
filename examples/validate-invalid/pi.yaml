@@ -1,0 +1,9 @@
+project: validate-invalid
+
+shortcuts:
+  bad: nonexistent-automation
+  ok: hello
+
+setup:
+  - run: also-nonexistent
+  - run: hello

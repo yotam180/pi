@@ -40,8 +40,10 @@ internal/
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
-    root_test.go                   CLI tests (10 tests — includes doctor subcommand)
+    validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; reports all errors; exit 0/1
+    root_test.go                   CLI tests (12 tests — includes doctor and validate subcommands)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
+    validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
     info_test.go                   pi info tests (17 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, and step description display)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
@@ -203,6 +205,28 @@ pi doctor
          CheckRequirementForDoctor() → CheckResult per requirement
        Prints per-automation health table with ✓/✗ icons
        Exit 0 (all satisfied) or 1 (any missing)
+```
+
+```
+pi validate
+  │
+  ├─ CLI (internal/cli)
+  │    Parses args, gets CWD
+  │
+  ├─ Project (internal/project)
+  │    Walks up from CWD to find pi.yaml → repo root path
+  │
+  ├─ Config (internal/config)
+  │    Loads pi.yaml → ProjectConfig (validates schema)
+  │
+  ├─ Discovery (internal/discovery + internal/builtins)
+  │    discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
+  │
+  └─ Cross-reference validation (internal/cli/validate.go)
+       Checks shortcut targets → automation names
+       Checks setup entry targets → automation names
+       Checks run: step values → automation names (incl. install phases)
+       Collects all errors, prints to stderr, exit 0 or 1
 ```
 
 ## Build
@@ -417,6 +441,17 @@ Makefile                               build, vet, test, test-matrix targets
 - Validation happens after input resolution but before step/install execution
 - `InstallHintFor()` is the exported version of `installHint()` for use by `pi doctor`
 
+### Validate command (`pi validate`)
+- Statically validates all config and automation files without executing anything
+- Validation layers: (1) pi.yaml schema via `config.Load()`, (2) automation discovery via `discoverAll()`, (3) cross-reference checks
+- Cross-reference checks: shortcuts → automations, setup entries → automations, `run:` steps → automations (including install phase steps)
+- Reports all errors (not just the first) with `✗` prefixed lines to stderr
+- Prints summary on success: `✓ Validated N automation(s), M shortcut(s), K setup entry(ies)`
+- Exit code 0 on success, 1 on validation errors (uses `*executor.ExitError{Code: 1}` for CLI exit handling)
+- Built-in automations are included in the resolution target set — `pi:install-python` references are valid
+- Designed for CI pipelines: no interactive prompts, clear exit codes, structured error output
+- No network requests, no command execution — purely static analysis
+
 ### Doctor command (`pi doctor`)
 - Scans all automations (local + built-in), filters to those with `requires:` entries
 - For each automation, checks every requirement using `CheckRequirementForDoctor()` from `internal/executor`
@@ -583,7 +618,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 674 (103 automation + 42 builtins + 63 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 170 executor [across 14 test files] + 4 project + 16 runtimes + 16 shell + 159 integration)
+Total tests: 690 (103 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 170 executor [across 14 test files] + 4 project + 16 runtimes + 16 shell + 164 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -629,3 +664,4 @@ tests/docker/
 - Step visibility tests: `step-visibility` example workspace; default trace lines in stderr, `silent: true` suppresses trace and output, `--loud` overrides silent, all-silent produces no output, all-silent with `--loud` shows everything, `pi info` shows silent annotation
 - Parent shell tests: `parent-shell` example workspace; list automations, parent_shell step writes to eval file, mixed normal + parent_shell steps, error without PI_PARENT_EVAL_FILE, normal automations unaffected, `pi info` shows parent_shell annotation, shell codegen includes eval wrapper and pi-setup helper
 - Step description tests: `step-description` example workspace; list automations, run with descriptions (execution unaffected), `pi info` shows step descriptions below step lines, descriptions combined with annotations (silent, dir), no "Step details" section when no descriptions or annotations present
+- Validate tests: `validate-valid` and `validate-invalid` example workspaces; valid project produces ✓ summary with counts, invalid project produces exit 1 with all errors (broken shortcut, broken setup, broken run step), all 3 error lines reported, basic and builtins projects validate successfully
