@@ -4,7 +4,7 @@
 feature
 
 ## Status
-todo
+done
 
 ## Priority
 high
@@ -173,13 +173,40 @@ For each step type, cover: what it is, how to use it (inline vs file reference),
 9. **Private repos** — Brief overview (SSH / GITHUB_TOKEN). Link to the Private Repos guide for full details.
 
 ## Subtasks
-- [ ] Write `automations.md`
-- [ ] Write `pi-yaml.md`
-- [ ] Write `step-types.md`
-- [ ] Write `shell-shortcuts.md`
-- [ ] Write `packages.md`
-- [ ] Verify all examples against `docs/README.md`
-- [ ] Add cross-links between concept pages and to Reference pages
+- [x] Write `automations.md`
+- [x] Write `pi-yaml.md`
+- [x] Write `step-types.md`
+- [x] Write `shell-shortcuts.md`
+- [x] Write `packages.md`
+- [x] Verify all examples against `docs/README.md`
+- [x] Add cross-links between concept pages and to Reference pages
 
 ## Blocked By
 79-website-scaffold-and-ci
+
+## Implementation Notes
+
+### Session: 2026-04-05
+
+Wrote all five Concepts pages from stubs to full content. Total: ~1113 lines across 5 files.
+
+**Page summaries:**
+
+1. **automations.md** (348 lines) — The largest page. Covers: what an automation is, path-based naming, single-step shorthand (with equivalence to full form), multi-step automations, all step modifiers (env, dir, timeout, silent, if, pipe, description, parent_shell), step trace lines, first: blocks, install: blocks with full lifecycle, automation-level if:, and inputs. Every modifier has a concrete YAML example.
+
+2. **pi-yaml.md** (165 lines) — Covers project:, shortcuts: (with anywhere: true and with:), setup: (bare strings vs object form, conditional entries), packages: (source types, aliases, pi add), and runtimes: (provision modes, manager options).
+
+3. **step-types.md** (179 lines) — For each step type: inline and file reference forms, what PI actually runs at runtime, and important details (python uses $VIRTUAL_ENV/bin/python when active, typescript requires tsx). Covers run: step behavior (no env/dir/timeout inheritance, circular dependency detection). Explains the file path detection heuristic.
+
+4. **shell-shortcuts.md** (180 lines) — Covers: what pi shell does (writes functions + source block), how shortcuts work (cd to root + run), anywhere: true, the global pi() wrapper (with code), pi-setup-<project> helper, the parent shell pattern (problem, solution, requirements, use cases), uninstall/list, and shell completion.
+
+5. **packages.md** (241 lines) — Full package story: why packages, declaring them, source types (GitHub/file), aliases, pi add, resolution order, on-demand fetching (with advisory output), version pinning (with mutable ref warning), running package automations, writing a package (author side), pi-package.yaml, and private repos.
+
+**Cross-links:** All pages link to relevant Reference pages (Conditions reference, Automation YAML reference, pi-package.yaml reference) and to Guide pages (Parent Shell Steps guide, Publishing to GitHub guide, Private Repos guide).
+
+**Quality checks:**
+- All examples verified against `docs/README.md` (source of truth)
+- Website builds successfully with `npm run build` (21 pages, 0 errors)
+- Go project still builds (`go build ./...`)
+- Starlight Pagefind search indexes all 21 pages
+- Uses Starlight's :::note and :::tip callout syntax (consistent with Getting Started pages)
