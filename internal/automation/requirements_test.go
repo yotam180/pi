@@ -13,6 +13,8 @@ description: Test
 requires:
   - python
   - node
+  - go
+  - rust
 steps:
   - bash: echo hello
 `)
@@ -21,14 +23,20 @@ steps:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(a.Requires) != 2 {
-		t.Fatalf("expected 2 requirements, got %d", len(a.Requires))
+	if len(a.Requires) != 4 {
+		t.Fatalf("expected 4 requirements, got %d", len(a.Requires))
 	}
 	if a.Requires[0].Name != "python" || a.Requires[0].Kind != RequirementRuntime || a.Requires[0].MinVersion != "" {
 		t.Errorf("req[0] = %+v, want python runtime with no version", a.Requires[0])
 	}
 	if a.Requires[1].Name != "node" || a.Requires[1].Kind != RequirementRuntime || a.Requires[1].MinVersion != "" {
 		t.Errorf("req[1] = %+v, want node runtime with no version", a.Requires[1])
+	}
+	if a.Requires[2].Name != "go" || a.Requires[2].Kind != RequirementRuntime || a.Requires[2].MinVersion != "" {
+		t.Errorf("req[2] = %+v, want go runtime with no version", a.Requires[2])
+	}
+	if a.Requires[3].Name != "rust" || a.Requires[3].Kind != RequirementRuntime || a.Requires[3].MinVersion != "" {
+		t.Errorf("req[3] = %+v, want rust runtime with no version", a.Requires[3])
 	}
 }
 
@@ -40,6 +48,8 @@ description: Test
 requires:
   - python >= 3.11
   - node >= 18
+  - go >= 1.22
+  - rust >= 1.75
 steps:
   - bash: echo hello
 `)
@@ -48,14 +58,20 @@ steps:
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(a.Requires) != 2 {
-		t.Fatalf("expected 2 requirements, got %d", len(a.Requires))
+	if len(a.Requires) != 4 {
+		t.Fatalf("expected 4 requirements, got %d", len(a.Requires))
 	}
 	if a.Requires[0].Name != "python" || a.Requires[0].Kind != RequirementRuntime || a.Requires[0].MinVersion != "3.11" {
 		t.Errorf("req[0] = %+v, want python >= 3.11", a.Requires[0])
 	}
 	if a.Requires[1].Name != "node" || a.Requires[1].Kind != RequirementRuntime || a.Requires[1].MinVersion != "18" {
 		t.Errorf("req[1] = %+v, want node >= 18", a.Requires[1])
+	}
+	if a.Requires[2].Name != "go" || a.Requires[2].Kind != RequirementRuntime || a.Requires[2].MinVersion != "1.22" {
+		t.Errorf("req[2] = %+v, want go >= 1.22", a.Requires[2])
+	}
+	if a.Requires[3].Name != "rust" || a.Requires[3].Kind != RequirementRuntime || a.Requires[3].MinVersion != "1.75" {
+		t.Errorf("req[3] = %+v, want rust >= 1.75", a.Requires[3])
 	}
 }
 
@@ -227,6 +243,11 @@ steps:
 	}
 	if !strings.Contains(err.Error(), "command:") {
 		t.Errorf("expected hint about command:, got: %v", err)
+	}
+	for _, rt := range []string{"go", "node", "python", "rust"} {
+		if !strings.Contains(err.Error(), rt) {
+			t.Errorf("expected error to list known runtime %q, got: %v", rt, err)
+		}
 	}
 }
 

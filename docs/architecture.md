@@ -52,7 +52,7 @@ internal/
     list.go                        pi list — discovers and prints automations with SOURCE column; --all flag shows grouped package sections; --builtins/-b flag includes pi:* automations; automationSource() resolves source indicator per automation
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details (lettered sub-steps with annotations), and install lifecycle for installer automations (scalar/step-list phases, verify presence, version); stepAnnotations() shared helper for building annotation slices from step fields
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE; uses ProjectContext for resolution and executor construction
-    setup_add.go                   pi setup add — runs automation before appending setup entries to pi.yaml; short-form tool resolution (python → pi:install-python); --version, --if, --source, --groups flags; --only-add flag skips execution; key=value positional args; idempotent duplicate detection; auto-init when no pi.yaml
+    setup_add.go                   pi setup add — runs automation before appending setup entries to pi.yaml; short-form tool resolution (python → pi:install-python); --version, --if, --source, --groups flags; --only-add flag skips execution; key=value positional args; idempotent duplicate detection; auto-init when no pi.yaml; auto-generated help text via setupAddToolResolutionHelp()
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution; warnShadowedShortcuts() prints shadow warnings to stderr before installing
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
@@ -71,7 +71,7 @@ internal/
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (32 tests — includes if: condition display, installer type, installer lifecycle detail [scalar, step-list, explicit verify, no version, truncation], first: block detail [basic, block annotations, descriptions, sub-step annotations, integration], dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests)
-    setup_add_test.go              pi setup add tests (18 tests — bare string, short-form expansion, pi: prefix, if flag, key=value, invalid key=value, duplicate, replace same run target, no pi.yaml yes, no pi.yaml non-interactive, local automation, source flag, groups flag, combined flags, invoke before writing, invoke failure, only-add, invoke not found)
+    setup_add_test.go              pi setup add tests (21 tests — bare string, short-form expansion, pi: prefix, if flag, key=value, invalid key=value, duplicate, replace same run target, no pi.yaml yes, no pi.yaml non-interactive, local automation, source flag, groups flag, combined flags, invoke before writing, invoke failure, only-add, invoke not found, tool resolution help contains all builtins, tool resolution help deterministic, tool resolution help prefers canonical name)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (5 tests — includes shadow warning integration tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
@@ -88,12 +88,12 @@ internal/
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     walker.go                      StepLocation (Phase, Index, FirstIndex, IsScalar, InFirstBlock(), FormatPath()), StepVisitor, WalkSteps(), WalkStepsUntil() — visitor-pattern traversal of all steps in an automation (regular steps, first: sub-steps, install phases); used by cli/validate.go for run-step-ref and file-ref checks
     inputs.go                      InputSpec, inputsRaw, ResolveInputs() (with excess positional args error), InputEnvVars()
-    requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
+    requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString(), knownRuntimes map (python/node/go/rust), knownRuntimeNames()
     automation_test.go             33 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env, shorthand parent_shell and with)
     step_test.go                   73 tests (if/env/silent/parent_shell/dir/timeout/description/pipe fields, install block, first: block)
     walker_test.go                 17 tests (regular steps, first: blocks, installer scalar/step-list, verify absent, early stop, FormatPath, field preservation)
     inputs_test.go                 18 tests (input spec, resolution, env vars, with: on steps, excess positional args error, exact positional args)
-    requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
+    requirements_test.go           22 tests (requires parsing for all 4 runtimes [python/node/go/rust], version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, PackageFetch, truncateTrace, shouldColor; NewForWriter() — auto-detects TTY for arbitrary io.Writer (used by CLI commands that receive io.Writer stderr)
     tty.go                         isTerminal() via golang.org/x/term
@@ -141,7 +141,7 @@ internal/
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
   runtimes/                        Sandboxed runtime provisioning
-    runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
+    runtimes.go                    KnownRuntimes map (python/node/go/rust), Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath(), knownRuntimeList()
     runtimes_test.go               16 tests
   semver/                          Semver-aware version constraint checking
     semver.go                      Satisfies() — checks version against constraint; normalises incomplete versions; wraps Masterminds/semver/v3; isChannelName() — detects non-semver channel names (stable, nightly, beta) and accepts any valid version
@@ -449,7 +449,8 @@ Makefile                               build, vet, test, test-matrix targets
 - **Invoke-before-write**: by default, the automation is executed first; if it succeeds, the entry is written to `pi.yaml`; if it fails, `pi.yaml` is untouched. This prevents misconfigured or failing entries from polluting the config.
 - `--only-add`: skips execution and writes the entry directly to `pi.yaml` (the original behavior); useful for CI bootstrapping or when the tool is already set up
 - `invokeSetupAutomation()` reuses the same `ProjectContext → Discover → NewExecutor → RunWithInputs` pipeline as `pi setup`, applied to a single entry
-- Short-form tool name resolution via `setupAddKnownTools` map: `python` → `pi:install-python`, `pi:go` → `pi:install-go`, etc.
+- Short-form tool name resolution via `setupAddKnownTools` map: `python` → `pi:install-python`, `pi:go` → `pi:install-go`, `rust` → `pi:install-rust`, etc.
+- `setupAddToolResolutionHelp()` auto-generates the help text "Tool names are resolved automatically" section from the map; deduplicates aliases, prefers canonical names matching `pi:install-<name>` suffix, sorts alphabetically
 - Resolution advisory: when a short-form expansion happens, prints `Resolved '<input>' → <expanded>` (philosophy principle 6: explain the magic)
 - YAML output: bare string form when no modifiers, object form (`run:` + `if:` + `with:`) when modifiers are present
 - `--version`, `--source`, `--groups` flags populate `with:` entries; `--if` sets the condition
@@ -734,11 +735,11 @@ Makefile                               build, vet, test, test-matrix targets
 - Before executing any steps, `RunWithInputs()` calls `ValidateRequirements()` on the automation
 - If any requirement is not satisfied, execution stops immediately with a formatted error table and exit code 1
 - `checkRequirementImpl(req, env, alwaysDetectVersion)` is the shared core: PATH lookup via `LookPath()`, optional version detection and comparison. `checkRequirement()` (normal execution) and `CheckRequirementForDoctor()` (always-detect) both delegate to it.
-- Runtime requirements map names to commands: `python` → `python3`, `node` → `node`
+- Runtime requirements map names to commands: `python` → `python3`, `node` → `node`, `rust` → `rustc`, `go` → `go`
 - Version detection: runs `<cmd> --version`, captures stdout+stderr, extracts semver via regex `(\d+(?:\.\d+)+)`; falls back to `<cmd> version` (no `--`) when `--version` fails or produces no version string (needed for `go version` etc.)
 - Handles all common version output formats: `Python 3.13.0`, `v20.11.0`, `jq-1.7.1`, `docker version 24.0.5`
 - Version comparison: splits on `.`, compares numeric components pairwise; missing trailing components are treated as 0
-- Install hints: built-in map of common tool names → install instructions (python, node, docker, jq, kubectl, rustc, cargo, etc.)
+- Install hints: built-in map of common tool names → install instructions (python, node, go, rust, docker, jq, kubectl, rustc, cargo, etc.)
 - Formatted error output shows automation name, missing requirements with version info, and install hints
 - Testability: `RuntimeEnv.ExecOutput` field allows mocking `--version` calls without real command execution
 - Validation happens after input resolution but before step/install execution
@@ -782,7 +783,7 @@ Makefile                               build, vet, test, test-matrix targets
   - `python >= 3.11` — runtime with minimum version constraint
   - `command: docker` — command in PATH, any version
   - `command: kubectl >= 1.28` — command with minimum version
-- Scalar entries are parsed as runtimes; only `python` and `node` are known runtimes — unknown names produce an error suggesting `command:` syntax
+- Scalar entries are parsed as runtimes; `python`, `node`, `go`, and `rust` are known runtimes — unknown names produce an error suggesting `command:` syntax
 - Mapping entries with `command:` key are parsed as commands (any name is valid)
 - Version constraints use `>=` operator with dot-separated numeric components (validated at parse time)
 - `requires:` is valid on both `steps:` and `install:` automations
@@ -881,7 +882,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Opt-in via `runtimes:` block in `pi.yaml` — `provision: never` (default), `ask`, or `auto`
 - `manager: mise` (default, falls back to direct if mise not installed) or `manager: direct`
 - Provisioned runtimes are installed into `~/.pi/runtimes/<name>/<version>/bin/`
-- Only `python` and `node` are known runtimes — `command:` requirements are never provisioned
+- `python`, `node`, `go`, and `rust` are known runtimes — `command:` requirements are never provisioned
 - Integration point: `Executor.Provisioner` field — when set, `ValidateRequirements()` calls `tryProvision()` for failed runtime requirements
 - PATH scoping: `buildEnv()` prepends provisioned bin directories to PATH for all step executions via `prependPathInEnv()`
 - `buildEnv()` handles input env vars, provisioned runtime PATH, automation-level env, and step-level env vars; automation and step env keys are each iterated in sorted order for deterministic behavior
@@ -1018,7 +1019,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1405 (187 automation [170 base + 17 walker] + 141 builtins + 32 cache + 165 CLI [includes 11 completion, 13 init, 18 setup add, 32 info, 23 validate] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 281 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 31 semver + 27 shell + 277 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate])
+Total tests: 1488 (189 automation [177 base + 12 walker] + 142 builtins + 32 cache + 186 CLI [includes 6 completion, 12 init, 21 setup add, 20 info, 23 validate] + 30 conditions + 67 config + 42 display + 55 discovery [46 base + 9 suggest] + 305 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 57 semver + 40 shell + 277 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

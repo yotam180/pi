@@ -89,11 +89,19 @@ func TestCompareVersions_Invalid(t *testing.T) {
 }
 
 func TestRuntimeCommand(t *testing.T) {
-	if got := runtimeCommand("python"); got != "python3" {
-		t.Errorf("runtimeCommand(python) = %q, want python3", got)
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"python", "python3"},
+		{"node", "node"},
+		{"rust", "rustc"},
+		{"go", "go"},
 	}
-	if got := runtimeCommand("node"); got != "node" {
-		t.Errorf("runtimeCommand(node) = %q, want node", got)
+	for _, tt := range tests {
+		if got := runtimeCommand(tt.name); got != tt.want {
+			t.Errorf("runtimeCommand(%q) = %q, want %q", tt.name, got, tt.want)
+		}
 	}
 }
 
@@ -207,6 +215,80 @@ func TestCheckRequirement_VersionTooLow(t *testing.T) {
 	}
 	if !strings.Contains(result.Error, "3.9.7") || !strings.Contains(result.Error, "3.11") {
 		t.Errorf("error should mention both versions, got: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_RustRuntimeFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"rustc": true},
+		nil,
+	)
+	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_RustRuntimeNotFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{},
+		nil,
+	)
+	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime}
+	result := checkRequirement(req, env)
+
+	if result.Satisfied {
+		t.Error("expected not satisfied for missing rust runtime")
+	}
+	if result.Error != "not found" {
+		t.Errorf("unexpected error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_RustVersionSatisfied(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"rustc": true},
+		map[string]string{"rustc": "rustc 1.80.0 (051478957 2024-07-21)"},
+	)
+	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime, MinVersion: "1.75"}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+	if result.DetectedVersion != "1.80.0" {
+		t.Errorf("expected detected version 1.80.0, got %q", result.DetectedVersion)
+	}
+}
+
+func TestCheckRequirement_GoRuntimeFound(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"go": true},
+		nil,
+	)
+	req := automation.Requirement{Name: "go", Kind: automation.RequirementRuntime}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+}
+
+func TestCheckRequirement_GoVersionSatisfied(t *testing.T) {
+	env := mockEnv(
+		map[string]bool{"go": true},
+		map[string]string{"go": "go version go1.23.0 darwin/arm64"},
+	)
+	req := automation.Requirement{Name: "go", Kind: automation.RequirementRuntime, MinVersion: "1.22"}
+	result := checkRequirement(req, env)
+
+	if !result.Satisfied {
+		t.Errorf("expected satisfied, got error: %s", result.Error)
+	}
+	if result.DetectedVersion != "1.23.0" {
+		t.Errorf("expected detected version 1.23.0, got %q", result.DetectedVersion)
 	}
 }
 
@@ -403,6 +485,8 @@ func TestInstallHint(t *testing.T) {
 		{"node", "brew install node"},
 		{"docker", "brew install --cask docker"},
 		{"jq", "brew install jq"},
+		{"rust", "rustup"},
+		{"go", "brew install go"},
 		{"unknown-tool", ""},
 	}
 

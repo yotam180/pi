@@ -421,3 +421,69 @@ func TestRunSetupAdd_CombinedFlags(t *testing.T) {
 		t.Errorf("with.version = %q", cfg.Setup[0].With["version"])
 	}
 }
+
+func TestSetupAddToolResolutionHelp_ContainsAllBuiltins(t *testing.T) {
+	help := setupAddToolResolutionHelp()
+
+	expected := []string{
+		"python", "pi:install-python",
+		"node", "pi:install-node",
+		"go", "pi:install-go",
+		"rust", "pi:install-rust",
+		"uv", "pi:install-uv",
+		"homebrew", "pi:install-homebrew",
+		"terraform", "pi:install-terraform",
+		"kubectl", "pi:install-kubectl",
+		"helm", "pi:install-helm",
+		"pnpm", "pi:install-pnpm",
+		"bun", "pi:install-bun",
+		"deno", "pi:install-deno",
+		"aws-cli", "pi:install-aws-cli",
+	}
+	for _, s := range expected {
+		if !strings.Contains(help, s) {
+			t.Errorf("help text missing %q:\n%s", s, help)
+		}
+	}
+}
+
+func TestSetupAddToolResolutionHelp_Deterministic(t *testing.T) {
+	first := setupAddToolResolutionHelp()
+	for i := 0; i < 10; i++ {
+		got := setupAddToolResolutionHelp()
+		if got != first {
+			t.Fatalf("non-deterministic output on iteration %d:\nfirst:\n%s\ngot:\n%s", i, first, got)
+		}
+	}
+}
+
+func TestSetupAddToolResolutionHelp_PrefersCanonicalName(t *testing.T) {
+	help := setupAddToolResolutionHelp()
+
+	// "go" should appear, not "golang" (both match suffix, "go" is shorter)
+	if strings.Contains(help, "golang") {
+		t.Errorf("help should show 'go' not 'golang':\n%s", help)
+	}
+	// "node" should appear, not "nodejs" (node matches suffix of pi:install-node)
+	if strings.Contains(help, "nodejs") {
+		t.Errorf("help should show 'node' not 'nodejs':\n%s", help)
+	}
+	// "aws-cli" should appear (matches suffix of pi:install-aws-cli), not "aws" or "awscli"
+	if strings.Contains(help, "awscli") {
+		t.Errorf("help should show 'aws-cli' not 'awscli':\n%s", help)
+	}
+	// "homebrew" should appear (matches suffix of pi:install-homebrew), not "brew"
+	lines := strings.Split(help, "\n")
+	foundHomebrew := false
+	for _, line := range lines {
+		if strings.Contains(line, "pi:install-homebrew") {
+			if !strings.Contains(line, "homebrew") {
+				t.Errorf("expected 'homebrew' for pi:install-homebrew entry, got: %s", line)
+			}
+			foundHomebrew = true
+		}
+	}
+	if !foundHomebrew {
+		t.Errorf("expected pi:install-homebrew in help text:\n%s", help)
+	}
+}

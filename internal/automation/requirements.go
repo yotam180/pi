@@ -2,6 +2,7 @@ package automation
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -20,6 +21,18 @@ const (
 var knownRuntimes = map[string]bool{
 	"python": true,
 	"node":   true,
+	"go":     true,
+	"rust":   true,
+}
+
+// knownRuntimeNames returns a sorted, comma-separated list of known runtime names.
+func knownRuntimeNames() string {
+	names := make([]string, 0, len(knownRuntimes))
+	for name := range knownRuntimes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // Requirement declares a tool or runtime that an automation needs.
@@ -62,7 +75,7 @@ func (r *requirementRaw) parseScalar(s string) error {
 	}
 
 	if !knownRuntimes[name] {
-		return fmt.Errorf("requires entry %q: unknown runtime %q (known: python, node); use \"command: %s\" for arbitrary commands", s, name, name)
+		return fmt.Errorf("requires entry %q: unknown runtime %q (known: %s); use \"command: %s\" for arbitrary commands", s, name, knownRuntimeNames(), name)
 	}
 
 	r.Kind = RequirementRuntime

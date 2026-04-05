@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -60,6 +61,55 @@ var setupAddKnownTools = map[string]string{
 	"pi:aws-cli":   "pi:install-aws-cli",
 }
 
+// setupAddToolResolutionHelp builds the "Tool names are resolved automatically"
+// section from the setupAddKnownTools map, keeping it in sync with the actual
+// registered short-form names. When multiple short names resolve to the same
+// target, the canonical name is preferred (the one matching the pi:install-<name>
+// suffix), falling back to shortest.
+func setupAddToolResolutionHelp() string {
+	best := make(map[string]string) // resolved → best short name
+	for short, resolved := range setupAddKnownTools {
+		if strings.HasPrefix(short, "pi:") {
+			continue
+		}
+		prev, exists := best[resolved]
+		if !exists {
+			best[resolved] = short
+			continue
+		}
+		// Prefer the name that matches the install-<name> suffix
+		suffix := strings.TrimPrefix(resolved, "pi:install-")
+		shortIsCanonical := short == suffix
+		prevIsCanonical := prev == suffix
+		if shortIsCanonical && !prevIsCanonical {
+			best[resolved] = short
+		} else if !shortIsCanonical && prevIsCanonical {
+			// keep prev
+		} else if len(short) < len(prev) || (len(short) == len(prev) && short < prev) {
+			best[resolved] = short
+		}
+	}
+
+	type pair struct {
+		short    string
+		resolved string
+	}
+	pairs := make([]pair, 0, len(best))
+	for resolved, short := range best {
+		pairs = append(pairs, pair{short, resolved})
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		return pairs[i].short < pairs[j].short
+	})
+
+	var b strings.Builder
+	b.WriteString("Tool names are resolved automatically:\n")
+	for _, p := range pairs {
+		fmt.Fprintf(&b, "  %-12s→  %s\n", p.short, p.resolved)
+	}
+	return b.String()
+}
+
 func newSetupAddCmd() *cobra.Command {
 	var versionFlag string
 	var ifFlag string
@@ -71,7 +121,7 @@ func newSetupAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <name> [key=value ...]",
 		Short: "Add a setup entry to pi.yaml",
-		Long: `Add a setup automation to the setup section of pi.yaml.
+		Long: fmt.Sprintf(`Add a setup automation to the setup section of pi.yaml.
 
 By default, the automation is executed first. If it succeeds, the entry is
 written to pi.yaml. If it fails, pi.yaml is not modified.
@@ -79,11 +129,7 @@ written to pi.yaml. If it fails, pi.yaml is not modified.
 Use --only-add to skip execution and write the entry directly (useful for CI
 bootstrapping or when the tool is already set up).
 
-Tool names are resolved automatically:
-  python  →  pi:install-python
-  node    →  pi:install-node
-  go      →  pi:install-go
-
+%s
 Examples:
   pi setup add python --version 3.13
   pi setup add uv
@@ -91,7 +137,7 @@ Examples:
   pi setup add setup/install-deps
   pi setup add pi:install-homebrew --if os.macos
   pi setup add pi:cursor/install-extensions file=.pi/cursor/extensions.txt
-  pi setup add uv --only-add`,
+  pi setup add uv --only-add`, setupAddToolResolutionHelp()),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := getwd()

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/config"
@@ -26,6 +27,18 @@ func homeDir() string {
 var KnownRuntimes = map[string]bool{
 	"python": true,
 	"node":   true,
+	"go":     true,
+	"rust":   true,
+}
+
+// knownRuntimeList returns a sorted, comma-separated list of known runtimes.
+func knownRuntimeList() string {
+	names := make([]string, 0, len(KnownRuntimes))
+	for name := range KnownRuntimes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 // Provisioner manages runtime provisioning using a pluggable backend.
@@ -67,7 +80,7 @@ type ProvisionResult struct {
 // appropriate zero values.
 func (p *Provisioner) Provision(runtimeName, minVersion string) (*ProvisionResult, error) {
 	if !KnownRuntimes[runtimeName] {
-		return nil, fmt.Errorf("unknown runtime %q: PI can only provision python and node", runtimeName)
+		return nil, fmt.Errorf("unknown runtime %q: PI can only provision %s", runtimeName, knownRuntimeList())
 	}
 
 	if p.Mode == config.ProvisionNever {
@@ -158,6 +171,10 @@ func defaultVersion(runtimeName string) string {
 		return "3.13"
 	case "node":
 		return "20"
+	case "go":
+		return "1.23"
+	case "rust":
+		return "stable"
 	default:
 		return "latest"
 	}
@@ -169,6 +186,8 @@ func runtimeBinary(name string) string {
 		return "python3"
 	case "node":
 		return "node"
+	case "rust":
+		return "rustc"
 	default:
 		return name
 	}
@@ -249,6 +268,8 @@ func (p *Provisioner) provisionDirect(runtimeName, version string) error {
 		return p.provisionNodeDirect(version)
 	case "python":
 		return p.provisionPythonDirect(version)
+	case "go", "rust":
+		return fmt.Errorf("direct provisioning for %q is not supported — install mise first: curl https://mise.run | sh", runtimeName)
 	default:
 		return fmt.Errorf("direct provisioning not supported for %q — install mise first: curl https://mise.run | sh", runtimeName)
 	}

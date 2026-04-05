@@ -200,6 +200,8 @@ func TestDefaultVersion(t *testing.T) {
 	}{
 		{"python", "3.13"},
 		{"node", "20"},
+		{"go", "1.23"},
+		{"rust", "stable"},
 		{"unknown", "latest"},
 	}
 	for _, tt := range tests {
@@ -217,6 +219,8 @@ func TestRuntimeBinary(t *testing.T) {
 	}{
 		{"python", "python3"},
 		{"node", "node"},
+		{"rust", "rustc"},
+		{"go", "go"},
 		{"other", "other"},
 	}
 	for _, tt := range tests {
@@ -228,11 +232,10 @@ func TestRuntimeBinary(t *testing.T) {
 }
 
 func TestKnownRuntimes(t *testing.T) {
-	if !KnownRuntimes["python"] {
-		t.Error("python should be a known runtime")
-	}
-	if !KnownRuntimes["node"] {
-		t.Error("node should be a known runtime")
+	for _, rt := range []string{"python", "node", "go", "rust"} {
+		if !KnownRuntimes[rt] {
+			t.Errorf("%s should be a known runtime", rt)
+		}
 	}
 	if KnownRuntimes["ruby"] {
 		t.Error("ruby should not be a known runtime")

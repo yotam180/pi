@@ -191,6 +191,8 @@ func runtimeCommand(name string) string {
 	switch name {
 	case "python":
 		return "python3"
+	case "rust":
+		return "rustc"
 	default:
 		return name
 	}
@@ -310,6 +312,7 @@ var installHints = map[string]string{
 	"curl":       "brew install curl",
 	"wget":       "brew install wget",
 	"go":         "brew install go  or  https://go.dev/dl/",
+	"rust":       "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
 	"rustc":      "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
 	"cargo":      "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
 	"rustup":     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
