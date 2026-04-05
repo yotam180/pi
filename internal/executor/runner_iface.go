@@ -74,9 +74,9 @@ func (r *Registry) Get(stepType automation.StepType) StepRunner {
 // NewDefaultRegistry creates a registry with all built-in step runners.
 func NewDefaultRegistry() *Registry {
 	r := NewRegistry()
-	r.Register(automation.StepTypeBash, &BashRunner{})
-	r.Register(automation.StepTypePython, &PythonRunner{})
-	r.Register(automation.StepTypeTypeScript, &TypeScriptRunner{})
+	r.Register(automation.StepTypeBash, NewBashRunner())
+	r.Register(automation.StepTypePython, NewPythonRunner())
+	r.Register(automation.StepTypeTypeScript, NewTypeScriptRunner())
 	r.Register(automation.StepTypeRun, &RunStepRunner{})
 	return r
 }

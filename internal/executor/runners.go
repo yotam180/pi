@@ -10,60 +10,105 @@ import (
 	"strings"
 )
 
-// BashRunner executes bash steps (inline scripts or .sh files).
-type BashRunner struct{}
+// SubprocessConfig defines the language-specific behavior for a subprocess-based
+// step runner. All subprocess runners (bash, python, typescript, etc.) share the
+// same lifecycle: resolve file path → build command args → execute → handle errors.
+// The config captures only the parts that differ between languages.
+type SubprocessConfig struct {
+	// Binary is the fixed command name (e.g. "bash", "tsx"). If BinaryFunc is set,
+	// it takes precedence. One of Binary or BinaryFunc must be provided.
+	Binary string
 
-func (r *BashRunner) Run(ctx *RunContext) error {
+	// BinaryFunc dynamically resolves the command binary. Used when the binary
+	// depends on runtime state (e.g. Python venv detection). Takes precedence
+	// over Binary when set.
+	BinaryFunc func() string
+
+	// InlineArgs builds the argument list for an inline script.
+	// Receives the script text and returns the args to pass after the binary name.
+	// For example, bash returns ["-c", script, "--"] while python returns ["-c", script].
+	// If nil, TempFileExt must be set (temp-file mode).
+	InlineArgs func(script string) []string
+
+	// TempFileExt, when non-empty, writes inline scripts to a temp file with
+	// this extension instead of using InlineArgs. Used by languages whose
+	// interpreters don't support -c (e.g. tsx). The temp file is cleaned up
+	// after execution.
+	TempFileExt string
+
+	// NotFoundMsg is returned when the binary is not found in PATH.
+	// If empty, a generic error is used.
+	NotFoundMsg string
+
+	// Language is the human-readable name for error messages (e.g. "bash", "python").
+	Language string
+}
+
+// SubprocessRunner executes steps by shelling out to an external command.
+// It handles file-path resolution, inline-to-temp-file conversion, command
+// execution, and error wrapping — the common lifecycle shared by all
+// language-specific step runners.
+type SubprocessRunner struct {
+	Config SubprocessConfig
+}
+
+func (r *SubprocessRunner) Run(ctx *RunContext) error {
+	bin := r.Config.Binary
+	if r.Config.BinaryFunc != nil {
+		bin = r.Config.BinaryFunc()
+	}
+
 	var cmdArgs []string
 
-	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "bash")
+	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, r.Config.Language)
 	if err != nil {
 		return err
 	}
+
 	if isFile {
 		cmdArgs = append([]string{resolved}, ctx.Args...)
+	} else if r.Config.TempFileExt != "" {
+		tmpPath, cleanup, err := writeTempScript(ctx.Step.Value, r.Config.TempFileExt)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		cmdArgs = append([]string{tmpPath}, ctx.Args...)
+	} else if r.Config.InlineArgs != nil {
+		cmdArgs = append(r.Config.InlineArgs(ctx.Step.Value), ctx.Args...)
 	} else {
-		cmdArgs = append([]string{"-c", ctx.Step.Value, "--"}, ctx.Args...)
+		return fmt.Errorf("step type %q: no inline execution method configured", r.Config.Language)
 	}
 
-	if err := runStepCommand("bash", cmdArgs, ctx); err != nil {
+	if err := runStepCommand(bin, cmdArgs, ctx); err != nil {
 		var exitErr *ExitError
 		if errors.As(err, &exitErr) {
 			return err
 		}
-		return fmt.Errorf("running bash step: %w", err)
+		if isCommandNotFound(err) && r.Config.NotFoundMsg != "" {
+			return fmt.Errorf("%s", r.Config.NotFoundMsg)
+		}
+		return fmt.Errorf("running %s step: %w", r.Config.Language, err)
 	}
 	return nil
 }
 
-// PythonRunner executes python steps (inline scripts or .py files).
-type PythonRunner struct{}
-
-func (r *PythonRunner) Run(ctx *RunContext) error {
-	pythonBin := resolvePythonBin()
-
-	var cmdArgs []string
-	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "python")
+// writeTempScript writes script content to a temporary file with the given
+// extension and returns the path, a cleanup function, and any error.
+func writeTempScript(content, ext string) (string, func(), error) {
+	tmp, err := os.CreateTemp("", "pi-*"+ext)
 	if err != nil {
-		return err
+		return "", nil, fmt.Errorf("creating temp file for step: %w", err)
 	}
-	if isFile {
-		cmdArgs = append([]string{resolved}, ctx.Args...)
-	} else {
-		cmdArgs = append([]string{"-c", ctx.Step.Value}, ctx.Args...)
-	}
+	cleanup := func() { os.Remove(tmp.Name()) }
 
-	if err := runStepCommand(pythonBin, cmdArgs, ctx); err != nil {
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			return err
-		}
-		if isCommandNotFound(err) {
-			return fmt.Errorf("python3 not found in PATH — install Python 3 or activate a virtualenv")
-		}
-		return fmt.Errorf("running python step: %w", err)
+	if _, err := tmp.WriteString(content); err != nil {
+		tmp.Close()
+		cleanup()
+		return "", nil, fmt.Errorf("writing temp file: %w", err)
 	}
-	return nil
+	tmp.Close()
+	return tmp.Name(), cleanup, nil
 }
 
 // resolvePythonBin returns the python binary to use. If VIRTUAL_ENV is set,
@@ -75,45 +120,37 @@ func resolvePythonBin() string {
 	return "python3"
 }
 
-// TypeScriptRunner executes typescript steps (inline scripts or .ts files).
-type TypeScriptRunner struct{}
+// NewBashRunner creates a SubprocessRunner configured for bash steps.
+func NewBashRunner() *SubprocessRunner {
+	return &SubprocessRunner{Config: SubprocessConfig{
+		Binary:   "bash",
+		Language: "bash",
+		InlineArgs: func(script string) []string {
+			return []string{"-c", script, "--"}
+		},
+	}}
+}
 
-func (r *TypeScriptRunner) Run(ctx *RunContext) error {
-	var cmdArgs []string
+// NewPythonRunner creates a SubprocessRunner configured for python steps.
+func NewPythonRunner() *SubprocessRunner {
+	return &SubprocessRunner{Config: SubprocessConfig{
+		BinaryFunc:  resolvePythonBin,
+		Language:    "python",
+		NotFoundMsg: "python3 not found in PATH — install Python 3 or activate a virtualenv",
+		InlineArgs: func(script string) []string {
+			return []string{"-c", script}
+		},
+	}}
+}
 
-	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "typescript")
-	if err != nil {
-		return err
-	}
-	if isFile {
-		cmdArgs = append([]string{resolved}, ctx.Args...)
-	} else {
-		tmp, err := os.CreateTemp("", "pi-ts-*.ts")
-		if err != nil {
-			return fmt.Errorf("creating temp file for typescript step: %w", err)
-		}
-		defer os.Remove(tmp.Name())
-
-		if _, err := tmp.WriteString(ctx.Step.Value); err != nil {
-			tmp.Close()
-			return fmt.Errorf("writing typescript temp file: %w", err)
-		}
-		tmp.Close()
-
-		cmdArgs = append([]string{tmp.Name()}, ctx.Args...)
-	}
-
-	if err := runStepCommand("tsx", cmdArgs, ctx); err != nil {
-		var exitErr *ExitError
-		if errors.As(err, &exitErr) {
-			return err
-		}
-		if isCommandNotFound(err) {
-			return fmt.Errorf("tsx not found in PATH — install it with: npm install -g tsx")
-		}
-		return fmt.Errorf("running typescript step: %w", err)
-	}
-	return nil
+// NewTypeScriptRunner creates a SubprocessRunner configured for typescript steps.
+func NewTypeScriptRunner() *SubprocessRunner {
+	return &SubprocessRunner{Config: SubprocessConfig{
+		Binary:      "tsx",
+		Language:    "typescript",
+		NotFoundMsg: "tsx not found in PATH — install it with: npm install -g tsx",
+		TempFileExt: ".ts",
+	}}
 }
 
 // RunStepRunner executes run: steps by recursively invoking another automation.
