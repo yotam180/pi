@@ -102,7 +102,7 @@ internal/
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
-    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execInstallFirstBlock(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases
+    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseLive(), execInstallPhaseCapture(), execInstallFirstBlockLive(), execInstallFirstBlock(), execBashLive(), execBashSuppressed(), captureVersion(), printInstallStatus(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases; run phase streams stderr live to terminal
     helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), IsFilePath() (exported), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_IN_* + PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
@@ -115,7 +115,7 @@ internal/
     inputs_test.go                 9 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, args passthrough, short prefix, both prefixes, run step with with
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
-    install_test.go                11 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure, step list with conditionals, with inputs, automation-level if
+    install_test.go                15 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure (with content assertion), scalar stderr streamed, step list stderr streamed, first block stderr surfaced, step list with conditionals, with inputs, automation-level if
     step_env_test.go               14 tests — step-level env, automation-level env, bash/python, multiple vars, parent override, nil env inheritance, per-step isolation, buildEnv layers, buildEnv deterministic order, run: isolation
     step_dir_test.go               10 tests — step-level dir: bash inline/absolute/default, missing dir error, not-a-dir error, python step, per-step isolation, mixed with no dir, combined with env, resolveStepDir unit tests
     step_trace_test.go             6 tests — step trace lines, silent step suppression, loud override, silent still executes, silent pipe capture
@@ -522,7 +522,7 @@ Makefile                               build, vet, test, test-matrix targets
 - `InstallPhase` is polymorphic: either a scalar bash string or a list of steps (same step schema as `steps:`)
 - When `verify:` is absent, the `test:` phase is re-run as verification after `run:` completes
 - Executor runs `execInstall()`: test → [run → verify] → version
-- All phase stdout is suppressed; stderr is captured from `run:` and shown only on failure
+- All phase stdout is suppressed; stderr from `run:` is streamed live to the terminal so the user sees errors as they happen; test/verify phase stderr is suppressed
 - `version:` command stdout is trimmed and displayed in the status line
 - PI prints one formatted status line per installer: `✓ / → / ✗  name  status  (version)`
 - `--silent` flag on `pi run` and `pi setup` suppresses PI status lines (stderr from failures always shown)
@@ -940,7 +940,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1293 (170 automation + 136 builtins + 32 cache + 144 CLI [includes 11 completion, 13 init, 14 setup add] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 263 integration [includes 8 completion, 8 init, 13 setup add])
+Total tests: 1297 (170 automation + 136 builtins + 32 cache + 144 CLI [includes 11 completion, 13 init, 14 setup add] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 263 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 264 integration [includes 8 completion, 8 init, 13 setup add])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -982,7 +982,7 @@ tests/integration/
   info_test.go                    4 tests — info command: basic automation, with inputs, not-found, no args
   conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
   builtins_test.go                27 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs), builtins hidden by default, not-found did-you-mean
-  installer_schema_test.go        11 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, built-in installer
+  installer_schema_test.go        12 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, failed install shows stderr, built-in installer
   requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
   doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
   runtime_provisioning_test.go    7 tests — runtime provisioning: list, no-requirements, already-installed, never-mode, config parsing, auto/ask modes

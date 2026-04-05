@@ -23,15 +23,12 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	}
 
 	// Phase 2: run — perform the installation
+	// Stderr is streamed live to the terminal so the user sees errors as they happen.
 	e.printInstallStatus("→", a.Name, "installing...", "")
 
-	stderrBuf := &bytes.Buffer{}
-	runErr := e.execInstallPhaseCapture(a, &inst.Run, inputEnv, stderrBuf)
+	runErr := e.execInstallPhaseLive(a, &inst.Run, inputEnv)
 	if runErr != nil {
 		e.printInstallStatus("✗", a.Name, "failed", "")
-		if stderrBuf.Len() > 0 {
-			e.printIndentedStderr(stderrBuf.String())
-		}
 		return runErr
 	}
 
@@ -40,7 +37,7 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	if verifyPhase == nil {
 		verifyPhase = &inst.Test
 	}
-	verifyErr := e.execInstallPhase(a, verifyPhase, inputEnv)
+	verifyErr := e.execInstallPhaseCapture(a, verifyPhase, inputEnv, nil)
 	if verifyErr != nil {
 		e.printInstallStatus("✗", a.Name, "failed", "")
 		return verifyErr
@@ -54,6 +51,47 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 // execInstallPhase runs an install phase with stdout and stderr suppressed.
 func (e *Executor) execInstallPhase(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
 	return e.execInstallPhaseCapture(a, phase, inputEnv, nil)
+}
+
+// execInstallPhaseLive runs an install phase with stdout suppressed but stderr
+// streamed live to the terminal. This gives the user immediate visibility into
+// errors and progress from install commands.
+func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
+	if phase.IsScalar {
+		return e.execBashLive(a, phase.Scalar, inputEnv)
+	}
+
+	for i, step := range phase.Steps {
+		if step.If != "" {
+			skip, err := e.evaluateCondition(step.If)
+			if err != nil {
+				return fmt.Errorf("install phase step[%d] if: %w", i, err)
+			}
+			if skip {
+				continue
+			}
+		}
+
+		if step.IsFirst() {
+			if err := e.execInstallFirstBlockLive(a, step, i, inputEnv); err != nil {
+				return err
+			}
+			continue
+		}
+
+		runner := e.registry().Get(step.Type)
+		if runner == nil {
+			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
+		}
+
+		ctx := e.newRunContext(a, step, nil, io.Discard, nil, inputEnv)
+		ctx.Stderr = e.stderr()
+
+		if err := runner.Run(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // execInstallPhaseCapture runs an install phase, suppressing stdout and optionally
@@ -97,6 +135,32 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 		if err := runner.Run(ctx); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// execBashLive runs inline bash with stdout suppressed but stderr streamed live to the terminal.
+func (e *Executor) execBashLive(a *automation.Automation, script string, inputEnv []string) error {
+	var cmdArgs []string
+	if IsFilePath(script) {
+		resolved := resolveScriptPath(a.Dir(), script)
+		cmdArgs = []string{resolved}
+	} else {
+		cmdArgs = []string{"-c", script}
+	}
+
+	cmd := exec.Command("bash", cmdArgs...)
+	cmd.Dir = e.RepoRoot
+	cmd.Stdout = io.Discard
+	cmd.Stdin = nil
+	cmd.Env = e.buildEnv(inputEnv, nil, nil)
+	cmd.Stderr = e.stderr()
+
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
+		return fmt.Errorf("running install bash: %w", err)
 	}
 	return nil
 }
@@ -159,6 +223,33 @@ func (e *Executor) printInstallStatus(icon, name, status, version string) {
 	e.printer().InstallStatus(icon, name, status, version)
 }
 
+// execInstallFirstBlockLive handles a first: block inside an install phase,
+// streaming stderr live to the terminal.
+func (e *Executor) execInstallFirstBlockLive(a *automation.Automation, step automation.Step, index int, inputEnv []string) error {
+	for j, sub := range step.First {
+		if sub.If != "" {
+			skip, err := e.evaluateCondition(sub.If)
+			if err != nil {
+				return fmt.Errorf("install phase step[%d].first[%d] if: %w", index, j, err)
+			}
+			if skip {
+				continue
+			}
+		}
+
+		runner := e.registry().Get(sub.Type)
+		if runner == nil {
+			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
+		}
+
+		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv)
+		ctx.Stderr = e.stderr()
+
+		return runner.Run(ctx)
+	}
+	return nil
+}
+
 // execInstallFirstBlock handles a first: block inside an install phase.
 func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automation.Step, index int, inputEnv []string, stderrCapture *bytes.Buffer) error {
 	for j, sub := range step.First {
@@ -190,9 +281,3 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 	return nil
 }
 
-// printIndentedStderr prints stderr output indented for the error block.
-func (e *Executor) printIndentedStderr(text string) {
-	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
-		fmt.Fprintf(e.stderr(), "      %s\n", line)
-	}
-}

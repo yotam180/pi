@@ -163,6 +163,23 @@ func TestInstallerSchema_RegularAutomationUnaffectedBySilent(t *testing.T) {
 	}
 }
 
+func TestInstallerSchema_FailedInstallShowsStderr(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "installer-schema")
+	out, code := runPi(t, dir, "run", "install-failing")
+	if code == 0 {
+		t.Fatalf("expected non-zero exit, got 0: %s", out)
+	}
+	if !strings.Contains(out, "✗") {
+		t.Errorf("expected '✗' icon, got:\n%s", out)
+	}
+	if !strings.Contains(out, "failed") {
+		t.Errorf("expected 'failed' status, got:\n%s", out)
+	}
+	if !strings.Contains(out, "critical error: dependency XYZ not found") {
+		t.Errorf("expected stderr from failed install to be visible, got:\n%s", out)
+	}
+}
+
 func TestInstallerSchema_BuiltinInstallerAlreadyInstalled(t *testing.T) {
 	requireTsx(t)
 	dir := filepath.Join(examplesDir(), "installer-schema")

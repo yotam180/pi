@@ -16,8 +16,11 @@ install:
         - bash: brew install kubectl
           if: command.brew
         - bash: |
-            echo "no suitable installer found (tried mise, brew)" >&2
-            echo "Install manually: https://kubernetes.io/docs/tasks/tools/" >&2
+            echo "no suitable installer found for kubectl (tried mise, brew)" >&2
+            echo "Install one of:" >&2
+            echo "  mise  → https://mise.jdx.dev" >&2
+            echo "  brew  → https://brew.sh" >&2
+            echo "Or install kubectl manually: https://kubernetes.io/docs/tasks/tools/" >&2
             exit 1
 
   version: kubectl version --client 2>&1 | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | head -1 | tr -d 'v'

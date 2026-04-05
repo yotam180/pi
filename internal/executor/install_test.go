@@ -241,6 +241,70 @@ func TestExecInstall_SilentStillShowsStderrOnFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from failed run")
 	}
+	output := stderr.String()
+	if !strings.Contains(output, "error msg") {
+		t.Errorf("expected stderr from run to be streamed even in silent mode, got: %q", output)
+	}
+}
+
+func TestExecInstall_RunFailsScalarStderrStreamed(t *testing.T) {
+	root := t.TempDir()
+	var stderr bytes.Buffer
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "false"},
+		Run:  automation.InstallPhase{IsScalar: true, Scalar: "echo 'detailed failure reason' >&2; exit 1"},
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+	}
+
+	err := e.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error from failed run")
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "detailed failure reason") {
+		t.Errorf("expected stderr from scalar run phase to be streamed, got: %q", output)
+	}
+	if !strings.Contains(output, "✗") {
+		t.Errorf("expected '✗' icon, got: %q", output)
+	}
+}
+
+func TestExecInstall_RunFailsStepListStderrStreamed(t *testing.T) {
+	root := t.TempDir()
+	var stderr bytes.Buffer
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "false"},
+		Run: automation.InstallPhase{
+			IsScalar: false,
+			Steps: []automation.Step{
+				{Type: automation.StepTypeBash, Value: "echo 'step list failure' >&2; exit 1"},
+			},
+		},
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+	}
+
+	err := e.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error from failed run")
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "step list failure") {
+		t.Errorf("expected stderr from step list run phase to be streamed, got: %q", output)
+	}
 }
 
 func TestExecInstall_StepListWithConditionals(t *testing.T) {
@@ -318,6 +382,54 @@ func TestExecInstall_WithInputs(t *testing.T) {
 	}
 	if !strings.Contains(output, "3.13") {
 		t.Errorf("expected version '3.13' in output, got: %q", output)
+	}
+}
+
+func TestExecInstall_FirstBlockFailStderrSurfaced(t *testing.T) {
+	root := t.TempDir()
+	var stderr bytes.Buffer
+
+	a := newInstallerAutomation("install-node", &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "false"},
+		Run: automation.InstallPhase{
+			IsScalar: false,
+			Steps: []automation.Step{
+				{
+					Type: automation.StepTypeBash,
+					First: []automation.Step{
+						{Type: automation.StepTypeBash, Value: "echo 'mise path' >&2; exit 1", If: "command.mise"},
+						{Type: automation.StepTypeBash, Value: "echo 'brew path' >&2; exit 1", If: "command.brew"},
+						{Type: automation.StepTypeBash, Value: "echo 'no suitable installer found (tried mise, brew)' >&2\nexit 1"},
+					},
+				},
+			},
+		},
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+		RuntimeEnv: &RuntimeEnv{
+			GOOS:     "darwin",
+			GOARCH:   "arm64",
+			Getenv:   func(string) string { return "" },
+			LookPath: func(string) (string, error) { return "", osexec.ErrNotFound },
+			Stat:     func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+		},
+	}
+
+	err := e.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error from failed install")
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "✗") {
+		t.Errorf("expected '✗' icon, got: %q", output)
+	}
+	if !strings.Contains(output, "no suitable installer found") {
+		t.Errorf("expected stderr from first: block fallback to be surfaced, got: %q", output)
 	}
 }
 
