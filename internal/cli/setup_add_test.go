@@ -272,6 +272,36 @@ func TestRunSetupAdd_GroupsFlag(t *testing.T) {
 	}
 }
 
+func TestRunSetupAdd_ReplaceSameRunTarget(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "pi.yaml", "project: test\nsetup:\n  - pi:install-node\n")
+
+	var stdout, stderr bytes.Buffer
+	err := runSetupAdd(dir, "pi:install-node", nil, "22", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "Replaced in pi.yaml") {
+		t.Errorf("stdout should say 'Replaced in pi.yaml', got: %q", stdout.String())
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("reload error: %v", err)
+	}
+
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1 (should replace, not append)", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-node" {
+		t.Errorf("run = %q, want pi:install-node", cfg.Setup[0].Run)
+	}
+	if cfg.Setup[0].With["version"] != "22" {
+		t.Errorf("with.version = %q, want 22", cfg.Setup[0].With["version"])
+	}
+}
+
 func TestRunSetupAdd_CombinedFlags(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")

@@ -152,9 +152,13 @@ func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, source
 	}
 
 	if err := config.AddSetupEntry(root, entry); err != nil {
-		if dup, ok := err.(*config.DuplicateSetupEntryError); ok {
-			_ = dup
+		if _, ok := err.(*config.DuplicateSetupEntryError); ok {
 			fmt.Fprintln(stdout, "Already in pi.yaml. No changes made.")
+			return nil
+		}
+		if _, ok := err.(*config.ReplacedSetupEntryError); ok {
+			fmt.Fprintln(stdout, "Replaced in pi.yaml:")
+			fmt.Fprintln(stdout, config.FormatSetupEntry(entry))
 			return nil
 		}
 		return err

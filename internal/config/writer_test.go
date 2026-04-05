@@ -488,7 +488,7 @@ setup:
 	}
 }
 
-func TestAddSetupEntry_SameRunDifferentVersion_NotDuplicate(t *testing.T) {
+func TestAddSetupEntry_SameRunDifferentVersion_Replaces(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "pi.yaml", `project: test
 setup:
@@ -501,16 +501,182 @@ setup:
 		Run:  "pi:install-python",
 		With: map[string]string{"version": "3.13"},
 	}
-	if err := AddSetupEntry(dir, entry); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected ReplacedSetupEntryError")
+	}
+	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 
-	cfg, err := Load(dir)
-	if err != nil {
-		t.Fatalf("failed to reload: %v", err)
+	cfg, err2 := Load(dir)
+	if err2 != nil {
+		t.Fatalf("failed to reload: %v", err2)
 	}
-	if len(cfg.Setup) != 2 {
-		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1 (replaced in-place)", len(cfg.Setup))
+	}
+	if cfg.Setup[0].With["version"] != "3.13" {
+		t.Errorf("with.version = %q, want %q", cfg.Setup[0].With["version"], "3.13")
+	}
+}
+
+func TestAddSetupEntry_SameRunBareToVersioned_Replaces(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - pi:install-node
+`)
+
+	entry := SetupEntry{
+		Run:  "pi:install-node",
+		With: map[string]string{"version": "22"},
+	}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected ReplacedSetupEntryError")
+	}
+	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
+	}
+
+	cfg, err2 := Load(dir)
+	if err2 != nil {
+		t.Fatalf("failed to reload: %v", err2)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-node" {
+		t.Errorf("run = %q, want %q", cfg.Setup[0].Run, "pi:install-node")
+	}
+	if cfg.Setup[0].With["version"] != "22" {
+		t.Errorf("with.version = %q, want %q", cfg.Setup[0].With["version"], "22")
+	}
+}
+
+func TestAddSetupEntry_ReplacePreservesPosition(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - pi:install-uv
+  - pi:install-node
+  - pi:install-python
+`)
+
+	entry := SetupEntry{
+		Run:  "pi:install-node",
+		With: map[string]string{"version": "22"},
+	}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected ReplacedSetupEntryError")
+	}
+	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
+	}
+
+	cfg, err2 := Load(dir)
+	if err2 != nil {
+		t.Fatalf("failed to reload: %v", err2)
+	}
+	if len(cfg.Setup) != 3 {
+		t.Fatalf("setup count = %d, want 3", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-uv" {
+		t.Errorf("setup[0].Run = %q, want pi:install-uv", cfg.Setup[0].Run)
+	}
+	if cfg.Setup[1].Run != "pi:install-node" {
+		t.Errorf("setup[1].Run = %q, want pi:install-node", cfg.Setup[1].Run)
+	}
+	if cfg.Setup[1].With["version"] != "22" {
+		t.Errorf("setup[1].with.version = %q, want 22", cfg.Setup[1].With["version"])
+	}
+	if cfg.Setup[2].Run != "pi:install-python" {
+		t.Errorf("setup[2].Run = %q, want pi:install-python", cfg.Setup[2].Run)
+	}
+}
+
+func TestAddSetupEntry_ReplaceVersionedToBare(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - run: pi:install-node
+    with:
+      version: "22"
+`)
+
+	entry := SetupEntry{Run: "pi:install-node"}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected ReplacedSetupEntryError")
+	}
+	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
+	}
+
+	cfg, err2 := Load(dir)
+	if err2 != nil {
+		t.Fatalf("failed to reload: %v", err2)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-node" {
+		t.Errorf("run = %q", cfg.Setup[0].Run)
+	}
+	if len(cfg.Setup[0].With) != 0 {
+		t.Errorf("with should be empty, got %v", cfg.Setup[0].With)
+	}
+}
+
+func TestReplacedSetupEntryError_Message(t *testing.T) {
+	err := &ReplacedSetupEntryError{Run: "pi:install-node"}
+	got := err.Error()
+	if !strings.Contains(got, "pi:install-node") {
+		t.Errorf("error should contain run value, got: %s", got)
+	}
+	if !strings.Contains(got, "replaced") {
+		t.Errorf("error should say 'replaced', got: %s", got)
+	}
+}
+
+func TestReplaceSetupEntry_MultiLineToMultiLine(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `project: test
+setup:
+  - run: pi:install-python
+    with:
+      version: "3.12"
+
+shortcuts:
+  up: docker/up
+`)
+
+	entry := SetupEntry{
+		Run:  "pi:install-python",
+		With: map[string]string{"version": "3.13"},
+	}
+	err := AddSetupEntry(dir, entry)
+	if err == nil {
+		t.Fatal("expected ReplacedSetupEntryError")
+	}
+	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
+	}
+
+	cfg, err2 := Load(dir)
+	if err2 != nil {
+		t.Fatalf("failed to reload: %v", err2)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].With["version"] != "3.13" {
+		t.Errorf("with.version = %q, want 3.13", cfg.Setup[0].With["version"])
+	}
+	if len(cfg.Shortcuts) != 1 {
+		t.Errorf("shortcuts count = %d, want 1 (preserved)", len(cfg.Shortcuts))
 	}
 }
 

@@ -10,9 +10,12 @@ import (
 
 // SetupEntry is re-exported here for writer use — same type as config.SetupEntry.
 
-// AddSetupEntry adds a setup entry to pi.yaml in the given directory.
-// It reads the file, checks for duplicates, and appends the entry to the
-// setup: block (creating it if absent). Preserves existing file content.
+// AddSetupEntry adds or replaces a setup entry in pi.yaml.
+//
+// Behaviour:
+//   - Exact duplicate (same run + if + with) → returns DuplicateSetupEntryError (no-op).
+//   - Same run target (run + if match, with differs) → replaces in-place, returns ReplacedSetupEntryError.
+//   - No match → appends the entry.
 func AddSetupEntry(dir string, entry SetupEntry) error {
 	path := filepath.Join(dir, FileName)
 
@@ -29,15 +32,30 @@ func AddSetupEntry(dir string, entry SetupEntry) error {
 		return err
 	}
 
-	if isSetupDuplicate(cfg.Setup, entry) {
+	idx, exact := findMatchingEntry(cfg.Setup, entry)
+
+	if idx >= 0 && exact {
 		return &DuplicateSetupEntryError{Run: entry.Run}
 	}
 
 	content := string(data)
 	entryYAML := FormatSetupEntry(entry)
-	updated, err := insertSetupEntry(content, entryYAML)
-	if err != nil {
-		return err
+
+	var updated string
+	var replaced bool
+
+	if idx >= 0 {
+		// Same run target but different with — replace in-place.
+		updated, err = replaceSetupEntry(content, idx, entryYAML)
+		if err != nil {
+			return err
+		}
+		replaced = true
+	} else {
+		updated, err = insertSetupEntry(content, entryYAML)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
@@ -48,11 +66,15 @@ func AddSetupEntry(dir string, entry SetupEntry) error {
 		return fmt.Errorf("validation after update failed: %w", err)
 	}
 
+	if replaced {
+		return &ReplacedSetupEntryError{Run: entry.Run}
+	}
+
 	return nil
 }
 
 // DuplicateSetupEntryError is returned when trying to add a setup entry that's
-// already declared in pi.yaml.
+// already declared in pi.yaml (exact match on run + if + with).
 type DuplicateSetupEntryError struct {
 	Run string
 }
@@ -61,22 +83,32 @@ func (e *DuplicateSetupEntryError) Error() string {
 	return fmt.Sprintf("setup entry %q is already declared in %s", e.Run, FileName)
 }
 
-// isSetupDuplicate checks if a setup entry with the same run target and
-// matching with/if fields already exists.
-func isSetupDuplicate(entries []SetupEntry, entry SetupEntry) bool {
-	for _, e := range entries {
+// ReplacedSetupEntryError is returned when an existing entry with the same run
+// target was replaced in-place (run + if match, with differs).
+type ReplacedSetupEntryError struct {
+	Run string
+}
+
+func (e *ReplacedSetupEntryError) Error() string {
+	return fmt.Sprintf("setup entry %q replaced in %s", e.Run, FileName)
+}
+
+// findMatchingEntry searches for an existing setup entry that matches the new
+// entry's run target and if condition. Returns (index, exactMatch).
+//   - index == -1: no match found.
+//   - index >= 0 && exactMatch: full duplicate (run + if + with all equal).
+//   - index >= 0 && !exactMatch: same target (run + if match, with differs).
+func findMatchingEntry(entries []SetupEntry, entry SetupEntry) (int, bool) {
+	for i, e := range entries {
 		if e.Run != entry.Run {
 			continue
 		}
 		if e.If != entry.If {
 			continue
 		}
-		if !mapsEqual(e.With, entry.With) {
-			continue
-		}
-		return true
+		return i, mapsEqual(e.With, entry.With)
 	}
-	return false
+	return -1, false
 }
 
 func mapsEqual(a, b map[string]string) bool {
@@ -126,6 +158,82 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// replaceSetupEntry replaces the Nth setup entry (0-indexed) in the raw file
+// content with the new YAML text, preserving position in the list.
+func replaceSetupEntry(content string, entryIdx int, newYAML string) (string, error) {
+	lines := strings.Split(content, "\n")
+
+	setupIdx := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "setup:" {
+			setupIdx = i
+			break
+		}
+	}
+	if setupIdx == -1 {
+		return "", fmt.Errorf("setup: block not found")
+	}
+
+	// Walk setup block items, counting top-level list items (lines starting
+	// with "  - " or "  -\n" relative to setup:).
+	type entryRange struct{ start, end int }
+	var entries []entryRange
+	i := setupIdx + 1
+	for i < len(lines) {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+
+		// Skip blank lines between entries
+		if trimmed == "" {
+			i++
+			continue
+		}
+
+		// End of setup block: non-indented, non-empty line
+		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			break
+		}
+
+		// A new list item starts with "  -" (at 2-space indent)
+		if strings.HasPrefix(line, "  -") {
+			start := i
+			i++
+			// Continuation lines: indented but NOT starting a new list item
+			for i < len(lines) {
+				next := lines[i]
+				nextTrimmed := strings.TrimSpace(next)
+				if nextTrimmed == "" {
+					break
+				}
+				if !strings.HasPrefix(next, " ") && !strings.HasPrefix(next, "\t") {
+					break
+				}
+				if strings.HasPrefix(next, "  -") {
+					break
+				}
+				i++
+			}
+			entries = append(entries, entryRange{start, i})
+			continue
+		}
+		i++
+	}
+
+	if entryIdx < 0 || entryIdx >= len(entries) {
+		return "", fmt.Errorf("setup entry index %d out of range (have %d entries)", entryIdx, len(entries))
+	}
+
+	r := entries[entryIdx]
+	newLines := strings.Split(newYAML, "\n")
+
+	result := make([]string, 0, len(lines)-r.end+r.start+len(newLines))
+	result = append(result, lines[:r.start]...)
+	result = append(result, newLines...)
+	result = append(result, lines[r.end:]...)
+
+	return strings.Join(result, "\n"), nil
 }
 
 // insertSetupEntry appends the rendered YAML entry to the setup: block in the
