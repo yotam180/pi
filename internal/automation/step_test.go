@@ -18,7 +18,7 @@ steps:
     if: os.macos
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +38,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +58,7 @@ steps:
     if: os.linux or os.macos
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,7 +84,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -105,7 +105,7 @@ steps:
     if: "and and and"
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid if expression")
 	}
@@ -123,7 +123,7 @@ steps:
     if: file.exists(".env")
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -143,7 +143,7 @@ steps:
       GOARCH: amd64
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -169,7 +169,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -191,7 +191,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -216,7 +216,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -236,7 +236,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -254,7 +254,7 @@ steps:
   - bash: echo installing
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -272,7 +272,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid if expression")
 	}
@@ -290,7 +290,7 @@ steps:
   - bash: source .env && echo loaded
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -310,7 +310,7 @@ steps:
   - bash: echo done
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,7 +339,7 @@ install:
   version: brew --version | head -1
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -387,7 +387,7 @@ install:
   version: python3 --version | awk '{print $2}'
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -443,7 +443,7 @@ install:
   version: node --version
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -477,7 +477,7 @@ install:
   run: install foo
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for both steps and install")
 	}
@@ -497,7 +497,7 @@ install:
   run: install foo
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty test")
 	}
@@ -517,7 +517,7 @@ install:
   run: ""
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty run")
 	}
@@ -537,7 +537,7 @@ install:
   run: curl install.sh | sh
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -558,7 +558,7 @@ install:
   verify: python3 --version | grep -q "3.13"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -582,7 +582,7 @@ install:
   run: curl install.sh | sh
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -611,7 +611,7 @@ install:
   version: python3 --version | awk '{print $2}'
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -643,7 +643,7 @@ install:
       if: "!invalid"
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid if in install step")
 	}
@@ -668,7 +668,7 @@ install:
   version: node --version
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -699,7 +699,7 @@ install:
   run: install-tool.sh
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -719,7 +719,7 @@ install:
   version: brew --version
 `)
 
-	a, err := LoadFromBytes(yaml, "builtin://install-brew")
+	a, err := LoadFromBytes(yaml, "builtin://install-brew", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -745,7 +745,7 @@ steps:
     silent: true
   - bash: echo also visible
 `
-	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml")
+	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -770,7 +770,7 @@ steps:
   - bash: echo hello
     silent: false
 `
-	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml")
+	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -790,7 +790,7 @@ steps:
     parent_shell: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -817,7 +817,7 @@ steps:
     parent_shell: true
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for parent_shell on non-bash step")
 	}
@@ -839,7 +839,7 @@ steps:
   - bash: cat
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for parent_shell with pipe_to")
 	}
@@ -859,7 +859,7 @@ steps:
     parent_shell: false
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -878,7 +878,7 @@ steps:
     dir: src
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -898,7 +898,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -919,7 +919,7 @@ steps:
     silent: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -943,7 +943,7 @@ steps:
     timeout: 30s
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -967,7 +967,7 @@ steps:
     timeout: 5m
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -985,7 +985,7 @@ steps:
     timeout: 1h30m
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1002,7 +1002,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1023,7 +1023,7 @@ steps:
     timeout: not-a-duration
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid timeout duration")
 	}
@@ -1041,7 +1041,7 @@ steps:
     timeout: "-5s"
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for negative timeout")
 	}
@@ -1059,7 +1059,7 @@ steps:
     timeout: "0s"
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for zero timeout")
 	}
@@ -1077,7 +1077,7 @@ steps:
     timeout: 30s
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for timeout on run step")
 	}
@@ -1096,7 +1096,7 @@ steps:
     timeout: 30s
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for timeout on parent_shell step")
 	}
@@ -1118,7 +1118,7 @@ steps:
     silent: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1142,7 +1142,7 @@ steps:
     timeout: 10s
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1160,7 +1160,7 @@ steps:
     timeout: 15s
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1180,7 +1180,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1205,7 +1205,7 @@ steps:
     description: Verify services are healthy
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1239,7 +1239,7 @@ steps:
       GO_TEST_FLAGS: -v
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1277,7 +1277,7 @@ steps:
       - bash: echo "fallback"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1312,7 +1312,7 @@ steps:
     description: Pick the right installer
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1332,7 +1332,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1351,7 +1351,7 @@ steps:
     if: os.macos
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1368,7 +1368,7 @@ steps:
   - first: []
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty first: block")
 	}
@@ -1387,7 +1387,7 @@ steps:
     bash: echo world
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for first: combined with bash:")
 	}
@@ -1407,7 +1407,7 @@ steps:
       FOO: bar
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for env on first: block")
 	}
@@ -1426,7 +1426,7 @@ steps:
     dir: some/dir
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for dir on first: block")
 	}
@@ -1448,7 +1448,7 @@ steps:
       - bash: echo world
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1473,7 +1473,7 @@ install:
   version: go version | awk '{print $3}'
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1502,7 +1502,7 @@ steps:
           - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for nested first: blocks")
 	}
@@ -1521,7 +1521,7 @@ steps:
   - bash: echo after
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1551,7 +1551,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1573,7 +1573,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1593,10 +1593,8 @@ steps:
 `)
 
 	warn := &bytes.Buffer{}
-	WarnWriter = warn
-	defer func() { WarnWriter = nil }()
 
-	a, err := Load(path)
+	a, err := Load(path, warn)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1619,7 +1617,7 @@ steps:
   - bash: cat
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error when both pipe and pipe_to are specified")
 	}
@@ -1638,7 +1636,7 @@ steps:
   - bash: cat
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid pipe_to value")
 	}
@@ -1658,7 +1656,7 @@ steps:
   - bash: cat
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for parent_shell with pipe")
 	}
@@ -1678,7 +1676,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

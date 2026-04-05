@@ -2,6 +2,7 @@ package automation
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -37,6 +38,11 @@ type Automation struct {
 	// FilePath is the absolute path to the YAML file this automation was loaded from.
 	// Set by Load(), not parsed from YAML.
 	FilePath string `yaml:"-"`
+
+	// warnWriter receives deprecation warnings during YAML parsing (e.g. pipe_to: next).
+	// Set by Load/LoadFromBytes before unmarshalling. Not exported — callers pass it
+	// through the loading functions.
+	warnWriter io.Writer
 }
 
 // IsInstaller returns true if this automation uses the install: block schema.
@@ -117,7 +123,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		shorthand.PipeTo = raw.PipeTo
 		shorthand.Pipe = raw.Pipe
 		shorthand.With = raw.With
-		step, err := shorthand.toStep(0)
+		step, err := shorthand.toStep(0, a.warnWriter)
 		if err != nil {
 			return err
 		}
@@ -129,7 +135,7 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 	a.Env = raw.Env
 
 	for i, sr := range raw.Steps {
-		step, err := sr.toStep(i)
+		step, err := sr.toStep(i, a.warnWriter)
 		if err != nil {
 			return err
 		}
@@ -174,7 +180,9 @@ func buildShorthandStep(bash, python, typescript, run *string) (*stepRaw, error)
 }
 
 // Load reads and parses an automation YAML file at the given path.
-func Load(path string) (*Automation, error) {
+// warnWriter receives deprecation warnings (e.g. pipe_to: next). If nil,
+// warnings are silently discarded.
+func Load(path string, warnWriter io.Writer) (*Automation, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -188,7 +196,7 @@ func Load(path string) (*Automation, error) {
 		return nil, fmt.Errorf("resolving absolute path for %s: %w", path, err)
 	}
 
-	a := &Automation{}
+	a := &Automation{warnWriter: warnWriter}
 	if err := yaml.Unmarshal(data, a); err != nil {
 		return nil, fmt.Errorf("parsing automation file %s: %w", path, err)
 	}
@@ -204,8 +212,9 @@ func Load(path string) (*Automation, error) {
 
 // LoadFromBytes parses automation YAML from raw bytes, using filePath as the
 // automation's logical file path (for Dir() resolution and error messages).
-func LoadFromBytes(data []byte, filePath string) (*Automation, error) {
-	a := &Automation{}
+// warnWriter receives deprecation warnings. If nil, warnings are silently discarded.
+func LoadFromBytes(data []byte, filePath string, warnWriter io.Writer) (*Automation, error) {
+	a := &Automation{warnWriter: warnWriter}
 	if err := yaml.Unmarshal(data, a); err != nil {
 		return nil, fmt.Errorf("parsing automation %s: %w", filePath, err)
 	}

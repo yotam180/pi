@@ -56,7 +56,7 @@ func Discover() (*discovery.Result, error) {
 			return fmt.Errorf("reading embedded %s: %w", path, err)
 		}
 
-		a, err := automation.LoadFromBytes(data, path)
+		a, err := automation.LoadFromBytes(data, path, nil)
 		if err != nil {
 			return fmt.Errorf("loading built-in %s: %w", path, err)
 		}

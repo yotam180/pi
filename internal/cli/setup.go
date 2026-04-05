@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
@@ -51,9 +50,6 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 }
 
 func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
-	automation.WarnWriter = stderr
-	defer func() { automation.WarnWriter = nil }()
-
 	cwd, err := getwd()
 	if err != nil {
 		return err

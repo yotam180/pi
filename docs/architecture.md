@@ -65,8 +65,8 @@ internal/
     writer.go                      AddPackage() — reads pi.yaml, detects duplicates (DuplicatePackageError), insertPackageEntry() appends to packages: or creates the block; line-based raw string manipulation preserves unrelated file content
     writer_test.go                 14 tests (GitHub/file add, alias, duplicate, append, create block, missing pi.yaml, preserve content, multiple adds, format entry, insert entry, duplicate error, existing block with following content)
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env
-    step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(), toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
+    automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
+    step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
     automation_test.go             33 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env, shorthand parent_shell and with)
@@ -412,7 +412,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Package boundaries
 - `config` knows only about `pi.yaml` structure; includes `PackageEntry` (source + optional alias), `PackageAliases()` helper
-- `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths
+- `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths; `Load()`/`LoadFromBytes()` accept a `warnWriter io.Writer` parameter for deprecation warnings (no global state)
 - `cache` manages `~/.pi/cache/` — clones GitHub repos at specific versions, handles auth fallback, validates `pi-package.yaml`; depends on `gopkg.in/yaml.v3` for package YAML parsing; injectable `GitFunc`/`GetenvFunc` for testing
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)

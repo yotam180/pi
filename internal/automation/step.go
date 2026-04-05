@@ -58,9 +58,6 @@ func (s Step) IsFirst() bool {
 	return s.First != nil
 }
 
-// WarnWriter is the writer used for deprecation warnings during YAML parsing.
-// Set this before loading automations to capture warnings. Defaults to nil (no warnings).
-var WarnWriter io.Writer
 
 // stepRaw is the intermediate representation used during YAML unmarshalling.
 // Each step is a mapping that may contain one of the step type keys, or a first: block.
@@ -85,11 +82,11 @@ type stepRaw struct {
 	First []stepRaw `yaml:"first"`
 }
 
-func (sr *stepRaw) toStep(index int) (Step, error) {
+func (sr *stepRaw) toStep(index int, warnWriter io.Writer) (Step, error) {
 	// Handle first: block — mutually exclusive with step type keys.
 	// sr.First is non-nil when the YAML key was present (even for `first: []`).
 	if sr.First != nil {
-		return sr.toFirstStep(index)
+		return sr.toFirstStep(index, warnWriter)
 	}
 
 	var found []struct {
@@ -134,7 +131,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		return Step{}, fmt.Errorf("step[%d]: unknown step type %q", index, s.t)
 	}
 
-	pipe, err := sr.resolvePipe(index)
+	pipe, err := sr.resolvePipe(index, warnWriter)
 	if err != nil {
 		return Step{}, err
 	}
@@ -185,7 +182,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 }
 
 // toFirstStep converts a stepRaw with a first: block into a Step.
-func (sr *stepRaw) toFirstStep(index int) (Step, error) {
+func (sr *stepRaw) toFirstStep(index int, warnWriter io.Writer) (Step, error) {
 	// first: is mutually exclusive with step type keys
 	if sr.Bash != nil || sr.Run != nil || sr.Python != nil || sr.TypeScript != nil {
 		return Step{}, fmt.Errorf("step[%d]: 'first' cannot be combined with a step type key (bash/run/python/typescript)", index)
@@ -216,14 +213,14 @@ func (sr *stepRaw) toFirstStep(index int) (Step, error) {
 
 	var subSteps []Step
 	for i, sub := range sr.First {
-		s, err := sub.toStep(i)
+		s, err := sub.toStep(i, warnWriter)
 		if err != nil {
 			return Step{}, fmt.Errorf("step[%d].first: %w", index, err)
 		}
 		subSteps = append(subSteps, s)
 	}
 
-	pipe, err := sr.resolvePipe(index)
+	pipe, err := sr.resolvePipe(index, warnWriter)
 	if err != nil {
 		return Step{}, err
 	}
@@ -258,7 +255,7 @@ func (p *InstallPhase) UnmarshalYAML(value *yaml.Node) error {
 			return err
 		}
 		for i, sr := range rawSteps {
-			step, err := sr.toStep(i)
+			step, err := sr.toStep(i, nil)
 			if err != nil {
 				return err
 			}
@@ -283,7 +280,7 @@ func (s *InstallSpec) HasVerify() bool {
 }
 
 // resolvePipe normalises pipe_to: next (deprecated) and pipe: true into a single bool.
-func (sr *stepRaw) resolvePipe(index int) (bool, error) {
+func (sr *stepRaw) resolvePipe(index int, warnWriter io.Writer) (bool, error) {
 	hasPipeTo := sr.PipeTo != ""
 	hasPipe := sr.Pipe != nil
 
@@ -295,8 +292,8 @@ func (sr *stepRaw) resolvePipe(index int) (bool, error) {
 		if sr.PipeTo != "next" {
 			return false, fmt.Errorf("step[%d]: pipe_to must be \"next\", got %q", index, sr.PipeTo)
 		}
-		if WarnWriter != nil {
-			fmt.Fprintf(WarnWriter, "warning: step[%d]: 'pipe_to: next' is deprecated, use 'pipe: true'\n", index)
+		if warnWriter != nil {
+			fmt.Fprintf(warnWriter, "warning: step[%d]: 'pipe_to: next' is deprecated, use 'pipe: true'\n", index)
 		}
 		return true, nil
 	}

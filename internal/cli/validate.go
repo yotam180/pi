@@ -51,9 +51,6 @@ func runValidate(startDir string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	automation.WarnWriter = stderr
-	defer func() { automation.WarnWriter = nil }()
-
 	result := validateProject(pc.Root)
 
 	if len(result.Errors) > 0 {

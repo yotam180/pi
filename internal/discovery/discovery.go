@@ -102,7 +102,7 @@ func Discover(piDir string, warnWriter io.Writer) (*Result, error) {
 			return fmt.Errorf("automation name collision: %q resolves from both %s and %s", name, existingPath, path)
 		}
 
-		a, err := automation.Load(path)
+		a, err := automation.Load(path, warnWriter)
 		if err != nil {
 			return fmt.Errorf("loading %s: %w", path, err)
 		}

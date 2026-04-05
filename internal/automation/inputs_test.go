@@ -26,7 +26,7 @@ steps:
   - bash: echo "$PI_INPUT_GREETING $PI_INPUT_NAME"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ steps:
   - bash: echo hi
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,7 +89,7 @@ steps:
       greeting: hi
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,7 +114,7 @@ steps:
       key: value
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for 'with' on non-run step")
 	}

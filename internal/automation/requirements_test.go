@@ -17,7 +17,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,7 +44,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +71,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -122,7 +122,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,7 +152,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -172,7 +172,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,7 +193,7 @@ install:
   run: curl install.sh | sh
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +218,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown runtime")
 	}
@@ -240,7 +240,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty requires entry")
 	}
@@ -259,7 +259,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty command value")
 	}
@@ -278,7 +278,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for bad version syntax")
 	}
@@ -297,7 +297,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for missing version after >=")
 	}
@@ -316,7 +316,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown mapping key")
 	}
@@ -335,7 +335,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for version with empty component")
 	}
@@ -354,7 +354,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid format")
 	}
@@ -373,7 +373,7 @@ steps:
   - bash: echo hello
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for bad command version")
 	}
@@ -393,7 +393,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := LoadFromBytes(data, "builtin://test")
+	a, err := LoadFromBytes(data, "builtin://test", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

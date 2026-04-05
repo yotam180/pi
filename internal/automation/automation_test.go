@@ -27,7 +27,7 @@ steps:
   - bash: echo "Hello, World!"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,7 +60,7 @@ steps:
   - bash: echo "step 3"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -86,7 +86,7 @@ steps:
   - bash: cat
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,7 +109,7 @@ steps:
       echo "line 2"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +120,7 @@ steps:
 }
 
 func TestLoad_MissingFile(t *testing.T) {
-	_, err := Load("/nonexistent/path.yaml")
+	_, err := Load("/nonexistent/path.yaml", nil)
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -136,7 +136,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,7 +152,7 @@ name: empty
 description: No steps
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for missing steps")
 	}
@@ -169,7 +169,7 @@ steps:
   - pipe_to: next
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for step with no type")
 	}
@@ -187,7 +187,7 @@ steps:
     run: other/thing
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for multiple step types")
 	}
@@ -206,7 +206,7 @@ steps:
       print("hello from python")
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -225,7 +225,7 @@ steps:
       console.log(msg);
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -243,7 +243,7 @@ steps:
   invalid yaml here: [[[
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for malformed YAML")
 	}
@@ -257,7 +257,7 @@ steps:
   - bash: ""
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for empty step value")
 	}
@@ -275,7 +275,7 @@ description: Run tests
 bash: go test ./...
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -300,7 +300,7 @@ description: Run Python script
 python: print("hello")
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -319,7 +319,7 @@ description: Run TS
 typescript: console.log("hello")
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -338,7 +338,7 @@ description: Delegate to another automation
 run: setup/install-deps
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -366,7 +366,7 @@ timeout: 30s
 silent: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -405,7 +405,7 @@ bash: cd /tmp
 parent_shell: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -426,7 +426,7 @@ with:
   name: world
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -449,7 +449,7 @@ bash: brew install jq
 if: os.macos
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -472,7 +472,7 @@ steps:
   - bash: echo world
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for shorthand + steps conflict")
 	}
@@ -490,7 +490,7 @@ install:
   run: echo installing
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for shorthand + install conflict")
 	}
@@ -506,7 +506,7 @@ bash: echo hello
 python: print("hello")
 `)
 
-	_, err := Load(path)
+	_, err := Load(path, nil)
 	if err == nil {
 		t.Fatal("expected error for multiple top-level step keys")
 	}
@@ -523,7 +523,7 @@ bash: echo "data"
 pipe_to: next
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -540,7 +540,7 @@ bash: echo "data"
 pipe: true
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -558,7 +558,7 @@ bash: |
   echo "line 2"
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -581,7 +581,7 @@ inputs:
     description: Name to greet
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -609,7 +609,7 @@ steps:
   - bash: sha256sum bin/app
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -647,7 +647,7 @@ steps:
       GOARCH: arm64
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -670,7 +670,7 @@ steps:
   - bash: echo hello
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -688,7 +688,7 @@ env:
   GOOS: linux
 `)
 
-	a, err := Load(path)
+	a, err := Load(path, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
