@@ -53,7 +53,7 @@ steps:
 
 func TestRunAutomation_Success(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "hello", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestRunAutomation_Success(t *testing.T) {
 
 func TestRunAutomation_NestedName(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "docker/up", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "docker/up", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestRunAutomation_NestedName(t *testing.T) {
 
 func TestRunAutomation_NotFound(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "nonexistent", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "nonexistent", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error for unknown automation")
 	}
@@ -83,7 +83,7 @@ func TestRunAutomation_NotFound(t *testing.T) {
 
 func TestRunAutomation_ExitCode(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "fail", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "fail", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error for failed step")
 	}
@@ -98,7 +98,7 @@ func TestRunAutomation_ExitCode(t *testing.T) {
 
 func TestRunAutomation_WithArgs(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "args", []string{"foo", "bar"}, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "args", []string{"foo", "bar"}, nil, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestRunAutomation_WithArgs(t *testing.T) {
 
 func TestRunAutomation_RunStep(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "chain", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "chain", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestRunAutomation_FromSubdirectory(t *testing.T) {
 	sub := filepath.Join(root, "src", "deep")
 	os.MkdirAll(sub, 0o755)
 
-	err := runAutomation(sub, "hello", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(sub, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRunAutomation_FromSubdirectory(t *testing.T) {
 
 func TestRunAutomation_NoPiYaml(t *testing.T) {
 	dir := t.TempDir()
-	err := runAutomation(dir, "hello", nil, nil, false, os.Stdout, os.Stderr)
+	err := runAutomation(dir, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error when no pi.yaml found")
 	}
@@ -150,7 +150,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "greet", nil, map[string]string{"name": "alice"}, false, &buf, os.Stderr)
+	err := runAutomation(root, "greet", nil, map[string]string{"name": "alice"}, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

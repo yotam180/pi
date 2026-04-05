@@ -263,3 +263,73 @@ func TestMultipleStyles_Sequential(t *testing.T) {
 		t.Errorf("expected 3 resets for 3 styled calls, got %q", got)
 	}
 }
+
+func TestStepTrace_NoColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.StepTrace("bash", "echo hello")
+	got := buf.String()
+	if got != "  → bash: echo hello\n" {
+		t.Errorf("expected trace line, got %q", got)
+	}
+}
+
+func TestStepTrace_WithColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, true)
+	p.StepTrace("bash", "echo hello")
+	got := buf.String()
+	if !strings.Contains(got, dim) {
+		t.Errorf("trace should use dim style, got %q", got)
+	}
+	if !strings.Contains(got, "bash: echo hello") {
+		t.Errorf("trace should contain command, got %q", got)
+	}
+}
+
+func TestStepTrace_Truncation(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	long := strings.Repeat("x", 100)
+	p.StepTrace("bash", long)
+	got := buf.String()
+	if !strings.HasSuffix(strings.TrimSpace(got), "...") {
+		t.Errorf("long trace should be truncated, got %q", got)
+	}
+}
+
+func TestStepTrace_MultilineCollapse(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.StepTrace("bash", "line1\nline2\nline3")
+	got := buf.String()
+	if strings.Contains(got, "line2") {
+		t.Errorf("multiline should be collapsed, got %q", got)
+	}
+	if !strings.Contains(got, "line1...") {
+		t.Errorf("should show first line with ..., got %q", got)
+	}
+}
+
+func TestTruncateTrace(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{"short", "echo hello", 80, "echo hello"},
+		{"exact", "abcde", 5, "abcde"},
+		{"long", "abcdefghij", 8, "abcde..."},
+		{"multiline", "line1\nline2", 80, "line1..."},
+		{"multiline long", strings.Repeat("x", 100) + "\nline2", 80, strings.Repeat("x", 77) + "..."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateTrace(tt.input, tt.maxLen)
+			if got != tt.want {
+				t.Errorf("truncateTrace(%q, %d) = %q, want %q", tt.input, tt.maxLen, got, tt.want)
+			}
+		})
+	}
+}

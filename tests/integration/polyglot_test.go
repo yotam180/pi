@@ -145,7 +145,7 @@ func TestPolyglot_ETLPipeline_StepOrder(t *testing.T) {
 func TestPolyglot_WordCount(t *testing.T) {
 	requirePython(t)
 	dir := filepath.Join(examplesDir(), "polyglot")
-	out, code := runPi(t, dir, "run", "pipeline/wordcount")
+	out, code := runPiStdout(t, dir, "run", "pipeline/wordcount")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}

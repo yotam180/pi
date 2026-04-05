@@ -68,6 +68,42 @@ func runPi(t *testing.T, dir string, args ...string) (string, int) {
 	return string(out), exitCode
 }
 
+func runPiStdout(t *testing.T, dir string, args ...string) (string, int) {
+	t.Helper()
+	cmd := exec.Command(piBinary, args...)
+	cmd.Dir = dir
+	var stdout strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = os.Stderr
+	exitCode := 0
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("running pi %v: %v", args, err)
+		}
+	}
+	return stdout.String(), exitCode
+}
+
+func runPiSplit(t *testing.T, dir string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	cmd := exec.Command(piBinary, args...)
+	cmd.Dir = dir
+	var stdoutBuf, stderrBuf strings.Builder
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	exitCode = 0
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("running pi %v: %v", args, err)
+		}
+	}
+	return stdoutBuf.String(), stderrBuf.String(), exitCode
+}
+
 func runPiWithEnv(t *testing.T, dir string, env []string, args ...string) (string, int) {
 	t.Helper()
 	cmd := exec.Command(piBinary, args...)
@@ -284,7 +320,7 @@ func TestPipe_Upper(t *testing.T) {
 func TestPipe_CountLines(t *testing.T) {
 	requirePython(t)
 	dir := filepath.Join(examplesDir(), "pipe")
-	out, code := runPi(t, dir, "run", "count-lines")
+	out, code := runPiStdout(t, dir, "run", "count-lines")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -339,7 +375,7 @@ func TestVersion_FlagAndSubcommandMatch(t *testing.T) {
 
 func TestInputs_PositionalArgs(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "greet", "alice")
+	out, code := runPiStdout(t, dir, "run", "greet", "alice")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -351,7 +387,7 @@ func TestInputs_PositionalArgs(t *testing.T) {
 
 func TestInputs_PositionalBothArgs(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "greet", "bob", "hi")
+	out, code := runPiStdout(t, dir, "run", "greet", "bob", "hi")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -363,7 +399,7 @@ func TestInputs_PositionalBothArgs(t *testing.T) {
 
 func TestInputs_WithFlags(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "greet", "--with", "name=charlie", "--with", "greeting=hey")
+	out, code := runPiStdout(t, dir, "run", "greet", "--with", "name=charlie", "--with", "greeting=hey")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -375,7 +411,7 @@ func TestInputs_WithFlags(t *testing.T) {
 
 func TestInputs_DefaultApplied(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "greet", "--with", "name=dave")
+	out, code := runPiStdout(t, dir, "run", "greet", "--with", "name=dave")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -409,7 +445,7 @@ func TestInputs_UnknownInput(t *testing.T) {
 
 func TestInputs_RunStepWithWith(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "caller")
+	out, code := runPiStdout(t, dir, "run", "caller")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -511,7 +547,7 @@ func TestConditional_List(t *testing.T) {
 
 func TestConditional_PlatformInfo(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "conditional")
-	out, code := runPi(t, dir, "run", "platform-info")
+	out, code := runPiStdout(t, dir, "run", "platform-info")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -543,7 +579,7 @@ func TestConditional_PlatformInfo(t *testing.T) {
 
 func TestConditional_SkipAll(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "conditional")
-	out, code := runPi(t, dir, "run", "skip-all")
+	out, code := runPiStdout(t, dir, "run", "skip-all")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -556,7 +592,7 @@ func TestConditional_SkipAll(t *testing.T) {
 
 func TestConditional_PipePassesThroughSkipped(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "conditional")
-	out, code := runPi(t, dir, "run", "pipe-conditional")
+	out, code := runPiStdout(t, dir, "run", "pipe-conditional")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -1870,5 +1906,116 @@ func TestStepEnv_InfoWithCondition(t *testing.T) {
 	}
 	if !strings.Contains(out, "env:") {
 		t.Errorf("expected 'env:' in info output, got: %s", out)
+	}
+}
+
+// --- Step visibility tests ---
+
+func TestStepVisibility_DefaultTraceLines(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	stdout, stderr, code := runPiSplit(t, dir, "run", "normal")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	if !strings.Contains(stderr, "→ bash: echo \"step-one-output\"") {
+		t.Errorf("expected trace line for step 1 in stderr, got:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "→ bash: echo \"step-two-output\"") {
+		t.Errorf("expected trace line for step 2 in stderr, got:\n%s", stderr)
+	}
+
+	if !strings.Contains(stdout, "step-one-output") {
+		t.Errorf("expected step 1 output in stdout, got:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "step-two-output") {
+		t.Errorf("expected step 2 output in stdout, got:\n%s", stdout)
+	}
+}
+
+func TestStepVisibility_SilentSuppressesTraceAndOutput(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	stdout, stderr, code := runPiSplit(t, dir, "run", "mixed")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	if !strings.Contains(stderr, "→ bash: echo \"visible-output\"") {
+		t.Errorf("expected trace for visible step, got stderr:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "hidden-output") {
+		t.Errorf("silent step trace should be suppressed, got stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "→ bash: echo \"also-visible\"") {
+		t.Errorf("expected trace for last step, got stderr:\n%s", stderr)
+	}
+
+	if !strings.Contains(stdout, "visible-output") {
+		t.Errorf("expected visible output, got stdout:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "hidden-output") {
+		t.Errorf("silent step output should be suppressed, got stdout:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "also-visible") {
+		t.Errorf("expected also-visible output, got stdout:\n%s", stdout)
+	}
+}
+
+func TestStepVisibility_LoudOverridesSilent(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	stdout, stderr, code := runPiSplit(t, dir, "run", "--loud", "mixed")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	if !strings.Contains(stderr, "→ bash: echo \"hidden-output\"") {
+		t.Errorf("loud should show trace for silent step, got stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stdout, "hidden-output") {
+		t.Errorf("loud should show output for silent step, got stdout:\n%s", stdout)
+	}
+}
+
+func TestStepVisibility_AllSilentNoOutput(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	stdout, stderr, code := runPiSplit(t, dir, "run", "all-silent")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	if strings.Contains(stderr, "→") {
+		t.Errorf("all-silent should produce no trace lines, got stderr:\n%s", stderr)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Errorf("all-silent should produce no stdout, got:\n%s", stdout)
+	}
+}
+
+func TestStepVisibility_AllSilentLoudShowsAll(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	stdout, stderr, code := runPiSplit(t, dir, "run", "--loud", "all-silent")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+
+	if !strings.Contains(stderr, "→ bash: echo \"quiet-one\"") {
+		t.Errorf("loud should show trace for silent step 1, got stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "→ bash: echo \"quiet-two\"") {
+		t.Errorf("loud should show trace for silent step 2, got stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stdout, "quiet-one") {
+		t.Errorf("loud should show output for silent step 1, got stdout:\n%s", stdout)
+	}
+}
+
+func TestStepVisibility_InfoShowsSilent(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-visibility")
+	out, code := runPi(t, dir, "info", "mixed")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "silent") {
+		t.Errorf("expected 'silent' annotation in info output, got:\n%s", out)
 	}
 }

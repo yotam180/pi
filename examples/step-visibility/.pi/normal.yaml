@@ -1,0 +1,5 @@
+name: normal
+description: Two normal steps
+steps:
+  - bash: echo "step-one-output"
+  - bash: echo "step-two-output"

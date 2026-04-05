@@ -133,6 +133,41 @@ steps:
 
 Environment variables are scoped to the step — they do not leak to subsequent steps. Step-level env vars override parent process env vars with the same name.
 
+### Step Trace Lines
+
+By default, PI prints a trace line to stderr before executing each step:
+
+```
+  → bash: echo "building project..."
+  → run:  setup/install-deps
+  → python: transform.py
+```
+
+Installer steps are exempt — they have their own formatted output.
+
+### Silent Steps (`silent: true`)
+
+A step can declare `silent: true` to suppress both its trace line and its stdout/stderr output. This is useful for noisy housekeeping commands that clutter the terminal:
+
+```yaml
+steps:
+  - bash: echo "Starting build..."
+  - bash: rm -rf dist && mkdir dist
+    silent: true
+  - bash: go build -o dist/app ./...
+```
+
+The silent step still executes — only its output is suppressed. Piped data (`pipe_to: next`) still flows through silent steps.
+
+### Loud Mode (`--loud`)
+
+Passing `--loud` to `pi run` or `pi setup` overrides all `silent: true` flags, forcing every step to print its trace line and output. This is the escape hatch for debugging:
+
+```bash
+pi run --loud build
+pi setup --loud
+```
+
 ### Installer Automations (`install:`)
 
 Automations that install tools use the `install:` block instead of `steps:`. The two are mutually exclusive. The `install:` block explicitly declares a test-run-verify lifecycle, and PI manages all status output.
@@ -288,10 +323,12 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | `pi run <name> --with key=value`        | Run with explicit named inputs (repeatable)              |
 | `pi run --repo <path> <name>`           | Run an automation with explicit project root             |
 | `pi run --silent <name>`                | Suppress PI status lines for installer automations       |
+| `pi run --loud <name>`                  | Force all steps to print trace lines and output          |
 | `pi info <name>`                        | Show name, description, and input docs for an automation |
 | `pi setup`                    | Run all setup automations, then install shell shortcuts  |
 | `pi setup --no-shell`         | Run setup automations without installing shortcuts       |
 | `pi setup --silent`           | Suppress PI status lines for installer automations       |
+| `pi setup --loud`             | Force all steps to print trace lines and output          |
 | `pi shell`                    | Install shortcut functions into the current shell config |
 | `pi shell uninstall`          | Remove shortcuts for the current project                 |
 | `pi shell list`               | List all installed shortcut files across all projects    |

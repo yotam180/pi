@@ -95,6 +95,24 @@ func (p *Printer) SetupHeader(format string, a ...any) {
 	p.Dim(format, a...)
 }
 
+// StepTrace prints a step execution trace line (e.g. "  → bash: echo hello")
+// in dim style.
+func (p *Printer) StepTrace(stepType, value string) {
+	truncated := truncateTrace(value, 80)
+	p.Dim("  → %s: %s\n", stepType, truncated)
+}
+
+// truncateTrace shortens a value to maxLen, collapsing newlines.
+func truncateTrace(s string, maxLen int) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i] + "..."
+	}
+	if len(s) > maxLen {
+		return s[:maxLen-3] + "..."
+	}
+	return s
+}
+
 // styled wraps text in ANSI codes when color is enabled.
 func (p *Printer) styled(code, format string, a ...any) {
 	if !p.color {

@@ -17,6 +17,7 @@ func newRunCmd() *cobra.Command {
 	var repoFlag string
 	var withFlags []string
 	var silent bool
+	var loud bool
 
 	cmd := &cobra.Command{
 		Use:   "run <automation> [args...]",
@@ -27,7 +28,8 @@ so this works from any subdirectory of the project.
 
 Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).
 Use --with key=value to pass named inputs (repeatable).
-Use --silent to suppress PI status lines for installer automations.`,
+Use --silent to suppress PI status lines for installer automations.
+Use --loud to force trace lines and output for all steps (overrides silent: true).`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			startDir := repoFlag
@@ -44,13 +46,14 @@ Use --silent to suppress PI status lines for installer automations.`,
 				return err
 			}
 
-			return runAutomation(startDir, args[0], args[1:], withArgs, silent, os.Stdout, os.Stderr)
+			return runAutomation(startDir, args[0], args[1:], withArgs, silent, loud, os.Stdout, os.Stderr)
 		},
 	}
 
 	cmd.Flags().StringVar(&repoFlag, "repo", "", "project root path (used by anywhere shortcuts)")
 	cmd.Flags().StringArrayVar(&withFlags, "with", nil, "pass named input as key=value (repeatable)")
 	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")
+	cmd.Flags().BoolVar(&loud, "loud", false, "force trace lines and output for all steps (overrides silent: true)")
 
 	return cmd
 }
@@ -72,7 +75,7 @@ func parseWithFlags(flags []string) (map[string]string, error) {
 }
 
 // runAutomation resolves and executes an automation. Extracted for testability.
-func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent bool, stdout, stderr io.Writer) error {
+func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent, loud bool, stdout, stderr io.Writer) error {
 	root, err := project.FindRoot(startDir)
 	if err != nil {
 		return err
@@ -94,6 +97,7 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		Stdout:    stdout,
 		Stderr:    stderr,
 		Silent:    silent,
+		Loud:      loud,
 	}
 
 	cfg, cfgErr := config.Load(root)

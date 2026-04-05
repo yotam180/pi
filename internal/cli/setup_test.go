@@ -48,7 +48,7 @@ func TestSetup_RunsEntries(t *testing.T) {
 	t.Chdir(root)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, true, false)
+	err := runSetup(&stdout, &stderr, true, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestSetup_SkipsShellInCI(t *testing.T) {
 	t.Chdir(root)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, false, false)
+	err := runSetup(&stdout, &stderr, false, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestSetup_InstallsShortcuts(t *testing.T) {
 	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, false, false)
+	err := runSetup(&stdout, &stderr, false, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -144,7 +144,7 @@ steps:
 	t.Chdir(root)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, true, false)
+	err := runSetup(&stdout, &stderr, true, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,7 +186,7 @@ steps:
 	t.Chdir(root)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, true, false)
+	err := runSetup(&stdout, &stderr, true, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestSetup_Empty(t *testing.T) {
 	t.Chdir(root)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetup(&stdout, &stderr, false, false)
+	err := runSetup(&stdout, &stderr, false, false, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

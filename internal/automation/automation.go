@@ -190,6 +190,7 @@ type Step struct {
 	With   map[string]string `yaml:"-"`
 	If     string            `yaml:"-"`
 	Env    map[string]string `yaml:"-"`
+	Silent bool              `yaml:"-"`
 }
 
 // InstallPhase represents a phase (test, run, verify) in an install: block.
@@ -280,6 +281,7 @@ type stepRaw struct {
 	With       map[string]string `yaml:"with"`
 	If         string            `yaml:"if"`
 	Env        map[string]string `yaml:"env"`
+	Silent     bool              `yaml:"silent"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -396,6 +398,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		PipeTo: sr.PipeTo,
 		If:     sr.If,
 		Env:    sr.Env,
+		Silent: sr.Silent,
 	}
 	if len(sr.With) > 0 {
 		if s.t != StepTypeRun {

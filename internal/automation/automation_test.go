@@ -1771,6 +1771,49 @@ func TestParseNameVersion(t *testing.T) {
 	}
 }
 
+func TestStep_SilentField(t *testing.T) {
+	yaml := `name: test
+description: Test silent field
+steps:
+  - bash: echo visible
+  - bash: echo hidden
+    silent: true
+  - bash: echo also visible
+`
+	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Silent {
+		t.Error("step 0 should not be silent")
+	}
+	if !a.Steps[1].Silent {
+		t.Error("step 1 should be silent")
+	}
+	if a.Steps[2].Silent {
+		t.Error("step 2 should not be silent")
+	}
+}
+
+func TestStep_SilentFalseExplicit(t *testing.T) {
+	yaml := `name: test
+description: Test explicit silent false
+steps:
+  - bash: echo hello
+    silent: false
+`
+	a, err := LoadFromBytes([]byte(yaml), "/fake/test.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Silent {
+		t.Error("step with silent: false should not be silent")
+	}
+}
+
 func TestValidateVersionString(t *testing.T) {
 	tests := []struct {
 		input   string

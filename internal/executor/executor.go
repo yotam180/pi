@@ -38,6 +38,10 @@ type Executor struct {
 	// Stderr from failed install steps is always shown regardless of this flag.
 	Silent bool
 
+	// Loud forces all steps to print their trace line and output,
+	// overriding per-step silent: true flags.
+	Loud bool
+
 	// callStack tracks the chain of automation names currently being executed,
 	// used to detect circular run: dependencies.
 	callStack []string
@@ -142,9 +146,20 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 			}
 		}
 
+		suppress := step.Silent && !e.Loud
+		if !suppress {
+			e.printer().StepTrace(string(step.Type), step.Value)
+		}
+
 		isPipeSrc := step.PipeTo == "next" && i < len(a.Steps)-1
-		if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
-			return err
+		if suppress {
+			if err := e.execStepSuppressed(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+				return err
+			}
+		} else {
+			if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+				return err
+			}
 		}
 		pipedInput = nil
 		if isPipeSrc {
@@ -357,6 +372,19 @@ func (e *Executor) printIndentedStderr(text string) {
 	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
 		fmt.Fprintf(e.stderr(), "      %s\n", line)
 	}
+}
+
+// execStepSuppressed runs a step with stdout and stderr suppressed (for silent: true steps).
+// Pipe capture still works so that downstream steps can receive data.
+func (e *Executor) execStepSuppressed(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+	origStdout, origStderr := e.Stdout, e.Stderr
+	if !capturePipe {
+		e.Stdout = io.Discard
+	}
+	e.Stderr = io.Discard
+	err := e.execStep(a, step, args, index, stdinOverride, capturePipe, inputEnv)
+	e.Stdout, e.Stderr = origStdout, origStderr
+	return err
 }
 
 func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {

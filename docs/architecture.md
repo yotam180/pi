@@ -33,10 +33,10 @@ internal/
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
     discover.go                    discoverAll() — discovers local + built-in automations and merges
-    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; wires Provisioner from config
+    run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, if: conditions, and install lifecycle for installer automations
-    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; color-coded headers via display.Printer
+    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
@@ -54,20 +54,20 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If, Install, and Requires fields), Step (with If and Env fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             78 tests
+    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, and Silent fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             80 tests
   display/                         Styled terminal output (color, TTY detection)
-    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, shouldColor
+    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
-    display_test.go                25 tests (styles, color toggle, NO_COLOR, TTY, install status variants)
+    display_test.go                35 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor (with RuntimeEnv, Silent, Provisioner, and Printer fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), captureVersion(), printInstallStatus(), printer(), buildEnv(), prependPathInEnv(); pipe_to:next support; PI_INPUT_* env injection; step-level env: injection; step-level and automation-level if: conditional execution; structured installer lifecycle; provisioned runtime PATH injection; color-coded installer status via display.Printer
+    executor.go                    Executor (with RuntimeEnv, Silent, Loud, Provisioner, and Printer fields), ExitError, Run(), RunWithInputs(), evaluateCondition(), execBash(), execPython(), execTypeScript(), execRun(), execInstall(), execInstallPhase(), execStepSuppressed(), captureVersion(), printInstallStatus(), printer(), buildEnv(), prependPathInEnv(); pipe_to:next support; PI_INPUT_* env injection; step-level env: injection; step-level and automation-level if: conditional execution; structured installer lifecycle; provisioned runtime PATH injection; color-coded installer status via display.Printer; step trace lines via display.Printer.StepTrace(); step-level silent: true suppression; --loud override
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
-    executor_test.go               95 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env)
+    executor_test.go               102 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env + 7 step-trace/silent/loud)
     validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv with step env, prependPathInEnv)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
@@ -252,6 +252,19 @@ Makefile                               build, vet, test, test-matrix targets
 - Exit code propagation: if a piping step fails, execution stops immediately
 - Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
 
+### Step trace lines and silent/loud
+- Before executing each non-installer step, PI prints a trace line to stderr: `  → <type>: <truncated-command>`
+- Trace lines use dim styling via `display.Printer.StepTrace()`
+- Multiline commands are collapsed to first line with `...`; long commands are truncated at 80 chars
+- Installer steps are exempt — they have their own formatted status output
+- A step with `silent: true` suppresses its trace line AND its stdout/stderr output
+- Silent steps still execute — only their output is hidden; pipe data (`pipe_to: next`) still flows through
+- `Executor.Loud` overrides all `silent: true` flags — when set, every step prints trace + output
+- `--loud` flag on `pi run` and `pi setup` sets `Executor.Loud = true`
+- `execStepSuppressed()` wraps `execStep()` with stdout/stderr redirected to `io.Discard` for silent steps
+- When a silent step uses `pipe_to: next`, pipe capture still works (only non-pipe stdout is discarded)
+- `pi info` shows `[silent]` annotation on steps with `silent: true`
+
 ### Step-level environment variables (`env:` on steps)
 - Steps can declare an `env:` mapping of key-value pairs to inject into the step's execution environment
 - `env:` vars are merged into the process environment after PI_INPUT_* vars and provisioned runtime PATH
@@ -396,9 +409,10 @@ Makefile                               build, vet, test, test-matrix targets
 - Style methods: `Plain()`, `Dim()`, `Green()`, `Red()`, `Bold()` — all accept `fmt.Sprintf`-style format strings
 - `InstallStatus(icon, name, status, version)` encapsulates the icon→style mapping: `✓`+already→dim, `✓`+installed→bold green, `✗`→bold red, `→`→plain
 - `SetupHeader()` renders `==>` lines in dim style
+- `StepTrace(stepType, value)` renders step trace lines (`  → bash: echo hello`) in dim style with multiline collapse and 80-char truncation
 - TTY detection uses `golang.org/x/term.IsTerminal()` for cross-platform reliability
 - Backward compatible: tests use `bytes.Buffer` (not `*os.File`) so color is always off in tests; identical text output
-- Used by: `Executor.printInstallStatus()`, `cli/setup.go` headers, `cli/doctor.go` health output
+- Used by: `Executor.printInstallStatus()`, `Executor.RunWithInputs()` for step trace lines, `cli/setup.go` headers, `cli/doctor.go` health output
 
 ### Error philosophy
 - Parse errors include file path and field name
@@ -480,7 +494,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 575 (78 automation + 42 builtins + 57 CLI + 30 conditions + 17 config + 25 display + 24 discovery + 139 executor + 4 project + 16 runtimes + 14 shell + 130 integration)
+Total tests: 601 (80 automation + 42 builtins + 57 CLI + 30 conditions + 17 config + 35 display + 24 discovery + 146 executor + 4 project + 16 runtimes + 14 shell + 136 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -521,3 +535,4 @@ tests/docker/
 - Doctor tests: `pi doctor` on `requires-validation` workspace showing ✓ for satisfied, ✗ for missing, version mismatch, skipping no-requires automations, detected version display, install hints; healthy workspace with all-satisfied exit code 0
 - Runtime provisioning tests: `runtime-provisioning` and `runtime-provisioning-never` example workspaces; list automations, no-requirements runs normally, python already installed (no provisioning needed), never-mode errors, config parsing with auto/ask/direct modes
 - Step env tests: `step-env` example workspace; env vars injected into step execution, per-step isolation (no leaking between steps), `pi info` shows env annotations, env combined with if: conditions
+- Step visibility tests: `step-visibility` example workspace; default trace lines in stderr, `silent: true` suppresses trace and output, `--loud` overrides silent, all-silent produces no output, all-silent with `--loud` shows everything, `pi info` shows silent annotation
