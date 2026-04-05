@@ -36,7 +36,7 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	if verifyPhase == nil {
 		verifyPhase = &inst.Test
 	}
-	verifyErr := e.execInstallPhaseCapture(a, verifyPhase, inputEnv, nil)
+	verifyErr := e.execInstallPhase(a, verifyPhase, inputEnv)
 	if verifyErr != nil {
 		e.printInstallStatus("✗", a.Name, "failed", "")
 		return verifyErr
@@ -49,60 +49,19 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 
 // execInstallPhase runs an install phase with stdout and stderr suppressed.
 func (e *Executor) execInstallPhase(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
-	return e.execInstallPhaseCapture(a, phase, inputEnv, nil)
+	return e.execInstallPhaseWithStderr(a, phase, inputEnv, io.Discard)
 }
 
 // execInstallPhaseLive runs an install phase with stdout suppressed but stderr
-// streamed live to the terminal. This gives the user immediate visibility into
-// errors and progress from install commands.
+// streamed live to the terminal.
 func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
-	steps := phase.Steps
-	if phase.IsScalar {
-		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
-	}
-
-	savedOutputs := e.stepOutputs
-	e.stepOutputs = nil
-	defer func() { e.stepOutputs = savedOutputs }()
-
-	for i, step := range steps {
-		if step.If != "" {
-			skip, err := e.evaluateCondition(step.If)
-			if err != nil {
-				return fmt.Errorf("install phase step[%d] if: %w", i, err)
-			}
-			if skip {
-				continue
-			}
-		}
-
-		if step.IsFirst() {
-			if err := e.execInstallFirstBlockLive(a, step, i, inputEnv); err != nil {
-				return err
-			}
-			continue
-		}
-
-		runner := e.registry().Get(step.Type)
-		if runner == nil {
-			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
-		}
-
-		var outputCapture bytes.Buffer
-		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv)
-		ctx.Stderr = e.stderr()
-
-		if err := runner.Run(ctx); err != nil {
-			return err
-		}
-		e.recordOutput(outputCapture.String())
-	}
-	return nil
+	return e.execInstallPhaseWithStderr(a, phase, inputEnv, e.stderr())
 }
 
-// execInstallPhaseCapture runs an install phase, suppressing stdout and optionally
-// capturing stderr to the given buffer (in addition to suppressing it).
-func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrCapture *bytes.Buffer) error {
+// execInstallPhaseWithStderr runs an install phase with stdout suppressed and
+// stderr routed to the given writer. This is the unified implementation for both
+// suppressed (io.Discard) and live (e.stderr()) stderr modes.
+func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrWriter io.Writer) error {
 	steps := phase.Steps
 	if phase.IsScalar {
 		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
@@ -124,15 +83,10 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 		}
 
 		if step.IsFirst() {
-			if err := e.execInstallFirstBlock(a, step, i, inputEnv, stderrCapture); err != nil {
+			if err := e.execInstallFirstBlock(a, step, i, inputEnv, stderrWriter); err != nil {
 				return err
 			}
 			continue
-		}
-
-		stderrWriter := io.Writer(io.Discard)
-		if stderrCapture != nil {
-			stderrWriter = stderrCapture
 		}
 
 		runner := e.registry().Get(step.Type)
@@ -181,35 +135,9 @@ func (e *Executor) printInstallStatus(icon, name, status, version string) {
 	e.printer().InstallStatus(icon, name, status, version)
 }
 
-// execInstallFirstBlockLive handles a first: block inside an install phase,
-// streaming stderr live to the terminal.
-func (e *Executor) execInstallFirstBlockLive(a *automation.Automation, step automation.Step, index int, inputEnv []string) error {
-	for j, sub := range step.First {
-		if sub.If != "" {
-			skip, err := e.evaluateCondition(sub.If)
-			if err != nil {
-				return fmt.Errorf("install phase step[%d].first[%d] if: %w", index, j, err)
-			}
-			if skip {
-				continue
-			}
-		}
-
-		runner := e.registry().Get(sub.Type)
-		if runner == nil {
-			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
-		}
-
-		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv)
-		ctx.Stderr = e.stderr()
-
-		return runner.Run(ctx)
-	}
-	return nil
-}
-
 // execInstallFirstBlock handles a first: block inside an install phase.
-func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automation.Step, index int, inputEnv []string, stderrCapture *bytes.Buffer) error {
+// stderrWriter controls where stderr goes (e.g. e.stderr() for live, io.Discard for suppressed).
+func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automation.Step, index int, inputEnv []string, stderrWriter io.Writer) error {
 	for j, sub := range step.First {
 		if sub.If != "" {
 			skip, err := e.evaluateCondition(sub.If)
@@ -219,11 +147,6 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 			if skip {
 				continue
 			}
-		}
-
-		stderrWriter := io.Writer(io.Discard)
-		if stderrCapture != nil {
-			stderrWriter = stderrCapture
 		}
 
 		runner := e.registry().Get(sub.Type)
