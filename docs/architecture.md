@@ -648,26 +648,36 @@ tests/docker/
 - `.github/workflows/docker-matrix.yml` — CI workflow runs each environment as a separate matrix job on PRs
 
 ### Integration tests
-- Build `pi` binary once in `TestMain`
-- Run `pi list` and `pi run` against `examples/basic/`, `examples/docker-project/`, and `examples/pipe/`
+
+Integration tests live in `tests/integration/` and are split by feature domain into focused test files:
+
+```
+tests/integration/
+  main_test.go                    TestMain (builds pi binary), shared helpers (runPi, runPiStdout, runPiSplit, runPiWithEnv, examplesDir, findRepoRoot)
+  helpers_test.go                 Runtime skip guards: requirePython, requireNode, requireTsx
+  basic_test.go                   7 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, from subdirectory
+  docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
+  pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)
+  version_test.go                 3 tests — version: --version flag, version subcommand, flag and subcommand match
+  inputs_test.go                  8 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, list INPUTS column
+  info_test.go                    4 tests — info command: basic automation, with inputs, not-found, no args
+  conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
+  builtins_test.go                25 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs)
+  installer_schema_test.go        11 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, built-in installer
+  requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
+  doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
+  runtime_provisioning_test.go    7 tests — runtime provisioning: list, no-requirements, already-installed, never-mode, config parsing, auto/ask modes
+  step_env_integ_test.go          5 tests — step env: build with env, multi-env isolation, list, info, info with condition
+  step_visibility_integ_test.go   7 tests — step visibility: default trace, silent suppression, loud override, all-silent, all-silent loud, info silent annotation
+  parent_shell_integ_test.go      7 tests — parent shell: list, eval file write, mixed steps, no eval file error, normal unaffected, info annotation, shell codegen
+  step_dir_integ_test.go          6 tests — step dir: list, run in subdir, mixed dirs, dir with env, bad dir error, info annotation
+  step_timeout_integ_test.go      5 tests — step timeout: list, fast completes, slow exceeds (exit 124), mixed timed/untimed, info annotation
+  step_description_integ_test.go  5 tests — step description: list, run, info descriptions, info with annotations, info no-desc no-details
+  validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
+  polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
+  shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)
+```
+
+- Build `pi` binary once in `TestMain` (`main_test.go`)
+- Run `pi list` and `pi run` against `examples/` workspaces using `exec.Command`
 - Assert exit codes, output content, and step ordering
-- Pipe tests verify cross-language piping (bash→python→bash) end-to-end
-- Polyglot tests cover Python (inline/file), TypeScript (inline/file), multi-step pipe chains (bash→Python→TypeScript), and `run:` step piping
-- Shell tests: install, idempotent re-install, uninstall, list, `--repo` flag, setup integration, `--no-shell`, setup with conditional entries (skip/run), conditional skip shows condition
-- Inputs tests: positional mapping, `--with` flags, defaults, missing required errors, unknown input errors, `run:` step with `with:`, `pi list` INPUTS column
-- Info tests: basic automation details, automation with inputs (required/optional/defaults), not-found error, missing argument error
-- Conditional tests: list, platform-info (OS-aware step skipping), skip-all (all conditional steps skipped), pipe-conditional (pipe passthrough on skipped step), automation-level-if list, impossible (always-skipped automation), macos-only (OS-aware automation), run-step calling skipped automation, env predicate (with/without var), command predicate (available/missing), file.exists/dir.exists predicates, complex boolean expressions (and/or/not/parentheses), combined automation+step level if, pi info showing conditions (automation-level, step-level, absent)
-- Docker built-in tests: all three docker automations appear in `pi list` with `[built-in]` marker, `pi info` shows details for each, `run:` step resolution works via `docker-builtins` example workspace
-- Installer built-in tests: all 7 installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`) appear in `pi list` with `[built-in]` marker, `pi info` shows details/inputs/conditions for each, `pi run pi:install-tsx` executes idempotently with PI-managed output, `pi list` shows INPUTS column for versioned installers
-- Installer schema tests: `installer-schema` example workspace tests structured install lifecycle — already-installed path with `✓` output, fresh install with `→`/`✓` transitions, `--silent` suppression, `pi info` showing installer type and lifecycle, conditional run steps, version display, regular automations unaffected by `--silent`
-- Dev tool built-in tests: `cursor/install-extensions` and `git/install-hooks` appear in `pi list` with `[built-in]` marker, `pi info` shows details and inputs for each, `pi list` shows INPUTS column with required input names
-- Requires validation tests: `requires-validation` example workspace with automations requiring bash (satisfied), python (satisfied), impossible command (fails with error table), impossible python version >= 99.0 (fails with version error), no-requires (runs normally), error output includes install hints
-- Doctor tests: `pi doctor` on `requires-validation` workspace showing ✓ for satisfied, ✗ for missing, version mismatch, skipping no-requires automations, detected version display, install hints; healthy workspace with all-satisfied exit code 0
-- Runtime provisioning tests: `runtime-provisioning` and `runtime-provisioning-never` example workspaces; list automations, no-requirements runs normally, python already installed (no provisioning needed), never-mode errors, config parsing with auto/ask/direct modes
-- Step env tests: `step-env` example workspace; env vars injected into step execution, per-step isolation (no leaking between steps), `pi info` shows env annotations, env combined with if: conditions
-- Step dir tests: `step-dir` example workspace; list automations, run in subdirectory, mixed dirs (per-step isolation), dir combined with env, bad dir produces error, `pi info` shows dir annotations
-- Step timeout tests: `step-timeout` example workspace; list automations, fast step completes within timeout, slow step exceeds timeout (exit 124), mixed timed and untimed steps, `pi info` shows timeout annotations
-- Step visibility tests: `step-visibility` example workspace; default trace lines in stderr, `silent: true` suppresses trace and output, `--loud` overrides silent, all-silent produces no output, all-silent with `--loud` shows everything, `pi info` shows silent annotation
-- Parent shell tests: `parent-shell` example workspace; list automations, parent_shell step writes to eval file, mixed normal + parent_shell steps, error without PI_PARENT_EVAL_FILE, normal automations unaffected, `pi info` shows parent_shell annotation, shell codegen includes eval wrapper and pi-setup helper
-- Step description tests: `step-description` example workspace; list automations, run with descriptions (execution unaffected), `pi info` shows step descriptions below step lines, descriptions combined with annotations (silent, dir), no "Step details" section when no descriptions or annotations present
-- Validate tests: `validate-valid` and `validate-invalid` example workspaces; valid project produces ✓ summary with counts, invalid project produces exit 1 with all errors (broken shortcut, broken setup, broken run step), all 3 error lines reported, basic and builtins projects validate successfully
