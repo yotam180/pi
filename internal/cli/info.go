@@ -109,7 +109,7 @@ func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
 func printStepsDetail(steps []automation.Step, out io.Writer) {
 	hasDetails := false
 	for _, s := range steps {
-		if s.If != "" || len(s.Env) > 0 || s.Silent || s.ParentShell || s.Dir != "" {
+		if s.If != "" || len(s.Env) > 0 || s.Silent || s.ParentShell || s.Dir != "" || s.Timeout > 0 {
 			hasDetails = true
 			break
 		}
@@ -133,6 +133,9 @@ func printStepsDetail(steps []automation.Step, out io.Writer) {
 		}
 		if s.Dir != "" {
 			annotations = append(annotations, fmt.Sprintf("dir: %s", s.Dir))
+		}
+		if s.Timeout > 0 {
+			annotations = append(annotations, fmt.Sprintf("timeout: %s", s.TimeoutRaw))
 		}
 		if len(s.Env) > 0 {
 			envKeys := make([]string, 0, len(s.Env))

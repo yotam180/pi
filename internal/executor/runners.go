@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -126,10 +127,24 @@ func (r *RunStepRunner) Run(ctx *RunContext) error {
 	return ctx.RunAutomation(target, ctx.Args, nil, ctx.Stdout, ctx.Stdin)
 }
 
+// TimeoutExitCode is the exit code returned when a step exceeds its timeout.
+// Matches the GNU timeout(1) convention.
+const TimeoutExitCode = 124
+
 // runStepCommand executes a command using the RunContext for directory, env, and I/O.
 // Non-zero exit codes are returned as *ExitError. Other exec failures are returned as-is.
+// When the step has a timeout, exec.CommandContext is used with a deadline.
 func runStepCommand(bin string, args []string, ctx *RunContext) error {
-	cmd := exec.Command(bin, args...)
+	var cmd *exec.Cmd
+
+	if ctx.Step.Timeout > 0 {
+		deadline, cancel := context.WithTimeout(context.Background(), ctx.Step.Timeout)
+		defer cancel()
+		cmd = exec.CommandContext(deadline, bin, args...)
+	} else {
+		cmd = exec.Command(bin, args...)
+	}
+
 	cmd.Dir = ctx.WorkDir
 	cmd.Stdout = ctx.Stdout
 	cmd.Stderr = ctx.Stderr
@@ -137,6 +152,12 @@ func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	cmd.Env = ctx.BuildEnv(ctx.InputEnv, ctx.Step.Env)
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Step.Timeout > 0 && cmd.ProcessState != nil && !cmd.ProcessState.Exited() {
+			return &ExitError{Code: TimeoutExitCode}
+		}
+		if ctx.Step.Timeout > 0 && err.Error() == "signal: killed" {
+			return &ExitError{Code: TimeoutExitCode}
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return &ExitError{Code: exitErr.ExitCode()}
 		}

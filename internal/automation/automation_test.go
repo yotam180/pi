@@ -1997,6 +1997,264 @@ steps:
 	}
 }
 
+func TestLoad_StepWithTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "timeout.yaml", `
+name: build-with-timeout
+steps:
+  - bash: go build ./...
+    timeout: 30s
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Timeout.Seconds() != 30 {
+		t.Errorf("timeout = %v, want 30s", a.Steps[0].Timeout)
+	}
+	if a.Steps[0].TimeoutRaw != "30s" {
+		t.Errorf("timeoutRaw = %q, want %q", a.Steps[0].TimeoutRaw, "30s")
+	}
+}
+
+func TestLoad_StepWithTimeout_Minutes(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "timeout-min.yaml", `
+name: long-build
+steps:
+  - bash: make all
+    timeout: 5m
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Minutes() != 5 {
+		t.Errorf("timeout = %v, want 5m", a.Steps[0].Timeout)
+	}
+}
+
+func TestLoad_StepWithTimeout_ComplexDuration(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "timeout-complex.yaml", `
+name: complex-timeout
+steps:
+  - bash: long-running-script.sh
+    timeout: 1h30m
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Hours() != 1.5 {
+		t.Errorf("timeout = %v, want 1h30m", a.Steps[0].Timeout)
+	}
+}
+
+func TestLoad_StepWithoutTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-timeout.yaml", `
+name: plain
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout != 0 {
+		t.Errorf("timeout should be zero, got %v", a.Steps[0].Timeout)
+	}
+	if a.Steps[0].TimeoutRaw != "" {
+		t.Errorf("timeoutRaw should be empty, got %q", a.Steps[0].TimeoutRaw)
+	}
+}
+
+func TestLoad_StepTimeout_InvalidDuration(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad-timeout.yaml", `
+name: bad
+steps:
+  - bash: echo hello
+    timeout: not-a-duration
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for invalid timeout duration")
+	}
+	if !strings.Contains(err.Error(), "invalid timeout") {
+		t.Errorf("error = %q, expected to contain 'invalid timeout'", err.Error())
+	}
+}
+
+func TestLoad_StepTimeout_NegativeDuration(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "neg-timeout.yaml", `
+name: neg
+steps:
+  - bash: echo hello
+    timeout: "-5s"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for negative timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout must be positive") {
+		t.Errorf("error = %q, expected to contain 'timeout must be positive'", err.Error())
+	}
+}
+
+func TestLoad_StepTimeout_ZeroDuration(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "zero-timeout.yaml", `
+name: zero
+steps:
+  - bash: echo hello
+    timeout: "0s"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for zero timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout must be positive") {
+		t.Errorf("error = %q, expected to contain 'timeout must be positive'", err.Error())
+	}
+}
+
+func TestLoad_StepTimeout_OnRunStep(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "run-timeout.yaml", `
+name: run-with-timeout
+steps:
+  - run: other/automation
+    timeout: 30s
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for timeout on run step")
+	}
+	if !strings.Contains(err.Error(), "'timeout' is not valid on 'run' steps") {
+		t.Errorf("error = %q, expected to mention timeout not valid on run steps", err.Error())
+	}
+}
+
+func TestLoad_StepTimeout_OnParentShell(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "parent-timeout.yaml", `
+name: parent-with-timeout
+steps:
+  - bash: source venv/bin/activate
+    parent_shell: true
+    timeout: 30s
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for timeout on parent_shell step")
+	}
+	if !strings.Contains(err.Error(), "'timeout' cannot be combined with 'parent_shell'") {
+		t.Errorf("error = %q, expected to mention timeout+parent_shell", err.Error())
+	}
+}
+
+func TestLoad_StepTimeout_WithOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "timeout-combo.yaml", `
+name: combo
+steps:
+  - bash: go test ./...
+    timeout: 2m
+    dir: src
+    env:
+      GOFLAGS: -race
+    silent: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Minutes() != 2 {
+		t.Errorf("timeout = %v, want 2m", a.Steps[0].Timeout)
+	}
+	if a.Steps[0].Dir != "src" {
+		t.Errorf("dir = %q, want %q", a.Steps[0].Dir, "src")
+	}
+	if !a.Steps[0].Silent {
+		t.Error("expected silent = true")
+	}
+}
+
+func TestLoad_StepTimeout_PythonStep(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "py-timeout.yaml", `
+name: py-timeout
+steps:
+  - python: print("hello")
+    timeout: 10s
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Seconds() != 10 {
+		t.Errorf("timeout = %v, want 10s", a.Steps[0].Timeout)
+	}
+}
+
+func TestLoad_StepTimeout_TypeScriptStep(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "ts-timeout.yaml", `
+name: ts-timeout
+steps:
+  - typescript: console.log("hello")
+    timeout: 15s
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Seconds() != 15 {
+		t.Errorf("timeout = %v, want 15s", a.Steps[0].Timeout)
+	}
+}
+
+func TestLoad_StepTimeout_WithPipeTo(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "pipe-timeout.yaml", `
+name: pipe-timeout
+steps:
+  - bash: echo hello
+    pipe_to: next
+    timeout: 5s
+  - bash: cat
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Steps[0].Timeout.Seconds() != 5 {
+		t.Errorf("timeout = %v, want 5s", a.Steps[0].Timeout)
+	}
+	if a.Steps[0].PipeTo != "next" {
+		t.Errorf("pipe_to = %q, want %q", a.Steps[0].PipeTo, "next")
+	}
+}
+
 func TestValidateVersionString(t *testing.T) {
 	tests := []struct {
 		input   string

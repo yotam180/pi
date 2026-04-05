@@ -1,0 +1,5 @@
+name: fast
+description: Fast step with generous timeout
+steps:
+  - bash: echo "completed-fast"
+    timeout: 10s

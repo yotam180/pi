@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"gopkg.in/yaml.v3"
@@ -187,6 +188,8 @@ type Step struct {
 	Silent      bool              `yaml:"-"`
 	ParentShell bool              `yaml:"-"`
 	Dir         string            `yaml:"-"`
+	Timeout     time.Duration     `yaml:"-"`
+	TimeoutRaw  string            `yaml:"-"` // original string for display (e.g. "30s")
 }
 
 // InstallPhase represents a phase (test, run, verify) in an install: block.
@@ -280,6 +283,7 @@ type stepRaw struct {
 	Silent      bool              `yaml:"silent"`
 	ParentShell bool              `yaml:"parent_shell"`
 	Dir         string            `yaml:"dir"`
+	Timeout     string            `yaml:"timeout"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -413,6 +417,23 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		if sr.PipeTo != "" {
 			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' cannot be combined with 'pipe_to'", index)
 		}
+	}
+	if sr.Timeout != "" {
+		if s.t == StepTypeRun {
+			return Step{}, fmt.Errorf("step[%d]: 'timeout' is not valid on 'run' steps (set timeouts on the target automation's steps instead)", index)
+		}
+		if sr.ParentShell {
+			return Step{}, fmt.Errorf("step[%d]: 'timeout' cannot be combined with 'parent_shell'", index)
+		}
+		d, err := time.ParseDuration(sr.Timeout)
+		if err != nil {
+			return Step{}, fmt.Errorf("step[%d]: invalid timeout %q: %w", index, sr.Timeout, err)
+		}
+		if d <= 0 {
+			return Step{}, fmt.Errorf("step[%d]: timeout must be positive, got %q", index, sr.Timeout)
+		}
+		step.Timeout = d
+		step.TimeoutRaw = sr.Timeout
 	}
 	return step, nil
 }

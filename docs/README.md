@@ -152,6 +152,28 @@ The `dir:` path is resolved relative to the project root. Absolute paths are use
 
 Working directories are per-step — each step independently resolves its own `dir:`, and steps without `dir:` always use the project root (no implicit carry-over from a previous step).
 
+### Timeout (`timeout:`)
+
+Steps can declare a `timeout:` field to set a maximum execution duration. If the step exceeds the timeout, PI kills the process and returns exit code 124 (matching the GNU `timeout` command convention).
+
+```yaml
+steps:
+  - bash: go build ./...
+    timeout: 30s
+
+  - bash: npm test
+    timeout: 5m
+
+  - python: train_model.py
+    timeout: 1h30m
+```
+
+The value is a Go-style duration string (e.g., `30s`, `5m`, `1h30m`). Timeout must be positive — zero or negative values are rejected at parse time.
+
+Timeout works with all subprocess step types (`bash`, `python`, `typescript`). It cannot be used on `run:` steps (set timeouts on the target automation's own steps instead) or `parent_shell` steps (they don't execute as subprocesses).
+
+Timeout is compatible with all other step fields: `env:`, `dir:`, `silent:`, `if:`, and `pipe_to`. When a step with `if:` is skipped, no timeout applies. When a step with `silent: true` times out, the timeout error still propagates.
+
 ### Step Trace Lines
 
 By default, PI prints a trace line to stderr before executing each step:

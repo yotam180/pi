@@ -1,0 +1,5 @@
+name: slow
+description: Step that will exceed its timeout
+steps:
+  - bash: sleep 30
+    timeout: 500ms

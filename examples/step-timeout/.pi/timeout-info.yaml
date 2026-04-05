@@ -1,0 +1,9 @@
+name: timeout-info
+description: Automation for info display testing
+steps:
+  - bash: echo "step one"
+    timeout: 30s
+  - bash: echo "step two"
+    timeout: 5m
+    silent: true
+  - bash: echo "step three"

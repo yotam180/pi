@@ -1,0 +1,7 @@
+name: mixed
+description: Mix of timed and untimed steps
+steps:
+  - bash: echo "no-timeout"
+  - bash: echo "with-timeout"
+    timeout: 10s
+  - bash: echo "also-no-timeout"
