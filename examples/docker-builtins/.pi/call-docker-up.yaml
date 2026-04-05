@@ -1,5 +1,2 @@
-name: call-docker-up
 description: Calls the built-in docker/up automation via run step
-
-steps:
-  - run: pi:docker/up
+run: pi:docker/up

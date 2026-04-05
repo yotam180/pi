@@ -1,5 +1,2 @@
-name: hello
 description: Local version that shadows built-in
-
-steps:
-  - bash: echo "hello from local override"
+bash: echo "hello from local override"

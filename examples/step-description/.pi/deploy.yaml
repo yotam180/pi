@@ -1,4 +1,3 @@
-name: deploy
 description: Deploy the application
 steps:
   - bash: echo "building image..."

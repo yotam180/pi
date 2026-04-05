@@ -1,4 +1,3 @@
-name: pipe-conditional
 description: Pipe passes through a skipped step
 
 steps:

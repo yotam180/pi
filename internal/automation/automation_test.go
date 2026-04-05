@@ -397,6 +397,50 @@ silent: true
 	}
 }
 
+func TestLoad_ShorthandWithParentShell(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-parent-shell.yaml", `
+description: cd in parent
+bash: cd /tmp
+parent_shell: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if !a.Steps[0].ParentShell {
+		t.Error("parent_shell = false, want true")
+	}
+}
+
+func TestLoad_ShorthandRunWithWith(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-run-with.yaml", `
+description: run with inputs
+run: greet
+with:
+  name: world
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if a.Steps[0].Type != StepTypeRun {
+		t.Errorf("step type = %q, want %q", a.Steps[0].Type, StepTypeRun)
+	}
+	if a.Steps[0].With["name"] != "world" {
+		t.Errorf("with name = %q, want %q", a.Steps[0].With["name"], "world")
+	}
+}
+
 func TestLoad_ShorthandWithIf(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "shorthand-if.yaml", `

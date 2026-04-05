@@ -1,4 +1,3 @@
-name: mixed
 description: Mix of normal and silent steps
 steps:
   - bash: echo "visible-output"

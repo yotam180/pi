@@ -7,6 +7,19 @@ import (
 	"github.com/vyper-tooling/pi/internal/automation"
 )
 
+// collectAllSteps flattens steps and their first: sub-steps into a single slice.
+func collectAllSteps(steps []automation.Step) []automation.Step {
+	var all []automation.Step
+	for _, s := range steps {
+		if s.IsFirst() {
+			all = append(all, s.First...)
+		} else {
+			all = append(all, s)
+		}
+	}
+	return all
+}
+
 func TestDiscover_FindsEmbeddedAutomations(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
@@ -588,7 +601,7 @@ func TestDiscover_InstallPythonUsesMiseAndBrew(t *testing.T) {
 		t.Fatal("expected step list for install-python run phase")
 	}
 	foundMise, foundBrew := false, false
-	for _, s := range run.Steps {
+	for _, s := range collectAllSteps(run.Steps) {
 		if strings.Contains(s.Value, "mise") {
 			foundMise = true
 		}
@@ -619,7 +632,7 @@ func TestDiscover_InstallNodeUsesMiseAndBrew(t *testing.T) {
 		t.Fatal("expected step list for install-node run phase")
 	}
 	foundMise, foundBrew := false, false
-	for _, s := range run.Steps {
+	for _, s := range collectAllSteps(run.Steps) {
 		if strings.Contains(s.Value, "mise") {
 			foundMise = true
 		}
@@ -650,7 +663,7 @@ func TestDiscover_InstallGoUsesMiseAndBrew(t *testing.T) {
 		t.Fatal("expected step list for install-go run phase")
 	}
 	foundMise, foundBrew := false, false
-	for _, s := range run.Steps {
+	for _, s := range collectAllSteps(run.Steps) {
 		if strings.Contains(s.Value, "mise") {
 			foundMise = true
 		}

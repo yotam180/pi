@@ -1,4 +1,3 @@
-name: build
 description: Build project
 steps:
   - bash: echo "building..."

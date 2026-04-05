@@ -1,4 +1,3 @@
-name: check-ready
 description: Check if bash is installed (always passes)
 
 install:

@@ -1,4 +1,3 @@
-name: install-no-version
 description: Installer without version field
 
 install:

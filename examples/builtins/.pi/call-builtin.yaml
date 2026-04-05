@@ -1,5 +1,2 @@
-name: call-builtin
 description: Calls a built-in via run step
-
-steps:
-  - run: pi:hello
+run: pi:hello

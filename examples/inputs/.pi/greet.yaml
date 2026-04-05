@@ -1,4 +1,3 @@
-name: greet
 description: Greet someone
 
 inputs:
@@ -12,5 +11,4 @@ inputs:
     default: hello
     description: The greeting word
 
-steps:
-  - bash: echo "$PI_IN_GREETING $PI_IN_NAME"
+bash: echo "$PI_IN_GREETING $PI_IN_NAME"

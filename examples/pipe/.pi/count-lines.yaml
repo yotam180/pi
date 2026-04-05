@@ -1,4 +1,3 @@
-name: count-lines
 description: Generate lines and count them through a three-step pipe chain
 
 steps:

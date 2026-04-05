@@ -1,8 +1,6 @@
-name: needs-impossible
 description: Automation that requires a tool that doesn't exist
 
 requires:
   - command: pi-nonexistent-tool-xyz
 
-steps:
-  - bash: echo "this should never run"
+bash: echo "this should never run"

@@ -1,4 +1,3 @@
-name: pipeline/wordcount
 description: Generate text in bash, count words in Python
 
 steps:

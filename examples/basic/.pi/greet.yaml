@@ -1,5 +1,4 @@
 description: Print a greeting message (inline bash step)
-steps:
-  - bash: |
-      name="${1:-World}"
-      echo "Hello, ${name}! Welcome to PI."
+bash: |
+  name="${1:-World}"
+  echo "Hello, ${name}! Welcome to PI."

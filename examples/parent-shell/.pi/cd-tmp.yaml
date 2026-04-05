@@ -1,6 +1,4 @@
-name: cd-tmp
 description: Change directory in parent shell
 
-steps:
-  - bash: cd /tmp
-    parent_shell: true
+bash: cd /tmp
+parent_shell: true

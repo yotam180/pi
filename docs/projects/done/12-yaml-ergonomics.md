@@ -1,7 +1,7 @@
 # YAML Ergonomics
 
 ## Status
-todo
+done
 
 ## Priority
 high
@@ -53,8 +53,8 @@ All fixes are backward-compatible with a deprecation path: old syntax continues 
 - [x] `$PI_IN_*` resolves inputs; `$PI_INPUT_*` still works with deprecation warning
 - [x] `setup:` entries in `pi.yaml` accept bare strings (`- setup/install-go`)
 - [x] Automation-level `env:` applies to all steps in the automation
-- [ ] All built-in and example YAML files use the new concise style
-- [ ] All existing tests pass; new tests cover each new feature
+- [x] All built-in and example YAML files use the new concise style
+- [x] All existing tests pass; new tests cover each new feature
 
 ## Notes
 - Maintain backward compatibility throughout — real-world users already have `.pi/` folders

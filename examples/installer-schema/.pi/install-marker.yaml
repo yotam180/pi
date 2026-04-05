@@ -1,4 +1,3 @@
-name: install-marker
 description: Install a marker file (for testing fresh install path)
 
 inputs:

@@ -1,4 +1,3 @@
-name: deploy
 description: Build then deploy (demonstrates run step chaining)
 steps:
   - run: build/compile

@@ -1,4 +1,2 @@
 description: A simple built-in test automation
-
-steps:
-  - bash: echo "hello from built-in"
+bash: echo "hello from built-in"

@@ -1,4 +1,3 @@
-name: timeout-info
 description: Automation for info display testing
 steps:
   - bash: echo "step one"

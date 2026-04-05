@@ -1,4 +1,3 @@
-name: conditional-with-if
 description: Automation with top-level if and step-level if combined
 if: os.macos or os.linux
 

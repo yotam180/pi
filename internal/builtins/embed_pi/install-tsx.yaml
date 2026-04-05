@@ -1,4 +1,3 @@
-name: install-tsx
 description: Install tsx globally for TypeScript execution
 
 install:

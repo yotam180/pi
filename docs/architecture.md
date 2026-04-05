@@ -60,7 +60,7 @@ internal/
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(), toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
-    automation_test.go             31 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env)
+    automation_test.go             33 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env, shorthand parent_shell and with)
     step_test.go                   73 tests (if/env/silent/parent_shell/dir/timeout/description/pipe fields, install block, first: block)
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
@@ -277,7 +277,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Single-step shorthand
 - Automations with a single step can place the step type key (`bash:`, `python:`, `typescript:`, `run:`) at the top level, skipping the `steps:` wrapper
-- Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe:`) are supported alongside the shorthand key at the top level
+- Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe:`, `parent_shell:`, `with:`) are supported alongside the shorthand key at the top level
 - Top-level `if:` maps to the automation-level condition (not a step-level condition) — for a single-step automation, these are semantically equivalent
 - Top-level `description:` remains the automation description (not a step description)
 - Having both a top-level step key and `steps:` (or `install:`) in the same file is a parse error
@@ -580,18 +580,19 @@ Makefile                               build, vet, test, test-matrix targets
 - `run:` steps can reference `pi:hello` to explicitly call built-in automations
 - `pi.yaml` setup entries can reference `pi:hello` for built-in setup automations
 - Built-in automations use inline scripts only (no file-path steps) since they have no real filesystem directory
-- Docker automations (`docker/up`, `docker/down`, `docker/logs`) detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
+- All built-in YAML files use the new concise syntax: no `name:` fields, single-step shorthand where applicable, `first:` blocks in installer run phases, `PI_IN_*` input variables
+- Docker automations (`docker/up`, `docker/down`, `docker/logs`) use single-step shorthand; detect `docker compose` (v2 plugin) first, falling back to `docker-compose` (v1 standalone); forward all CLI args via `"$@"`
 - Installer automations (`install-homebrew`, `install-python`, `install-node`, `install-go`, `install-rust`, `install-uv`, `install-tsx`) use the structured `install:` block:
   - Each defines `test:`, `run:`, and optional `verify:` and `version:` fields
   - PI manages all user-facing output — automations only provide commands
   - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
   - `test` exits non-zero → `→  <name>  installing...` → `run` executes → `verify` (or re-run `test`) → `✓  <name>  installed  (<version>)` or `✗  <name>  failed`
   - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
-  - `install-python`, `install-node`, and `install-go` accept a `version` input; use step lists with `if:` conditions to try `mise` first, fall back to `brew`
+  - `install-python`, `install-node`, and `install-go` accept a `version` input; use `first:` blocks in the `run:` phase to try `mise` first, fall back to `brew`, with a clear error fallback
   - `install-rust` accepts a `version` input; uses `rustup` if available, otherwise installs via the official `rustup.rs` installer script
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
   - `install-tsx` uses `npm install -g tsx`
-- Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) handle common team setup tasks:
+- Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) use single-step shorthand:
   - `cursor/install-extensions` accepts an `extensions` input (comma or newline-separated IDs), checks `cursor --list-extensions`, installs missing ones via `cursor --install-extension`
   - `git/install-hooks` accepts a `source` input (directory path relative to repo root), copies hook files to `.git/hooks/`, makes them executable; uses `cmp` for idempotency
 
@@ -700,7 +701,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 826 (140 automation + 42 builtins + 75 CLI + 30 conditions + 21 config + 30 display + 29 discovery + 191 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 187 integration)
+Total tests: 999 (170 automation + 81 builtins + 81 CLI + 30 conditions + 21 config + 35 display + 29 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 204 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

@@ -63,16 +63,18 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		Requires    []requirementRaw `yaml:"requires"`
 
 		// Single-step shorthand: top-level step type keys
-		Bash       *string           `yaml:"bash"`
-		Python     *string           `yaml:"python"`
-		TypeScript *string           `yaml:"typescript"`
-		Run        *string           `yaml:"run"`
-		Env        map[string]string `yaml:"env"`
-		Dir        string            `yaml:"dir"`
-		Timeout    string            `yaml:"timeout"`
-		Silent     bool              `yaml:"silent"`
-		PipeTo     string            `yaml:"pipe_to"`
-		Pipe       *bool             `yaml:"pipe"`
+		Bash        *string           `yaml:"bash"`
+		Python      *string           `yaml:"python"`
+		TypeScript  *string           `yaml:"typescript"`
+		Run         *string           `yaml:"run"`
+		Env         map[string]string `yaml:"env"`
+		Dir         string            `yaml:"dir"`
+		Timeout     string            `yaml:"timeout"`
+		Silent      bool              `yaml:"silent"`
+		ParentShell bool              `yaml:"parent_shell"`
+		PipeTo      string            `yaml:"pipe_to"`
+		Pipe        *bool             `yaml:"pipe"`
+		With        map[string]string `yaml:"with"`
 	}
 
 	if err := value.Decode(&raw); err != nil {
@@ -111,8 +113,10 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		shorthand.Dir = raw.Dir
 		shorthand.Timeout = raw.Timeout
 		shorthand.Silent = raw.Silent
+		shorthand.ParentShell = raw.ParentShell
 		shorthand.PipeTo = raw.PipeTo
 		shorthand.Pipe = raw.Pipe
+		shorthand.With = raw.With
 		step, err := shorthand.toStep(0)
 		if err != nil {
 			return err

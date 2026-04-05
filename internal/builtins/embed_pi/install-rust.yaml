@@ -1,4 +1,3 @@
-name: install-rust
 description: Install Rust at a specific version
 
 inputs:

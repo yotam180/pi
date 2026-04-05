@@ -94,13 +94,12 @@ steps:
 # Name is automatically "setup/install-cursor-extensions" (derived from path)
 description: Install required Cursor extensions if missing
 
-steps:
-  - bash: |
-      while IFS= read -r ext; do
-        if ! cursor --list-extensions 2>/dev/null | grep -qx "$ext"; then
-          cursor --install-extension "$ext" --force
-        fi
-      done < "$(dirname "$0")/extensions.txt"
+bash: |
+  while IFS= read -r ext; do
+    if ! cursor --list-extensions 2>/dev/null | grep -qx "$ext"; then
+      cursor --install-extension "$ext" --force
+    fi
+  done < "$(dirname "$0")/extensions.txt"
 ```
 
 > **Note:** The `name:` field is optional and deprecated. PI derives the automation name from the file path: `.pi/docker/up.yaml` → `docker/up`, `.pi/setup/cursor/automation.yaml` → `setup/cursor`. If `name:` is present and matches the derived name, it's accepted silently. If it mismatches, PI prints a warning. Existing files with `name:` continue to work.
@@ -325,7 +324,6 @@ Automations that install tools use the `install:` block instead of `steps:`. The
 
 ```yaml
 # Scalar shorthand for simple installs
-name: install-homebrew
 description: Install Homebrew (macOS only)
 if: os.macos
 
@@ -336,8 +334,7 @@ install:
 ```
 
 ```yaml
-# Step list for conditional install paths
-name: install-python
+# Step list with first: block for conditional install paths
 description: Install Python at a specific version
 
 inputs:
@@ -349,10 +346,14 @@ install:
   test:
     - bash: python3 --version 2>&1 | grep -q "Python $PI_IN_VERSION"
   run:
-    - bash: mise install "python@$PI_IN_VERSION" && mise use "python@$PI_IN_VERSION"
-      if: command.mise
-    - bash: brew install "python@$PI_IN_VERSION"
-      if: command.brew and not command.mise
+    - first:
+        - bash: mise install "python@$PI_IN_VERSION" && mise use "python@$PI_IN_VERSION"
+          if: command.mise
+        - bash: brew install "python@$PI_IN_VERSION"
+          if: command.brew
+        - bash: |
+            echo "no suitable installer found (tried mise, brew)" >&2
+            exit 1
   version: python3 --version 2>&1 | awk '{print $2}'
 ```
 
@@ -478,11 +479,10 @@ Setup entries support the same `if:` conditions as automation steps. When a cond
 
 ```yaml
 # .pi/setup/install-uv.yaml
-steps:
-  - bash: |
-      if ! command -v uv &> /dev/null; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-      fi
+bash: |
+  if ! command -v uv &> /dev/null; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+  fi
 ```
 
 ---

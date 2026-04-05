@@ -1,4 +1,3 @@
-name: mixed-dirs
 description: Steps with different working directories
 
 steps:

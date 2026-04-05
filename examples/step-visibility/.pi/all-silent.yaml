@@ -1,4 +1,3 @@
-name: all-silent
 description: All steps are silent
 steps:
   - bash: echo "quiet-one"

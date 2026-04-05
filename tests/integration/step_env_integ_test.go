@@ -48,7 +48,7 @@ func TestStepEnv_Info(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
-	if !strings.Contains(out, "env:") {
+	if !strings.Contains(strings.ToLower(out), "env:") {
 		t.Errorf("expected env annotation in info output, got: %s", out)
 	}
 }

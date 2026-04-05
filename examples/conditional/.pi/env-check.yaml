@@ -1,4 +1,3 @@
-name: env-check
 description: Conditional steps based on environment variables
 
 steps:

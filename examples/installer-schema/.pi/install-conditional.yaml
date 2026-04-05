@@ -1,4 +1,3 @@
-name: install-conditional
 description: Installer with conditional run steps
 
 install:

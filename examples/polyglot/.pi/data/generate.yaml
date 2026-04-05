@@ -1,11 +1,9 @@
-name: data/generate
 description: Generate sample JSON data using inline TypeScript
 
-steps:
-  - typescript: |
-      const items = [
-        { name: "alice", score: 95 },
-        { name: "bob", score: 87 },
-        { name: "charlie", score: 92 },
-      ];
-      console.log(JSON.stringify(items, null, 2));
+typescript: |
+  const items = [
+    { name: "alice", score: 95 },
+    { name: "bob", score: 87 },
+    { name: "charlie", score: 92 },
+  ];
+  console.log(JSON.stringify(items, null, 2));

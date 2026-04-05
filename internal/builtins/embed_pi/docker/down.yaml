@@ -1,13 +1,10 @@
-name: docker/down
 description: Stop and remove Docker Compose services
-
-steps:
-  - bash: |
-      if docker compose version >/dev/null 2>&1; then
-        docker compose down "$@"
-      elif command -v docker-compose >/dev/null 2>&1; then
-        docker-compose down "$@"
-      else
-        echo "Error: neither 'docker compose' nor 'docker-compose' found" >&2
-        exit 1
-      fi
+bash: |
+  if docker compose version >/dev/null 2>&1; then
+    docker compose down "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose down "$@"
+  else
+    echo "Error: neither 'docker compose' nor 'docker-compose' found" >&2
+    exit 1
+  fi

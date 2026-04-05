@@ -1,9 +1,7 @@
-name: docker/up
 description: Start all containers in detached mode
-steps:
-  - bash: |
-      echo "Starting containers..."
-      echo "  [+] api       (port 8080)"
-      echo "  [+] postgres  (port 5432)"
-      echo "  [+] redis     (port 6379)"
-      echo "All containers started."
+bash: |
+  echo "Starting containers..."
+  echo "  [+] api       (port 8080)"
+  echo "  [+] postgres  (port 5432)"
+  echo "  [+] redis     (port 6379)"
+  echo "All containers started."

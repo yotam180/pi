@@ -1,4 +1,3 @@
-name: install-python
 description: Install Python at a specific version
 
 inputs:
@@ -11,14 +10,14 @@ install:
     - bash: python3 --version 2>&1 | grep -q "Python $PI_IN_VERSION"
 
   run:
-    - bash: mise install "python@$PI_IN_VERSION" && mise use "python@$PI_IN_VERSION"
-      if: command.mise
-    - bash: brew install "python@$PI_IN_VERSION"
-      if: command.brew and not command.mise
-    - bash: |
-        echo "no suitable installer found (tried mise, brew)" >&2
-        exit 1
-      if: not command.mise and not command.brew
+    - first:
+        - bash: mise install "python@$PI_IN_VERSION" && mise use "python@$PI_IN_VERSION"
+          if: command.mise
+        - bash: brew install "python@$PI_IN_VERSION"
+          if: command.brew
+        - bash: |
+            echo "no suitable installer found (tried mise, brew)" >&2
+            exit 1
 
   verify:
     - bash: python3 --version 2>&1 | grep -q "Python $PI_IN_VERSION"

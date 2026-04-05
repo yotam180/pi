@@ -1,5 +1,2 @@
-name: local-hello
 description: A local greeting automation
-
-steps:
-  - bash: echo "hello from local"
+bash: echo "hello from local"

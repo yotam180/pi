@@ -1,4 +1,3 @@
-name: mixed
 description: Mix of timed and untimed steps
 steps:
   - bash: echo "no-timeout"

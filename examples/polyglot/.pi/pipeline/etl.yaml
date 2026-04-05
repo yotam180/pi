@@ -1,4 +1,3 @@
-name: pipeline/etl
 description: Three-step ETL pipeline — bash generates CSV, Python transforms, TypeScript formats
 
 steps:

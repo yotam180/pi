@@ -1,8 +1,6 @@
-name: text/reverse
 description: Reverse a string using inline Python
 
-steps:
-  - python: |
-      import sys
-      text = sys.argv[1] if len(sys.argv) > 1 else "hello world"
-      print(text[::-1])
+python: |
+  import sys
+  text = sys.argv[1] if len(sys.argv) > 1 else "hello world"
+  print(text[::-1])
