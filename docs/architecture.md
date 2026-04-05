@@ -32,7 +32,8 @@ internal/
         install-hooks.yaml         pi:git/install-hooks — copies hook scripts to .git/hooks/ (source input)
   cli/                             Cobra CLI commands
     root.go                        Root command, wires subcommands, exit code handling
-    discover.go                    discoverAll() / discoverAllWithConfig() — discovers local + package + built-in automations and merges; fetches/verifies packages from config; passes os.Stderr for warnings
+    discover.go                    discoverAll() / discoverAllWithConfig() — discovers local + package + built-in automations and merges; fetches/verifies packages from config; passes os.Stderr for warnings; newOnDemandFetcher() — creates on-demand GitHub package fetch callback with per-invocation dedup and advisory output; printOnDemandAdvisory() — prints fetch status and pi.yaml snippet to stderr
+    discover_test.go               4 tests (advisory output format, nil writer, fetch status text, down arrow icon)
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
@@ -42,6 +43,7 @@ internal/
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
     validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; reports all errors; exit 0/1
     root_test.go                   CLI tests (12 tests — includes doctor and validate subcommands)
+    discover_test.go               on-demand fetch advisory tests (4 tests)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
@@ -69,8 +71,8 @@ internal/
     tty.go                         isTerminal() via golang.org/x/term
     display_test.go                34 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace, package fetch status)
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution
-    discovery_test.go              37 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests)
+    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), PackageAutomations(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution; OnDemandFetchFunc callback type and OnDemandFetch field for on-demand GitHub package fetching
+    discovery_test.go              43 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests + 6 on-demand fetch tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
@@ -315,6 +317,16 @@ Makefile                               build, vet, test, test-matrix targets
 - `pi setup` shows package fetch status before running setup automations (↓ fetching, ✓ cached/found, ✗ failed, ⚠ not found)
 - All CLI commands (run, list, info, validate, doctor) use `discoverAllWithConfig()` to see package automations
 - Validation: duplicate aliases are a parse error; aliases with `/` are rejected; empty source is rejected
+
+### On-demand GitHub package fetching
+- When a `run:` step references an undeclared GitHub package (e.g. `org/repo@v1.0/path`), PI fetches it automatically instead of failing
+- `OnDemandFetchFunc` type on `discovery.Result` — callback invoked by `findInPackage()` when a GitHub ref has no declared package
+- `newOnDemandFetcher()` in `cli/discover.go` creates the callback with a closure-scoped `fetched` map for per-invocation dedup
+- The callback uses the same `cache.Cache` as declared packages — identical auth fallback (SSH/token/HTTPS)
+- Advisory output: shown only when a live network fetch happens (not from cache); prints `↓ fetched (on demand)` status plus a `tip:` with a ready-to-paste `packages:` YAML snippet
+- Advisory is written to stderr so it doesn't interfere with piped automation output
+- `file:` refs are never fetched on demand — `findInPackage()` checks `ref.Type == refparser.RefFile` and returns an error immediately
+- `PackageAutomations()` method on `Result` exposes the per-source automation map for lookup after on-demand merge
 
 ### GitHub package cache (`internal/cache`)
 - `Cache` struct holds configuration: `Root` (cache directory), `WarnWriter` (for mutable ref warnings), `PIVersion` (for version checks), `GitFunc` (injectable git executor), `GetenvFunc` (injectable env reader)
@@ -747,7 +759,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1062 (170 automation + 81 builtins + 32 cache + 81 CLI + 30 conditions + 31 config + 39 display + 37 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 213 integration)
+Total tests: 1078 (170 automation + 81 builtins + 32 cache + 85 CLI + 30 conditions + 31 config + 39 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 219 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -800,6 +812,7 @@ tests/integration/
   first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
   packages_test.go                9 tests — packages: list, run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
+  on_demand_test.go               6 tests — on-demand fetch: file: ref never on-demand, GitHub ref undeclared shows advisory, declared package no advisory, cached package silent, file: missing path clear error, advisory to stderr
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)
 ```

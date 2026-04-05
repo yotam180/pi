@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/builtins"
 	"github.com/vyper-tooling/pi/internal/cache"
 	"github.com/vyper-tooling/pi/internal/config"
@@ -44,7 +45,88 @@ func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Wri
 
 	result.MergeBuiltins(builtinResult)
 
+	result.OnDemandFetch = newOnDemandFetcher(os.Stderr)
+
 	return result, nil
+}
+
+// newOnDemandFetcher returns an OnDemandFetchFunc that fetches GitHub packages
+// on first encounter and prints an advisory to stderr. The advisory is shown
+// once per package per invocation (deduped via a closure-scoped map).
+func newOnDemandFetcher(stderr io.Writer) discovery.OnDemandFetchFunc {
+	fetched := make(map[string]bool) // tracks sources already fetched this invocation
+
+	return func(r *discovery.Result, ref refparser.AutomationRef) (*automation.Automation, error) {
+		source := ref.Org + "/" + ref.Repo + "@" + ref.Version
+
+		if !fetched[source] {
+			cacheRoot, err := cache.DefaultCacheRoot()
+			if err != nil {
+				return nil, err
+			}
+
+			c := &cache.Cache{
+				Root:       cacheRoot,
+				WarnWriter: stderr,
+				PIVersion:  version,
+			}
+
+			cachePath := c.PackagePath(ref.Org, ref.Repo, ref.Version)
+			wasCached := false
+			if info, statErr := os.Stat(cachePath); statErr == nil && info.IsDir() {
+				wasCached = true
+			}
+
+			pkgDir, err := c.Fetch(ref.Org, ref.Repo, ref.Version)
+			if err != nil {
+				return nil, fmt.Errorf("on-demand fetch of %s failed: %w", source, err)
+			}
+
+			if err := r.MergePackage(source, "", pkgDir, stderr); err != nil {
+				return nil, err
+			}
+
+			fetched[source] = true
+
+			// Print advisory only when a live network fetch happened (not from cache)
+			if !wasCached {
+				printOnDemandAdvisory(stderr, source)
+			}
+		}
+
+		// Package is now merged — look up the automation
+		path := ref.Path
+		if path == "" {
+			return nil, fmt.Errorf("no automation path specified in reference %q", ref.Raw)
+		}
+
+		if a, ok := r.Automations[path]; ok {
+			return a, nil
+		}
+
+		autos := r.PackageAutomations(source)
+		if a, ok := autos[path]; ok {
+			return a, nil
+		}
+
+		return nil, fmt.Errorf("automation %q not found in package %s", path, source)
+	}
+}
+
+// printOnDemandAdvisory prints a user-facing advisory to stderr when a package
+// was fetched on demand (not from cache). Nudges the user to declare it.
+func printOnDemandAdvisory(w io.Writer, source string) {
+	if w == nil {
+		return
+	}
+	printer := display.NewWithColor(w, false)
+	if f, ok := w.(*os.File); ok {
+		printer = display.New(f)
+	}
+	printer.PackageFetch("↓", source, "fetched (on demand)", "")
+	fmt.Fprintf(w, "\n  tip: add to pi.yaml to avoid fetching on every fresh clone:\n\n")
+	fmt.Fprintf(w, "    packages:\n")
+	fmt.Fprintf(w, "      - %s\n\n", source)
 }
 
 // mergePackages fetches/verifies each declared package and merges its

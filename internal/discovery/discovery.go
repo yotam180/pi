@@ -27,6 +27,12 @@ type PackageInfo struct {
 	Path   string // resolved filesystem path to the package .pi/ directory
 }
 
+// OnDemandFetchFunc is called when a GitHub ref is encountered that isn't in
+// any declared package. It should fetch the package, merge its automations
+// into the result, and return the resolved automation (or an error).
+// The source string is "org/repo@version". The ref contains parsed fields.
+type OnDemandFetchFunc func(r *Result, ref refparser.AutomationRef) (*automation.Automation, error)
+
 // Result holds all discovered automations and provides lookup.
 type Result struct {
 	Automations map[string]*automation.Automation
@@ -37,6 +43,10 @@ type Result struct {
 	packages    []PackageInfo                     // resolved packages (ordered)
 	aliasMap    map[string]string                 // alias → package source
 	packageAuto map[string]map[string]*automation.Automation // source → name → automation
+
+	// OnDemandFetch is called when findInPackage encounters a GitHub ref
+	// whose package hasn't been declared or fetched. If nil, an error is returned.
+	OnDemandFetch OnDemandFetchFunc
 }
 
 // Discover walks the given .pi/ directory, finds all automation YAML files,
@@ -215,6 +225,12 @@ func (r *Result) Packages() []PackageInfo {
 	return out
 }
 
+// PackageAutomations returns the automation map for a specific package source,
+// or nil if the source is not known.
+func (r *Result) PackageAutomations(source string) map[string]*automation.Automation {
+	return r.packageAuto[source]
+}
+
 // KnownAliases returns the alias→source map for package resolution.
 func (r *Result) KnownAliases() map[string]bool {
 	aliases := make(map[string]bool, len(r.aliasMap))
@@ -352,7 +368,16 @@ func (r *Result) findInPackage(ref refparser.AutomationRef) (*automation.Automat
 
 	autos, ok := r.packageAuto[source]
 	if !ok {
-		// Try matching without exact version for better error messages
+		// file: sources must be declared — no on-demand fetch
+		if ref.Type == refparser.RefFile {
+			return nil, fmt.Errorf("package %s not found — add it to packages: in pi.yaml and run pi setup", source)
+		}
+
+		// GitHub ref not in declared packages — try on-demand fetch
+		if r.OnDemandFetch != nil {
+			return r.OnDemandFetch(r, ref)
+		}
+
 		return nil, fmt.Errorf("package %s has not been fetched — add it to packages: in pi.yaml and run pi setup", source)
 	}
 

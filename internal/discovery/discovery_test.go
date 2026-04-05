@@ -2,12 +2,14 @@ package discovery
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/refparser"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -938,6 +940,206 @@ steps:
 
 	if len(result.Automations) != 1 {
 		t.Errorf("expected 1 automation (unchanged), got %d", len(result.Automations))
+	}
+}
+
+func TestOnDemandFetch_GitHubRef_CallsCallback(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	called := false
+	result.OnDemandFetch = func(r *Result, ref refparser.AutomationRef) (*automation.Automation, error) {
+		called = true
+		if ref.Org != "testorg" || ref.Repo != "testrepo" || ref.Version != "v1.0" {
+			t.Errorf("unexpected ref: org=%q repo=%q version=%q", ref.Org, ref.Repo, ref.Version)
+		}
+		if ref.Path != "docker/up" {
+			t.Errorf("expected path 'docker/up', got %q", ref.Path)
+		}
+		a := &automation.Automation{
+			Name:        "docker/up",
+			Description: "On-demand docker up",
+			Steps:       []automation.Step{{Type: automation.StepTypeBash, Value: "echo up"}},
+		}
+		return a, nil
+	}
+
+	a, err := result.Find("testorg/testrepo@v1.0/docker/up")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected OnDemandFetch to be called")
+	}
+	if a.Description != "On-demand docker up" {
+		t.Errorf("expected on-demand automation, got: %q", a.Description)
+	}
+}
+
+func TestOnDemandFetch_GitHubRef_NilCallback_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// OnDemandFetch is nil — should get the standard error
+	_, err = result.Find("testorg/testrepo@v1.0/docker/up")
+	if err == nil {
+		t.Fatal("expected error for undeclared GitHub ref without on-demand fetch")
+	}
+	if !strings.Contains(err.Error(), "has not been fetched") {
+		t.Errorf("expected 'has not been fetched' error, got: %v", err)
+	}
+}
+
+func TestOnDemandFetch_FileRef_NeverTriggered(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	called := false
+	result.OnDemandFetch = func(r *Result, ref refparser.AutomationRef) (*automation.Automation, error) {
+		called = true
+		return nil, fmt.Errorf("should not be called")
+	}
+
+	_, err = result.Find("file:/tmp/nonexistent")
+	if err == nil {
+		t.Fatal("expected error for undeclared file: ref")
+	}
+	if called {
+		t.Error("OnDemandFetch should NOT be called for file: refs")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' error for file: ref, got: %v", err)
+	}
+}
+
+func TestOnDemandFetch_DeclaredPackage_SkipsCallback(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "deploy.yaml"), `
+description: Deploy
+steps:
+  - bash: echo deploy
+`)
+
+	err = result.MergePackage("testorg/testrepo@v1.0", "", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	called := false
+	result.OnDemandFetch = func(r *Result, ref refparser.AutomationRef) (*automation.Automation, error) {
+		called = true
+		return nil, fmt.Errorf("should not be called")
+	}
+
+	a, err := result.Find("testorg/testrepo@v1.0/deploy")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called {
+		t.Error("OnDemandFetch should NOT be called for declared packages")
+	}
+	if a.Description != "Deploy" {
+		t.Errorf("expected 'Deploy', got: %q", a.Description)
+	}
+}
+
+func TestOnDemandFetch_CallbackError_Propagated(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result.OnDemandFetch = func(r *Result, ref refparser.AutomationRef) (*automation.Automation, error) {
+		return nil, fmt.Errorf("network error: connection refused")
+	}
+
+	_, err = result.Find("testorg/testrepo@v1.0/deploy")
+	if err == nil {
+		t.Fatal("expected error from on-demand fetch")
+	}
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("expected propagated error, got: %v", err)
+	}
+}
+
+func TestOnDemandFetch_PackageAutomations(t *testing.T) {
+	dir := t.TempDir()
+	piDir := filepath.Join(dir, PiDir)
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Discover(piDir, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Before merge, no package automations
+	autos := result.PackageAutomations("testorg/pkg@v1.0")
+	if autos != nil {
+		t.Error("expected nil for unknown source")
+	}
+
+	// Merge and verify
+	pkgDir := filepath.Join(dir, "pkg")
+	writeFile(t, filepath.Join(pkgDir, PiDir, "deploy.yaml"), `
+description: Deploy
+steps:
+  - bash: echo deploy
+`)
+
+	err = result.MergePackage("testorg/pkg@v1.0", "", pkgDir, nil)
+	if err != nil {
+		t.Fatalf("MergePackage error: %v", err)
+	}
+
+	autos = result.PackageAutomations("testorg/pkg@v1.0")
+	if autos == nil {
+		t.Fatal("expected non-nil automations for merged source")
+	}
+	if _, ok := autos["deploy"]; !ok {
+		t.Error("expected 'deploy' in package automations")
 	}
 }
 
