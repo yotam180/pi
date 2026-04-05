@@ -380,7 +380,8 @@ func (e *Executor) popCall() {
 // instead of executing it. The calling shell wrapper sources the file after PI exits.
 func (e *Executor) execParentShell(step automation.Step) error {
 	if e.ParentEvalFile == "" {
-		return fmt.Errorf("parent_shell step requires PI_PARENT_EVAL_FILE to be set (run via a PI shell shortcut)")
+		e.printer().Warn("  ⚠  parent_shell step skipped: not running inside a PI shell wrapper. Run 'pi shell' to install shell integration.\n")
+		return nil
 	}
 	e.printer().StepTrace("parent", step.Value)
 	return AppendToParentEval(e.ParentEvalFile, step.Value)

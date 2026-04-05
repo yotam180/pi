@@ -64,14 +64,17 @@ func TestParentShell_MixedSteps(t *testing.T) {
 	}
 }
 
-func TestParentShell_NoEvalFile_Error(t *testing.T) {
+func TestParentShell_NoEvalFile_Warning(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "parent-shell")
 	out, code := runPi(t, dir, "run", "cd-tmp")
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, got 0: %s", out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 (warning, not error), got %d: %s", code, out)
 	}
-	if !strings.Contains(out, "PI_PARENT_EVAL_FILE") {
-		t.Errorf("expected error about PI_PARENT_EVAL_FILE, got:\n%s", out)
+	if !strings.Contains(out, "parent_shell step skipped") {
+		t.Errorf("expected skip warning, got:\n%s", out)
+	}
+	if !strings.Contains(out, "pi shell") {
+		t.Errorf("expected 'pi shell' hint in warning, got:\n%s", out)
 	}
 }
 

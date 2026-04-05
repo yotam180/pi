@@ -14,6 +14,7 @@ const (
 	dim       = "\033[2m"
 	red       = "\033[31m"
 	green     = "\033[32m"
+	yellow    = "\033[33m"
 	boldRed   = "\033[1;31m"
 	boldGreen = "\033[1;32m"
 )
@@ -61,6 +62,11 @@ func (p *Printer) Red(format string, a ...any) {
 // Bold writes text in bold style.
 func (p *Printer) Bold(format string, a ...any) {
 	p.styled(bold, format, a...)
+}
+
+// Warn writes text in yellow style (for non-fatal warnings).
+func (p *Printer) Warn(format string, a ...any) {
+	p.styled(yellow, format, a...)
 }
 
 // InstallStatus prints a formatted installer status line with the

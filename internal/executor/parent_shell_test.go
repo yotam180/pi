@@ -113,7 +113,7 @@ func TestParentShell_MixedWithNormalSteps(t *testing.T) {
 	}
 }
 
-func TestParentShell_NoEvalFile_Error(t *testing.T) {
+func TestParentShell_NoEvalFile_Warning(t *testing.T) {
 	dir := t.TempDir()
 
 	step := automation.Step{
@@ -123,13 +123,18 @@ func TestParentShell_NoEvalFile_Error(t *testing.T) {
 	}
 	a := newAutomation("test", step)
 
-	exec := newExecutor(dir, newDiscovery(nil))
+	exec, _, stderr := newExecutorWithCapture(dir, newDiscovery(nil))
 	err := exec.Run(a, nil)
-	if err == nil {
-		t.Fatal("expected error when no ParentEvalFile is set")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "PI_PARENT_EVAL_FILE") {
-		t.Errorf("error should mention PI_PARENT_EVAL_FILE, got: %v", err)
+
+	stderrOut := stderr.String()
+	if !strings.Contains(stderrOut, "parent_shell step skipped") {
+		t.Errorf("expected skip warning in stderr, got: %q", stderrOut)
+	}
+	if !strings.Contains(stderrOut, "pi shell") {
+		t.Errorf("expected 'pi shell' hint in stderr, got: %q", stderrOut)
 	}
 }
 

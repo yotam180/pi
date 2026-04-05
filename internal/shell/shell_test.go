@@ -416,3 +416,165 @@ func TestGenerateShellFile_WithAnywhereAndWith(t *testing.T) {
 		t.Errorf("expected --with env=\"$1\", got:\n%s", content)
 	}
 }
+
+func TestGenerateGlobalWrapper(t *testing.T) {
+	content := GenerateGlobalWrapper("/usr/local/bin/pi")
+
+	if !strings.Contains(content, "function pi()") {
+		t.Error("expected function pi()")
+	}
+	if !strings.Contains(content, "command /usr/local/bin/pi") {
+		t.Error("expected 'command' keyword to avoid recursion")
+	}
+	if !strings.Contains(content, "PI_PARENT_EVAL_FILE") {
+		t.Error("expected PI_PARENT_EVAL_FILE in wrapper")
+	}
+	if !strings.Contains(content, `source "$_pi_eval_file"`) {
+		t.Error("expected source of eval file")
+	}
+	if !strings.Contains(content, `rm -f "$_pi_eval_file"`) {
+		t.Error("expected cleanup of eval file")
+	}
+	if !strings.Contains(content, `return $_pi_exit`) {
+		t.Error("expected exit code preservation")
+	}
+}
+
+func TestInstall_CreatesGlobalWrapper(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte("# existing\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "testproj",
+		Shortcuts: map[string]config.Shortcut{
+			"hello": {Run: "greet"},
+		},
+	}
+
+	_, err := Install(cfg, "pi", "/repo")
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	wrapperPath := filepath.Join(tmpHome, piShellDir, piWrapperFile)
+	data, err := os.ReadFile(wrapperPath)
+	if err != nil {
+		t.Fatalf("reading wrapper file: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "function pi()") {
+		t.Error("wrapper file should contain pi() function")
+	}
+	if !strings.Contains(content, "command pi") {
+		t.Error("wrapper file should use 'command' to avoid recursion")
+	}
+}
+
+func TestUninstall_RemovesWrapperWhenLastProject(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "only-proj",
+		Shortcuts: map[string]config.Shortcut{
+			"a": {Run: "auto/a"},
+		},
+	}
+
+	Install(cfg, "pi", "/repo")
+	wrapperPath := filepath.Join(tmpHome, piShellDir, piWrapperFile)
+	if _, err := os.Stat(wrapperPath); err != nil {
+		t.Fatalf("wrapper should exist after install: %v", err)
+	}
+
+	Uninstall("only-proj")
+	if _, err := os.Stat(wrapperPath); !os.IsNotExist(err) {
+		t.Error("wrapper should be removed when last project is uninstalled")
+	}
+}
+
+func TestUninstall_KeepsWrapperIfOtherProjectsExist(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+
+	cfg1 := &config.ProjectConfig{
+		Project: "proj1",
+		Shortcuts: map[string]config.Shortcut{
+			"a": {Run: "auto/a"},
+		},
+	}
+	cfg2 := &config.ProjectConfig{
+		Project: "proj2",
+		Shortcuts: map[string]config.Shortcut{
+			"b": {Run: "auto/b"},
+		},
+	}
+
+	Install(cfg1, "pi", "/repo1")
+	Install(cfg2, "pi", "/repo2")
+
+	Uninstall("proj1")
+
+	wrapperPath := filepath.Join(tmpHome, piShellDir, piWrapperFile)
+	if _, err := os.Stat(wrapperPath); err != nil {
+		t.Error("wrapper should remain when other projects still installed")
+	}
+}
+
+func TestListInstalled_ExcludesWrapper(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	shellDir := filepath.Join(tmpHome, piShellDir)
+	os.MkdirAll(shellDir, 0o755)
+	os.WriteFile(filepath.Join(shellDir, piWrapperFile), []byte("# wrapper"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "myproj.sh"), []byte("# shortcuts"), 0o644)
+
+	projects, err := ListInstalled()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d: %v", len(projects), projects)
+	}
+	if projects[0] != "myproj" {
+		t.Errorf("expected myproj, got %s", projects[0])
+	}
+}
+
+func TestGenerateFunction_EvalInsideSubshell(t *testing.T) {
+	sc := config.Shortcut{Run: "docker/up"}
+	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo")
+
+	// PI_PARENT_EVAL_FILE must be inside the subshell, not prefixing it.
+	// Correct: (cd "/path" && PI_PARENT_EVAL_FILE="$_pi_eval_file" /usr/local/bin/pi ...)
+	// Wrong:   PI_PARENT_EVAL_FILE="$_pi_eval_file" (cd "/path" && ...)
+	if strings.Contains(fn, `PI_PARENT_EVAL_FILE="$_pi_eval_file" (cd`) {
+		t.Errorf("PI_PARENT_EVAL_FILE must be inside the subshell, not outside:\n%s", fn)
+	}
+	if !strings.Contains(fn, `&& PI_PARENT_EVAL_FILE="$_pi_eval_file"`) {
+		t.Errorf("PI_PARENT_EVAL_FILE should be inside subshell as command prefix:\n%s", fn)
+	}
+}
+
+func TestGenerateFunction_WithInputs_EvalInsideSubshell(t *testing.T) {
+	sc := config.Shortcut{
+		Run:  "docker/logs",
+		With: map[string]string{"service": "$1"},
+	}
+	fn := generateFunction("dlogs", sc, "/usr/local/bin/pi", "/home/dev/repo")
+
+	if strings.Contains(fn, `PI_PARENT_EVAL_FILE="$_pi_eval_file" (cd`) {
+		t.Errorf("PI_PARENT_EVAL_FILE must be inside the subshell, not outside:\n%s", fn)
+	}
+	if !strings.Contains(fn, `&& PI_PARENT_EVAL_FILE="$_pi_eval_file"`) {
+		t.Errorf("PI_PARENT_EVAL_FILE should be inside subshell as command prefix:\n%s", fn)
+	}
+}
