@@ -69,7 +69,7 @@ internal/
     tty.go                         isTerminal() via golang.org/x/term
     display_test.go                30 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace)
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
+    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
     discovery_test.go              29 tests (18 base + 6 builtin merge/prefix + 5 optional name tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
@@ -96,6 +96,9 @@ internal/
     parent_shell_test.go           6 tests — parent shell: writes to eval file, multiple steps append, mixed with normal, no eval file error, skipped by condition, AppendToParentEval
     validate_test.go               34 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, prependPathInEnv)
     predicates_test.go             12 tests (+ subtests covering all predicate types)
+  refparser/                       Automation reference string parser
+    refparser.go                   Parse(), AutomationRef, RefType (Local/Builtin/GitHub/File/Alias); pure string parsing — no I/O
+    refparser_test.go              46 tests (local, builtin, github, file, alias, errors, round-trip, precedence)
   project/                         Project root detection
     root.go                        FindRoot() — walks up to find pi.yaml
     root_test.go                   4 tests
@@ -261,6 +264,17 @@ Makefile                               build, vet, test, test-matrix targets
 - When `name:` is present but mismatches the derived name, a warning is printed to stderr
 - Built-in automations (`internal/builtins`) apply the same rule: name from path when absent
 
+### Automation reference parsing (`internal/refparser`)
+- All automation references pass through `refparser.Parse()` before resolution
+- Five reference types: `RefLocal` (`.pi/` path), `RefBuiltin` (`pi:` prefix), `RefGitHub` (`org/repo@version[/path]`), `RefFile` (`file:` prefix), `RefAlias` (alias-prefixed path)
+- Detection precedence: `pi:` → `file:` → `@` (GitHub) → alias match → local (default)
+- `AutomationRef` struct holds all parsed fields: `Type`, `Raw`, `Path`, `Org`, `Repo`, `Version`, `FSPath`, `Alias`
+- `String()` produces the canonical form; round-trip (`Parse` → `String`) preserves canonical representation
+- Pure string parsing — no filesystem or network access; safe to call from validators and completers
+- `discovery.Find()` delegates to `refparser.Parse()` internally; local and builtin refs resolve as before
+- `discovery.FindWithAliases()` accepts `knownAliases` for alias resolution (used when packages are configured)
+- GitHub, file, and alias refs currently return clear "not yet supported" errors — infrastructure for project 13
+
 ### Single-step shorthand
 - Automations with a single step can place the step type key (`bash:`, `python:`, `typescript:`, `run:`) at the top level, skipping the `steps:` wrapper
 - Step modifier fields (`env:`, `dir:`, `timeout:`, `silent:`, `pipe_to:`) are supported alongside the shorthand key at the top level
@@ -275,7 +289,8 @@ Makefile                               build, vet, test, test-matrix targets
 - `config` knows only about `pi.yaml` structure
 - `automation` knows only about a single automation file's structure; also stores `FilePath` for resolving relative script paths
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
-- `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map
+- `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)
+- `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`
 - `executor` runs automation steps; depends on `automation` (types) and `discovery` (for `run:` step resolution)
 - `project` handles finding the repo root (directory containing `pi.yaml`)
 - `cli` ties project + discovery + executor together
@@ -667,7 +682,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 749 (128 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 184 executor [across 15 test files] + 4 project + 15 runtimes + 16 shell + 180 integration)
+Total tests: 795 (128 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 184 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 180 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

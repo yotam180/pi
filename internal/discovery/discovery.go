@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/refparser"
 )
 
 const (
@@ -185,31 +186,57 @@ func normalizeName(name string) string {
 	return filepath.ToSlash(name)
 }
 
-// Find looks up an automation by name. If the name starts with "pi:", it
-// resolves exclusively from built-ins. Otherwise, it checks local automations
-// first, then falls back to built-ins.
+// Find looks up an automation by name. It uses refparser to classify the
+// reference string and dispatches to the appropriate resolution strategy:
+//   - RefLocal: checks local automations, falls back to built-ins
+//   - RefBuiltin: resolves exclusively from built-ins
+//   - RefGitHub, RefFile, RefAlias: not yet supported (returns clear error)
 func (r *Result) Find(name string) (*automation.Automation, error) {
-	if strings.HasPrefix(name, BuiltinPrefix) {
-		stripped := normalizeName(strings.TrimPrefix(name, BuiltinPrefix))
-		if r.Builtins != nil {
-			if a, ok := r.Builtins[stripped]; ok {
-				return a, nil
-			}
-		}
-		return nil, fmt.Errorf("built-in automation %q not found", name)
+	return r.FindWithAliases(name, nil)
+}
+
+// FindWithAliases is like Find but accepts known aliases for resolving alias references.
+func (r *Result) FindWithAliases(name string, knownAliases map[string]bool) (*automation.Automation, error) {
+	ref, err := refparser.Parse(name, knownAliases)
+	if err != nil {
+		return nil, fmt.Errorf("invalid automation reference: %w", err)
 	}
 
-	name = normalizeName(name)
+	switch ref.Type {
+	case refparser.RefBuiltin:
+		return r.findBuiltin(ref)
+	case refparser.RefLocal:
+		return r.findLocal(ref)
+	case refparser.RefGitHub:
+		return nil, fmt.Errorf("external package references are not yet supported: %s", ref.String())
+	case refparser.RefFile:
+		return nil, fmt.Errorf("file source references are not yet supported: %s", ref.String())
+	case refparser.RefAlias:
+		return nil, fmt.Errorf("alias references are not yet supported: %s", ref.String())
+	default:
+		return nil, fmt.Errorf("unknown reference type for %q", name)
+	}
+}
 
-	if a, ok := r.Automations[name]; ok {
+func (r *Result) findBuiltin(ref refparser.AutomationRef) (*automation.Automation, error) {
+	if r.Builtins != nil {
+		if a, ok := r.Builtins[ref.Path]; ok {
+			return a, nil
+		}
+	}
+	return nil, fmt.Errorf("built-in automation %q not found", ref.Raw)
+}
+
+func (r *Result) findLocal(ref refparser.AutomationRef) (*automation.Automation, error) {
+	if a, ok := r.Automations[ref.Path]; ok {
 		return a, nil
 	}
 
 	if len(r.names) == 0 {
-		return nil, fmt.Errorf("automation %q not found (no automations discovered)", name)
+		return nil, fmt.Errorf("automation %q not found (no automations discovered)", ref.Raw)
 	}
 
-	return nil, fmt.Errorf("automation %q not found\n\nAvailable automations:\n%s", name, r.formatAvailable())
+	return nil, fmt.Errorf("automation %q not found\n\nAvailable automations:\n%s", ref.Raw, r.formatAvailable())
 }
 
 // Names returns a sorted list of all automation names (local + built-in).
