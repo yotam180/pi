@@ -112,6 +112,26 @@ func TestRunWithInputs_MixingError(t *testing.T) {
 	}
 }
 
+func TestRunWithInputs_ExcessPositionalArgs(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"target": {Description: "build target"},
+		},
+		[]string{"target"},
+		bashStep("echo should not run"),
+	)
+
+	exec := newExecutor(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"release", "--verbose"}, nil)
+	if err == nil {
+		t.Fatal("expected error for excess positional args")
+	}
+	if !strings.Contains(err.Error(), "too many arguments") {
+		t.Errorf("expected 'too many arguments' error, got: %v", err)
+	}
+}
+
 func TestRunWithInputs_NoInputsPassesArgsThrough(t *testing.T) {
 	dir := t.TempDir()
 	outFile := filepath.Join(dir, "out.txt")

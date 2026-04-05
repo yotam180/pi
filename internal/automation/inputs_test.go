@@ -250,6 +250,49 @@ func TestResolveInputs_AllDefaults(t *testing.T) {
 	}
 }
 
+func TestResolveInputs_ExcessPositionalArgs(t *testing.T) {
+	a := &Automation{
+		Name: "build",
+		Inputs: map[string]InputSpec{
+			"target": {Description: "build target"},
+		},
+		InputKeys: []string{"target"},
+	}
+
+	_, err := a.ResolveInputs(nil, []string{"release", "--verbose", "--extra"})
+	if err == nil {
+		t.Fatal("expected error for excess positional args")
+	}
+	if !strings.Contains(err.Error(), "too many arguments") {
+		t.Errorf("expected 'too many arguments' error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "--verbose --extra") {
+		t.Errorf("expected error to list extra args, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "1 input") {
+		t.Errorf("expected error to mention input count, got: %v", err)
+	}
+}
+
+func TestResolveInputs_ExactPositionalArgs(t *testing.T) {
+	a := &Automation{
+		Name: "build",
+		Inputs: map[string]InputSpec{
+			"target": {Description: "build target"},
+			"mode":   {Description: "build mode"},
+		},
+		InputKeys: []string{"target", "mode"},
+	}
+
+	resolved, err := a.ResolveInputs(nil, []string{"release", "fast"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolved["target"] != "release" || resolved["mode"] != "fast" {
+		t.Errorf("resolved = %v, want target=release mode=fast", resolved)
+	}
+}
+
 func TestResolveInputs_NoInputs(t *testing.T) {
 	a := &Automation{}
 	resolved, err := a.ResolveInputs(nil, []string{"ignored"})

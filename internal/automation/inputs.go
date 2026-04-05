@@ -93,6 +93,11 @@ func (a *Automation) ResolveInputs(withArgs map[string]string, positionalArgs []
 				return nil, fmt.Errorf("required input %q is missing (position %d)", key, i+1)
 			}
 		}
+		if len(positionalArgs) > len(a.InputKeys) {
+			extra := positionalArgs[len(a.InputKeys):]
+			return nil, fmt.Errorf("too many arguments: got %d, but %q only accepts %d input(s); extra: %s",
+				len(positionalArgs), a.Name, len(a.InputKeys), strings.Join(extra, " "))
+		}
 	}
 
 	return resolved, nil

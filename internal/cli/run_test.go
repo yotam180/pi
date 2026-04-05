@@ -161,6 +161,30 @@ steps:
 	}
 }
 
+func TestRunAutomation_ExcessPositionalArgs(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "greet.yaml"), []byte(`description: Greet with input
+inputs:
+  name:
+    type: string
+    required: true
+steps:
+  - bash: echo "hello $PI_INPUT_NAME"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "greet", []string{"alice", "--extra", "stuff"}, nil, false, false, &buf, os.Stderr)
+	if err == nil {
+		t.Fatal("expected error for excess positional args")
+	}
+	if !strings.Contains(err.Error(), "too many arguments") {
+		t.Errorf("expected 'too many arguments' in error, got: %v", err)
+	}
+}
+
 func TestParseWithFlags(t *testing.T) {
 	tests := []struct {
 		name    string

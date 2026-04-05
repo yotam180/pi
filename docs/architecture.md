@@ -66,7 +66,7 @@ internal/
     new_test.go                    pi new tests (14 tests — basic, bash flag, python flag, description, nested path, already exists, no project, strip extension, output, valid content, generate default, generate nested, init creates example, init next steps)
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               on-demand fetch advisory tests (4 tests)
-    run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
+    run_test.go                    pi run tests (15 tests — includes --with, inputs, --silent, excess positional args tests)
     validate_test.go               pi validate tests (23 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, multiple file ref errors, installer scalar file refs [broken + valid], installer step-list file refs, installer first: block file refs, installer verify phase file refs, installer inline scripts not flagged)
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
@@ -87,12 +87,12 @@ internal/
     automation.go                  Automation struct (with If, Env, Install, Requires, Inputs, GoFunc fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), IsGoFunc(), validate(), buildShorthandStep(); GoFunc field for Go-backed builtins; single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     walker.go                      StepLocation (Phase, Index, FirstIndex, IsScalar, InFirstBlock(), FormatPath()), StepVisitor, WalkSteps(), WalkStepsUntil() — visitor-pattern traversal of all steps in an automation (regular steps, first: sub-steps, install phases); used by cli/validate.go for run-step-ref and file-ref checks
-    inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
+    inputs.go                      InputSpec, inputsRaw, ResolveInputs() (with excess positional args error), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
     automation_test.go             33 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env, shorthand parent_shell and with)
     step_test.go                   73 tests (if/env/silent/parent_shell/dir/timeout/description/pipe fields, install block, first: block)
     walker_test.go                 17 tests (regular steps, first: blocks, installer scalar/step-list, verify absent, early stop, FormatPath, field preservation)
-    inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
+    inputs_test.go                 18 tests (input spec, resolution, env vars, with: on steps, excess positional args error, exact positional args)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, PackageFetch, truncateTrace, shouldColor; NewForWriter() — auto-detects TTY for arbitrary io.Writer (used by CLI commands that receive io.Writer stderr)
@@ -118,7 +118,7 @@ internal/
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
     pipe_test.go                   10 tests — pipe: true: bash→bash, bash→python, python→bash, three-step chain, failure propagation, stderr passthrough, run step piping, multiline data
-    inputs_test.go                 9 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, args passthrough, short prefix, both prefixes, run step with with
+    inputs_test.go                 10 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, excess positional args, args passthrough, short prefix, both prefixes, run step with with
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
     install_test.go                17 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure (with content assertion), scalar stderr streamed, step list stderr streamed, first list with conditionals, with inputs, first block stderr surfaced, scalar phase uses automation env, version capture uses automation env, automation-level if
