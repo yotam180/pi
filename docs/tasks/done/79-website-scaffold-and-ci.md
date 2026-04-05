@@ -4,7 +4,7 @@
 infra
 
 ## Status
-todo
+done
 
 ## Priority
 high
@@ -16,16 +16,16 @@ high
 Set up the Astro Starlight website skeleton in `website/` at the repo root, with all navigation stubs in place and a GitHub Actions workflow that builds and deploys to GitHub Pages on push to `main`. This is the foundation all content tasks depend on — it must be done first.
 
 ## Acceptance Criteria
-- [ ] `website/` directory exists at repo root with a working Astro Starlight installation
-- [ ] `cd website && npm run build` succeeds (stub pages are fine, no broken links in nav)
-- [ ] `cd website && npm run dev` starts a local dev server
-- [ ] Full navigation structure is in place as stub pages (correct filenames, correct sidebar config)
-- [ ] `astro.config.mjs` has the correct site title, description, and sidebar structure
-- [ ] `.github/workflows/docs.yml` workflow builds and deploys to GitHub Pages on push to `main` (path filter: `website/**`)
-- [ ] `website/` has a `.gitignore` ignoring `node_modules/` and `dist/`
-- [ ] `public/llms.txt` stub file exists (will be filled in by task 85)
-- [ ] `starlight-page-actions` npm package is installed (wired up in task 85, but installed here)
-- [ ] README note in repo root `README.md` mentions the website directory
+- [x] `website/` directory exists at repo root with a working Astro Starlight installation
+- [x] `cd website && npm run build` succeeds (stub pages are fine, no broken links in nav)
+- [x] `cd website && npm run dev` starts a local dev server
+- [x] Full navigation structure is in place as stub pages (correct filenames, correct sidebar config)
+- [x] `astro.config.mjs` has the correct site title, description, and sidebar structure
+- [x] `.github/workflows/docs.yml` workflow builds and deploys to GitHub Pages on push to `main` (path filter: `website/**`)
+- [x] `website/` has a `.gitignore` ignoring `node_modules/` and `dist/`
+- [x] `public/llms.txt` stub file exists (will be filled in by task 85)
+- [x] `starlight-page-actions` npm package is installed (wired up in task 85, but installed here)
+- [x] README note in repo root `README.md` mentions the website directory
 
 ## Implementation Notes
 
@@ -191,14 +191,26 @@ This page is coming soon.
 Should redirect to the Introduction page using a `<meta http-equiv="refresh">` or Astro's redirect. In Starlight, the simplest approach is to set the `template: splash` in frontmatter on the root and have the landing page at `src/pages/index.astro` (which is what task 80 will build). The `src/content/docs/index.mdx` should not exist — the root `/` is handled by the custom `src/pages/index.astro`.
 
 ## Subtasks
-- [ ] Scaffold Astro Starlight project in `website/`
-- [ ] Install `starlight-page-actions`
-- [ ] Create all stub pages with correct filenames
-- [ ] Configure sidebar in `astro.config.mjs`
-- [ ] Create `public/llms.txt` stub
-- [ ] Create `.github/workflows/docs.yml`
-- [ ] Verify `npm run build` passes
-- [ ] Add `website/` mention to root `README.md`
+- [x] Scaffold Astro Starlight project in `website/`
+- [x] Install `starlight-page-actions`
+- [x] Create all stub pages with correct filenames
+- [x] Configure sidebar in `astro.config.mjs`
+- [x] Create `public/llms.txt` stub
+- [x] Create `.github/workflows/docs.yml`
+- [x] Verify `npm run build` passes
+- [x] Add `website/` mention to root `README.md`
+
+## Completion Notes
+
+Scaffolded using `npm create astro@latest website -- --template starlight`. Astro v6.1.3, Starlight v0.38.2, starlight-page-actions v0.5.0.
+
+Key decisions:
+- Root `/` handled by `src/pages/index.astro` (currently a redirect to `/getting-started/introduction/`, task 80 will replace with landing page)
+- No `src/content/docs/index.mdx` — avoids conflict with the custom landing page route
+- `starlight-page-actions` wired into the Starlight plugin system in `astro.config.mjs` (ready for task 85 to configure actions)
+- `.gitignore` covers `node_modules/`, `dist/`, and `.astro/` (generated types directory)
+- Build produces 21 pages including Pagefind search index
+- Dev server verified at `localhost:4321` returning 200
 
 ## Blocked By
 None — this is the first task in the project.

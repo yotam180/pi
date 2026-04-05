@@ -39,7 +39,7 @@ go build -o bin/pi ./cmd/pi
 2. Add automation YAML files (e.g. `.pi/docker/up.yaml`)
 3. Run them: `pi run docker/up`
 
-See `docs/README.md` for the full product definition.
+See `docs/README.md` for the full product definition. The `website/` directory contains the public documentation site built with [Astro Starlight](https://starlight.astro.build/).
 
 ## Development
 

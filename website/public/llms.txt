@@ -1,0 +1,7 @@
+# PI Documentation — llms.txt
+# https://llmstxt.org/
+
+> PI is a developer automation platform that replaces shell_shortcuts.sh
+> with structured, polyglot, version-controlled automations.
+
+This file will be populated with links to documentation pages.
