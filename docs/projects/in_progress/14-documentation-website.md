@@ -52,7 +52,7 @@ The key pedagogical decision: start with short forms. A first-time developer sho
 - [ ] Every CLI command listed in `docs/README.md` has a corresponding reference page entry
 - [ ] Every YAML field and step modifier listed in `docs/README.md` has a documented reference entry
 - [ ] All `if:` predicates are documented in the Conditions reference
-- [ ] Guides cover: writing a setup automation, cross-platform scripts, publishing a package to GitHub, consuming packages, private repos, parent shell steps
+- [x] Guides cover: writing a setup automation, cross-platform scripts, publishing a package to GitHub, consuming packages, private repos, parent shell steps
 - [ ] `public/llms.txt` exists and links to key documentation pages
 - [ ] `starlight-page-actions` plugin provides "Copy as Markdown" button on all doc pages
 - [ ] Site scores 90+ on Lighthouse (Starlight default achieves this)
