@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vyper-tooling/pi/internal/automation"
 )
 
 func setupInfoWorkspace(t *testing.T) string {
@@ -432,6 +434,67 @@ steps:
 	}
 	if !strings.Contains(out, "GOOS") {
 		t.Errorf("expected GOOS in env list, got:\n%s", out)
+	}
+}
+
+func TestStepAnnotations_Empty(t *testing.T) {
+	s := automation.Step{Type: automation.StepTypeBash, Value: "echo hi"}
+	annotations := stepAnnotations(s)
+	if len(annotations) != 0 {
+		t.Errorf("expected no annotations for plain step, got: %v", annotations)
+	}
+}
+
+func TestStepAnnotations_AllFields(t *testing.T) {
+	s := automation.Step{
+		Type:        automation.StepTypeBash,
+		Value:       "echo hi",
+		If:          "os.macos",
+		Pipe:        true,
+		Silent:      true,
+		ParentShell: true,
+		Dir:         "src",
+		Timeout:     30_000_000_000,
+		TimeoutRaw:  "30s",
+		Env:         map[string]string{"FOO": "bar", "BAZ": "qux"},
+	}
+	annotations := stepAnnotations(s)
+	expected := []string{
+		"if: os.macos",
+		"pipe",
+		"silent",
+		"parent_shell",
+		"dir: src",
+		"timeout: 30s",
+		"env: BAZ, FOO",
+	}
+	if len(annotations) != len(expected) {
+		t.Fatalf("expected %d annotations, got %d: %v", len(expected), len(annotations), annotations)
+	}
+	for i, want := range expected {
+		if annotations[i] != want {
+			t.Errorf("annotation[%d] = %q, want %q", i, annotations[i], want)
+		}
+	}
+}
+
+func TestStepAnnotations_SubsetFields(t *testing.T) {
+	s := automation.Step{
+		Type:       automation.StepTypeBash,
+		Value:      "go test",
+		Dir:        "backend",
+		Timeout:    60_000_000_000,
+		TimeoutRaw: "1m",
+	}
+	annotations := stepAnnotations(s)
+	if len(annotations) != 2 {
+		t.Fatalf("expected 2 annotations, got %d: %v", len(annotations), annotations)
+	}
+	if annotations[0] != "dir: backend" {
+		t.Errorf("expected 'dir: backend', got %q", annotations[0])
+	}
+	if annotations[1] != "timeout: 1m" {
+		t.Errorf("expected 'timeout: 1m', got %q", annotations[1])
 	}
 }
 

@@ -33,6 +33,17 @@ func New(w io.Writer) *Printer {
 	return &Printer{w: w, color: shouldColor(w)}
 }
 
+// NewForWriter creates a Printer for an arbitrary io.Writer. If the writer
+// is a *os.File backed by a terminal, color is auto-detected (same as New).
+// Otherwise, color is disabled. Use this when the concrete type of the writer
+// is not known at the call site.
+func NewForWriter(w io.Writer) *Printer {
+	if f, ok := w.(*os.File); ok {
+		return New(f)
+	}
+	return &Printer{w: w, color: false}
+}
+
 // NewWithColor creates a Printer with an explicit color toggle.
 // Useful for testing or when the caller has already determined the mode.
 func NewWithColor(w io.Writer, color bool) *Printer {

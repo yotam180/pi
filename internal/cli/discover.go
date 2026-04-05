@@ -119,10 +119,7 @@ func printOnDemandAdvisory(w io.Writer, source string) {
 	if w == nil {
 		return
 	}
-	printer := display.NewWithColor(w, false)
-	if f, ok := w.(*os.File); ok {
-		printer = display.New(f)
-	}
+	printer := display.NewForWriter(w)
 	printer.PackageFetch("↓", source, "fetched (on demand)", "")
 	fmt.Fprintf(w, "\n  tip: add to pi.yaml to avoid fetching on every fresh clone:\n\n")
 	fmt.Fprintf(w, "    packages:\n")
@@ -135,10 +132,7 @@ func printOnDemandAdvisory(w io.Writer, source string) {
 func mergePackages(result *discovery.Result, cfg *config.ProjectConfig, root string, stderr io.Writer) error {
 	var printer *display.Printer
 	if stderr != nil {
-		printer = display.NewWithColor(stderr, false)
-		if f, ok := stderr.(*os.File); ok {
-			printer = display.New(f)
-		}
+		printer = display.NewForWriter(stderr)
 	}
 
 	for _, pkg := range cfg.Packages {

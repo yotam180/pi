@@ -212,6 +212,53 @@ func TestNew_BufferWriter_NoColor(t *testing.T) {
 	}
 }
 
+func TestNewForWriter_BufferDisablesColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewForWriter(&buf)
+	p.Green("test")
+	got := buf.String()
+	if strings.Contains(got, "\033[") {
+		t.Errorf("buffer writer should disable color, got %q", got)
+	}
+	if got != "test" {
+		t.Errorf("expected plain text, got %q", got)
+	}
+}
+
+func TestNewForWriter_OsFileUsesTTYDetection(t *testing.T) {
+	f, err := os.CreateTemp("", "display-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+
+	p := NewForWriter(f)
+	p.Green("test")
+
+	if _, seekErr := f.Seek(0, 0); seekErr != nil {
+		t.Fatal(seekErr)
+	}
+	content := make([]byte, 256)
+	n, _ := f.Read(content)
+	got := string(content[:n])
+	if strings.Contains(got, "\033[") {
+		t.Errorf("non-TTY file should disable color, got %q", got)
+	}
+}
+
+func TestNewForWriter_WritesCorrectOutput(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewForWriter(&buf)
+	p.Dim("dimmed")
+	p.Bold("bolded")
+	p.Red("error")
+	got := buf.String()
+	if got != "dimmedbolded" + "error" {
+		t.Errorf("expected concatenated plain text, got %q", got)
+	}
+}
+
 func TestShouldColor_NoColorEnvVar(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	if shouldColor(os.Stderr) {

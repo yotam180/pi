@@ -118,6 +118,40 @@ func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
 	}
 }
 
+// stepAnnotations returns the display annotations for a step (if, pipe, silent,
+// parent_shell, dir, timeout, env). Used by both printStepsDetail and
+// printFirstBlockDetail to avoid duplicating the annotation-building logic.
+func stepAnnotations(s automation.Step) []string {
+	var annotations []string
+	if s.If != "" {
+		annotations = append(annotations, fmt.Sprintf("if: %s", s.If))
+	}
+	if s.Pipe {
+		annotations = append(annotations, "pipe")
+	}
+	if s.Silent {
+		annotations = append(annotations, "silent")
+	}
+	if s.ParentShell {
+		annotations = append(annotations, "parent_shell")
+	}
+	if s.Dir != "" {
+		annotations = append(annotations, fmt.Sprintf("dir: %s", s.Dir))
+	}
+	if s.Timeout > 0 {
+		annotations = append(annotations, fmt.Sprintf("timeout: %s", s.TimeoutRaw))
+	}
+	if len(s.Env) > 0 {
+		envKeys := make([]string, 0, len(s.Env))
+		for k := range s.Env {
+			envKeys = append(envKeys, k)
+		}
+		sort.Strings(envKeys)
+		annotations = append(annotations, fmt.Sprintf("env: %s", strings.Join(envKeys, ", ")))
+	}
+	return annotations
+}
+
 func printStepsDetail(steps []automation.Step, out io.Writer) {
 	hasDetails := false
 	for _, s := range steps {
@@ -137,33 +171,7 @@ func printStepsDetail(steps []automation.Step, out io.Writer) {
 			continue
 		}
 		label := fmt.Sprintf("%s: %s", s.Type, truncateValue(s.Value, 40))
-		var annotations []string
-		if s.If != "" {
-			annotations = append(annotations, fmt.Sprintf("if: %s", s.If))
-		}
-		if s.Pipe {
-			annotations = append(annotations, "pipe")
-		}
-		if s.Silent {
-			annotations = append(annotations, "silent")
-		}
-		if s.ParentShell {
-			annotations = append(annotations, "parent_shell")
-		}
-		if s.Dir != "" {
-			annotations = append(annotations, fmt.Sprintf("dir: %s", s.Dir))
-		}
-		if s.Timeout > 0 {
-			annotations = append(annotations, fmt.Sprintf("timeout: %s", s.TimeoutRaw))
-		}
-		if len(s.Env) > 0 {
-			envKeys := make([]string, 0, len(s.Env))
-			for k := range s.Env {
-				envKeys = append(envKeys, k)
-			}
-			sort.Strings(envKeys)
-			annotations = append(annotations, fmt.Sprintf("env: %s", strings.Join(envKeys, ", ")))
-		}
+		annotations := stepAnnotations(s)
 		if len(annotations) > 0 {
 			fmt.Fprintf(out, "  %d. %s  [%s]\n", i+1, label, strings.Join(annotations, "; "))
 		} else {
@@ -177,15 +185,15 @@ func printStepsDetail(steps []automation.Step, out io.Writer) {
 
 func printFirstBlockDetail(index int, step automation.Step, out io.Writer) {
 	header := "first"
-	var annotations []string
+	var blockAnnotations []string
 	if step.If != "" {
-		annotations = append(annotations, fmt.Sprintf("if: %s", step.If))
+		blockAnnotations = append(blockAnnotations, fmt.Sprintf("if: %s", step.If))
 	}
 	if step.Pipe {
-		annotations = append(annotations, "pipe")
+		blockAnnotations = append(blockAnnotations, "pipe")
 	}
-	if len(annotations) > 0 {
-		fmt.Fprintf(out, "  %d. %s  [%s]\n", index+1, header, strings.Join(annotations, "; "))
+	if len(blockAnnotations) > 0 {
+		fmt.Fprintf(out, "  %d. %s  [%s]\n", index+1, header, strings.Join(blockAnnotations, "; "))
 	} else {
 		fmt.Fprintf(out, "  %d. %s\n", index+1, header)
 	}
@@ -194,27 +202,7 @@ func printFirstBlockDetail(index int, step automation.Step, out io.Writer) {
 	}
 	for j, sub := range step.First {
 		label := fmt.Sprintf("%s: %s", sub.Type, truncateValue(sub.Value, 36))
-		var subAnnotations []string
-		if sub.If != "" {
-			subAnnotations = append(subAnnotations, fmt.Sprintf("if: %s", sub.If))
-		}
-		if sub.Silent {
-			subAnnotations = append(subAnnotations, "silent")
-		}
-		if sub.Dir != "" {
-			subAnnotations = append(subAnnotations, fmt.Sprintf("dir: %s", sub.Dir))
-		}
-		if sub.Timeout > 0 {
-			subAnnotations = append(subAnnotations, fmt.Sprintf("timeout: %s", sub.TimeoutRaw))
-		}
-		if len(sub.Env) > 0 {
-			envKeys := make([]string, 0, len(sub.Env))
-			for k := range sub.Env {
-				envKeys = append(envKeys, k)
-			}
-			sort.Strings(envKeys)
-			subAnnotations = append(subAnnotations, fmt.Sprintf("env: %s", strings.Join(envKeys, ", ")))
-		}
+		subAnnotations := stepAnnotations(sub)
 		if len(subAnnotations) > 0 {
 			fmt.Fprintf(out, "     %c. %s  [%s]\n", 'a'+j, label, strings.Join(subAnnotations, "; "))
 		} else {

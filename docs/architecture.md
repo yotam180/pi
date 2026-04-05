@@ -36,7 +36,7 @@ internal/
     discover_test.go               4 tests (advisory output format, nil writer, fetch status text, down arrow icon)
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with SOURCE column; --all flag shows grouped package sections; --builtins/-b flag includes pi:* automations; automationSource() resolves source indicator per automation
-    info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
+    info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations; stepAnnotations() shared helper for building annotation slices from step fields
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
@@ -49,7 +49,7 @@ internal/
     validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
-    info_test.go                   pi info tests (18 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, and automation-level env display)
+    info_test.go                   pi info tests (21 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
@@ -71,9 +71,9 @@ internal/
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
   display/                         Styled terminal output (color, TTY detection)
-    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, PackageFetch, truncateTrace, shouldColor
+    display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, PackageFetch, truncateTrace, shouldColor; NewForWriter() — auto-detects TTY for arbitrary io.Writer (used by CLI commands that receive io.Writer stderr)
     tty.go                         isTerminal() via golang.org/x/term
-    display_test.go                34 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace, package fetch status)
+    display_test.go                37 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace, package fetch status, NewForWriter)
   discovery/                       .pi/ folder scanning and automation lookup
     discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), PackageAutomations(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution; OnDemandFetchFunc callback type and OnDemandFetch field for on-demand GitHub package fetching
     discovery_test.go              43 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests + 6 on-demand fetch tests)
@@ -710,6 +710,7 @@ Makefile                               build, vet, test, test-matrix targets
 ### Styled terminal output (`internal/display`)
 - `Printer` wraps an `io.Writer` with optional ANSI color codes
 - Color is auto-detected: enabled only when the writer is a `*os.File` backed by a terminal and `NO_COLOR` is not set
+- `NewForWriter(w)` accepts an arbitrary `io.Writer`: uses TTY-aware color detection when `w` is `*os.File`, disables color otherwise. Preferred over `New()` in CLI commands that receive `io.Writer` parameters.
 - `NewWithColor(w, bool)` allows explicit control for testing
 - Style methods: `Plain()`, `Dim()`, `Green()`, `Red()`, `Bold()` — all accept `fmt.Sprintf`-style format strings
 - `InstallStatus(icon, name, status, version)` encapsulates the icon→style mapping: `✓`+already→dim, `✓`+installed→bold green, `✗`→bold red, `→`→plain
@@ -802,7 +803,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1113 (170 automation + 81 builtins + 32 cache + 97 CLI + 30 conditions + 45 config + 39 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 228 integration)
+Total tests: 1119 (170 automation + 81 builtins + 32 cache + 100 CLI + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 228 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

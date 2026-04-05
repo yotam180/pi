@@ -58,10 +58,7 @@ func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	printer := display.NewWithColor(stderr, false)
-	if f, ok := stderr.(*os.File); ok {
-		printer = display.New(f)
-	}
+	printer := display.NewForWriter(stderr)
 
 	switch ref.Type {
 	case refparser.RefGitHub:
