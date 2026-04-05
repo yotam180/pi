@@ -381,6 +381,23 @@ func TestBuiltins_DevToolInfoShowsDetails(t *testing.T) {
 	}
 }
 
+func TestBuiltins_NotFound_DidYouMean(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "builtins")
+	out, code := runPi(t, dir, "run", "pi:install-pyhton")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for misspelled builtin")
+	}
+	if !strings.Contains(out, "not found") {
+		t.Errorf("expected 'not found' error, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Did you mean?") {
+		t.Errorf("expected 'Did you mean?' suggestion, got:\n%s", out)
+	}
+	if !strings.Contains(out, "pi:install-python") {
+		t.Errorf("expected 'pi:install-python' in suggestions, got:\n%s", out)
+	}
+}
+
 func TestBuiltins_DevToolInfoShowsInputs(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "builtins")
 	tests := []struct {

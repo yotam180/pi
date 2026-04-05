@@ -81,6 +81,37 @@ func TestBasic_NotFound(t *testing.T) {
 	}
 }
 
+func TestBasic_NotFound_DidYouMean(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "basic")
+	out, code := runPi(t, dir, "run", "gret")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for misspelled automation")
+	}
+	if !strings.Contains(out, "not found") {
+		t.Errorf("expected 'not found' error, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Did you mean?") {
+		t.Errorf("expected 'Did you mean?' suggestion, got:\n%s", out)
+	}
+	if !strings.Contains(out, "greet") {
+		t.Errorf("expected 'greet' in suggestions, got:\n%s", out)
+	}
+}
+
+func TestBasic_NotFound_DidYouMean_NoSuggestions(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "basic")
+	out, code := runPi(t, dir, "run", "zzzzzzzzzzzzzzzzzzzzz")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for unknown automation")
+	}
+	if !strings.Contains(out, "not found") {
+		t.Errorf("expected 'not found' error, got:\n%s", out)
+	}
+	if strings.Contains(out, "Did you mean?") {
+		t.Errorf("should NOT show 'Did you mean?' for distant names, got:\n%s", out)
+	}
+}
+
 func TestBasic_FromSubdirectory(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "basic")
 	sub := filepath.Join(dir, "sub")

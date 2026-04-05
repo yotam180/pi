@@ -340,6 +340,23 @@ func (r *Result) findBuiltin(ref refparser.AutomationRef) (*automation.Automatio
 			return a, nil
 		}
 	}
+
+	if r.Builtins != nil && len(r.Builtins) > 0 {
+		builtinNames := make([]string, 0, len(r.Builtins))
+		for name := range r.Builtins {
+			builtinNames = append(builtinNames, name)
+		}
+		sort.Strings(builtinNames)
+		if suggestions := suggestNames(ref.Path, builtinNames, 3); len(suggestions) > 0 {
+			var b strings.Builder
+			fmt.Fprintf(&b, "built-in automation %q not found\n\nDid you mean?\n", ref.Raw)
+			for _, name := range suggestions {
+				fmt.Fprintf(&b, "  pi:%s\n", name)
+			}
+			return nil, fmt.Errorf("%s", b.String())
+		}
+	}
+
 	return nil, fmt.Errorf("built-in automation %q not found", ref.Raw)
 }
 
@@ -401,7 +418,22 @@ func (r *Result) findLocal(ref refparser.AutomationRef) (*automation.Automation,
 		return nil, fmt.Errorf("automation %q not found (no automations discovered)", ref.Raw)
 	}
 
-	return nil, fmt.Errorf("automation %q not found\n\nAvailable automations:\n%s", ref.Raw, r.formatAvailable())
+	var b strings.Builder
+	fmt.Fprintf(&b, "automation %q not found", ref.Raw)
+
+	if suggestions := suggestNames(ref.Path, r.names, 3); len(suggestions) > 0 {
+		b.WriteString("\n\nDid you mean?\n")
+		for _, name := range suggestions {
+			if a, ok := r.Automations[name]; ok && a.Description != "" {
+				fmt.Fprintf(&b, "  %-30s %s\n", name, a.Description)
+			} else {
+				fmt.Fprintf(&b, "  %s\n", name)
+			}
+		}
+	}
+
+	fmt.Fprintf(&b, "\nAvailable automations:\n%s", r.formatAvailable())
+	return nil, fmt.Errorf("%s", b.String())
 }
 
 // Names returns a sorted list of all automation names (local + built-in).

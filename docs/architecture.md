@@ -94,7 +94,9 @@ internal/
     tty.go                         isTerminal() via golang.org/x/term
     display_test.go                37 tests (styles, color toggle, NO_COLOR, TTY, install status variants, step trace, truncateTrace, package fetch status, NewForWriter)
   discovery/                       .pi/ folder scanning and automation lookup
-    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), PackageAutomations(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution; OnDemandFetchFunc callback type and OnDemandFetch field for on-demand GitHub package fetching
+    discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), MergePackage(), IsBuiltin(), IsPackage(), PackageSource(), PackageAutomations(), KnownAliases(), reconcileAutomationName(); findAlias() and findInPackage() for package resolution; OnDemandFetchFunc callback type and OnDemandFetch field for on-demand GitHub package fetching; "Did you mean?" suggestions via Levenshtein distance on not-found errors
+    suggest.go                     levenshtein() — Wagner–Fischer edit distance; suggestNames() — returns close matches sorted by distance then alphabetically; used by findLocal() and findBuiltin() for "Did you mean?" error messages
+    suggest_test.go                13 tests (Levenshtein distance, symmetry, suggestion sorting, max results, exact match exclusion, empty inputs, integration with Find)
     discovery_test.go              43 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests + 6 on-demand fetch tests)
   executor/                        Step execution engine
     executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
@@ -844,7 +846,8 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Error philosophy
 - Parse errors include file path and field name
-- `Find()` not-found errors list all available automations
+- `Find()` not-found errors show "Did you mean?" suggestions for close matches (Levenshtein distance ≤ 3 or ≤ 30% of name length), then list all available automations
+- `findBuiltin()` not-found errors suggest close built-in names with `pi:` prefix
 - Collision errors mention both conflicting file paths
 - Circular dependency errors show the full chain (e.g., `a → b → c → a`)
 - Missing `pi.yaml` errors mention the start directory
@@ -936,7 +939,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1268 (170 automation + 136 builtins + 32 cache + 143 CLI [includes 11 completion, 13 init, 13 setup add] + 30 conditions + 64 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 258 integration [includes 8 completion, 8 init, 11 setup add])
+Total tests: 1284 (170 automation + 136 builtins + 32 cache + 143 CLI [includes 11 completion, 13 init, 13 setup add] + 30 conditions + 64 config + 42 display + 56 discovery [43 base + 13 suggest] + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 261 integration [includes 8 completion, 8 init, 11 setup add])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -970,14 +973,14 @@ tests/integration/
   add_test.go                     8 tests — pi add: file source, file with alias, idempotent, no version error, no args, creates packages block, appends to existing, invalid source
   init_test.go                    8 tests — pi init: creates project files, --yes flag, already initialized, .pi exists, next steps, non-interactive fallback, created project is valid, already-initialized next steps
   setup_add_test.go               11 tests — pi setup add: bare string, short-form resolution, if flag, idempotent duplicate, key=value args, no pi.yaml auto-init, local automation, multiple adds, no args, pi: prefix expansion, preserves existing content
-  basic_test.go                   7 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, from subdirectory
+  basic_test.go                   9 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, not-found did-you-mean, not-found no-suggestions, from subdirectory
   docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
   pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)
   version_test.go                 3 tests — version: --version flag, version subcommand, flag and subcommand match
   inputs_test.go                  9 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, info env var prefix, list INPUTS column
   info_test.go                    4 tests — info command: basic automation, with inputs, not-found, no args
   conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
-  builtins_test.go                26 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs), builtins hidden by default
+  builtins_test.go                27 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs), builtins hidden by default, not-found did-you-mean
   installer_schema_test.go        11 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, built-in installer
   requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
   doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
