@@ -67,8 +67,8 @@ setup:
     if: os.macos
   - run: setup/install-uv
     if: not command.uv
-  - run: setup/install-cursor-extensions
-  - run: pi:install-python          # built-in PI automation
+  - setup/install-cursor-extensions  # bare string — no modifiers needed
+  - run: pi:install-python           # object form — has with: modifier
     with:
       version: "3.13"
 ```
@@ -461,6 +461,18 @@ function pi() {
 ## Environment Setup
 
 `pi setup` runs all automations listed in `pi.yaml → setup:` sequentially. Setup automations are expected to be idempotent — check first, act only if needed.
+
+Setup entries can be bare strings or objects. Bare strings are shorthand for `run: <string>` with no conditions or inputs. The object form (`run:` + optional `if:` + optional `with:`) is required for entries that need modifiers. Both forms can be mixed in the same list:
+
+```yaml
+setup:
+  - setup/install-go                # bare string — simple run
+  - run: setup/install-ruby         # object form — has if: modifier
+    if: os.macos
+  - run: pi:install-python          # object form — has with: modifier
+    with:
+      version: "3.13"
+```
 
 Setup entries support the same `if:` conditions as automation steps. When a condition evaluates to false, the entry is skipped with a message. Entries without `if:` always run.
 

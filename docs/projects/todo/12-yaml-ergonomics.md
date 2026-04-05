@@ -51,7 +51,7 @@ All fixes are backward-compatible with a deprecation path: old syntax continues 
 - [x] `first:` block works in any step list: runs the first sub-step whose `if:` passes, skips rest
 - [x] `pipe: true` is the canonical form; `pipe_to: next` still works with deprecation warning
 - [x] `$PI_IN_*` resolves inputs; `$PI_INPUT_*` still works with deprecation warning
-- [ ] `setup:` entries in `pi.yaml` accept bare strings (`- setup/install-go`)
+- [x] `setup:` entries in `pi.yaml` accept bare strings (`- setup/install-go`)
 - [x] Automation-level `env:` applies to all steps in the automation
 - [ ] All built-in and example YAML files use the new concise style
 - [ ] All existing tests pass; new tests cover each new feature

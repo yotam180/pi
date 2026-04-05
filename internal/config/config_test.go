@@ -196,6 +196,121 @@ shortcuts:
 	}
 }
 
+func TestLoad_SetupBareString(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - setup/install-go
+  - setup/install-ruby
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Setup) != 2 {
+		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "setup/install-go" {
+		t.Errorf("setup[0].Run = %q, want %q", cfg.Setup[0].Run, "setup/install-go")
+	}
+	if cfg.Setup[1].Run != "setup/install-ruby" {
+		t.Errorf("setup[1].Run = %q, want %q", cfg.Setup[1].Run, "setup/install-ruby")
+	}
+	if cfg.Setup[0].If != "" {
+		t.Errorf("setup[0].If = %q, want empty", cfg.Setup[0].If)
+	}
+}
+
+func TestLoad_SetupMixedBareAndObject(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - setup/install-go
+  - run: setup/install-ruby
+    if: os.macos
+  - run: pi:install-python
+    with:
+      version: "3.13"
+  - setup/install-uv
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Setup) != 4 {
+		t.Fatalf("setup count = %d, want 4", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "setup/install-go" {
+		t.Errorf("setup[0].Run = %q, want %q", cfg.Setup[0].Run, "setup/install-go")
+	}
+	if cfg.Setup[0].If != "" {
+		t.Errorf("setup[0].If = %q, want empty", cfg.Setup[0].If)
+	}
+	if cfg.Setup[1].Run != "setup/install-ruby" {
+		t.Errorf("setup[1].Run = %q, want %q", cfg.Setup[1].Run, "setup/install-ruby")
+	}
+	if cfg.Setup[1].If != "os.macos" {
+		t.Errorf("setup[1].If = %q, want %q", cfg.Setup[1].If, "os.macos")
+	}
+	if cfg.Setup[2].Run != "pi:install-python" {
+		t.Errorf("setup[2].Run = %q, want %q", cfg.Setup[2].Run, "pi:install-python")
+	}
+	if cfg.Setup[2].With["version"] != "3.13" {
+		t.Errorf("setup[2].With[version] = %q, want %q", cfg.Setup[2].With["version"], "3.13")
+	}
+	if cfg.Setup[3].Run != "setup/install-uv" {
+		t.Errorf("setup[3].Run = %q, want %q", cfg.Setup[3].Run, "setup/install-uv")
+	}
+}
+
+func TestLoad_SetupBareStringEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - ""
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected error for empty bare setup entry")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should mention 'empty', got: %v", err)
+	}
+}
+
+func TestLoad_SetupBareStringWithBuiltin(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pi.yaml", `
+project: test
+setup:
+  - pi:install-python
+  - setup/local-thing
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Setup) != 2 {
+		t.Fatalf("setup count = %d, want 2", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "pi:install-python" {
+		t.Errorf("setup[0].Run = %q, want %q", cfg.Setup[0].Run, "pi:install-python")
+	}
+	if cfg.Setup[1].Run != "setup/local-thing" {
+		t.Errorf("setup[1].Run = %q, want %q", cfg.Setup[1].Run, "setup/local-thing")
+	}
+}
+
 func TestLoad_SetupEntryWithIf(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "pi.yaml", `

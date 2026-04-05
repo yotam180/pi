@@ -51,10 +51,32 @@ type Shortcut struct {
 }
 
 // SetupEntry represents one entry in the setup list.
+// It can be either a bare string ("setup/install-go") or an object with run:, if:, with: keys.
 type SetupEntry struct {
 	Run  string            `yaml:"run"`
 	With map[string]string `yaml:"with"`
 	If   string            `yaml:"if"`
+}
+
+// UnmarshalYAML implements custom unmarshalling for SetupEntry so it can accept
+// both a plain string ("setup/install-go") and an object ({run: ..., if: ...}).
+func (e *SetupEntry) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		e.Run = value.Value
+		return nil
+	}
+
+	if value.Kind == yaml.MappingNode {
+		type setupAlias SetupEntry
+		var alias setupAlias
+		if err := value.Decode(&alias); err != nil {
+			return err
+		}
+		*e = SetupEntry(alias)
+		return nil
+	}
+
+	return fmt.Errorf("line %d: setup entry must be a string or object", value.Line)
 }
 
 // UnmarshalYAML implements custom unmarshalling for Shortcut so it can accept

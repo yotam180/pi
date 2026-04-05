@@ -53,8 +53,8 @@ internal/
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
   config/                          pi.yaml parsing
-    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
-    config_test.go                 17 tests
+    config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field, bare string support), RuntimesConfig + Load()
+    config_test.go                 21 tests
   automation/                      Individual automation YAML parsing
     automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(), toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
@@ -477,8 +477,16 @@ Makefile                               build, vet, test, test-matrix targets
 - `run:` steps calling a conditionally-skipped automation succeed without error (the parent step continues normally)
 - Invalid `if:` expressions are caught at YAML load time, not at runtime
 
+### Setup entry syntax (`setup:` in `pi.yaml`)
+- Setup entries accept both bare strings and objects (like shortcuts)
+- Bare strings (`- setup/install-go`) are shorthand for `run: <string>` with no modifiers
+- Object form (`run:` + optional `if:` + optional `with:`) is required for entries that need modifiers
+- Both forms can be mixed in the same list
+- `SetupEntry.UnmarshalYAML()` handles the polymorphic parsing (scalar → bare, mapping → object)
+- Bare string entries cannot have `if:` or `with:` — YAML syntax prevents it naturally
+
 ### Conditional setup entries (`if:` on setup)
-- Setup entries in `pi.yaml` can declare an `if:` field containing a boolean condition expression
+- Setup entries in `pi.yaml` can declare an `if:` field containing a boolean condition expression (requires object form)
 - Before running each setup entry, `pi setup` evaluates the `if:` condition using `conditions.Predicates()` + `executor.ResolvePredicates()` + `conditions.Eval()`
 - If the condition evaluates to false, the entry is skipped with a message: `==> setup[N]: <name> [skipped] (condition: <expr>)`
 - Entries without `if:` always run (backward compatible)
@@ -692,7 +700,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 822 (140 automation + 42 builtins + 75 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 191 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 187 integration)
+Total tests: 826 (140 automation + 42 builtins + 75 CLI + 30 conditions + 21 config + 30 display + 29 discovery + 191 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 187 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

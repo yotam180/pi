@@ -5,4 +5,4 @@ shortcuts:
   build: build
 
 setup:
-  - run: hello
+  - hello

@@ -9,4 +9,4 @@ shortcuts:
   piclean: clean
 
 setup:
-  - run: pi:install-tsx
+  - pi:install-tsx

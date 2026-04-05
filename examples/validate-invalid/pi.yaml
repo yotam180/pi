@@ -5,5 +5,5 @@ shortcuts:
   ok: hello
 
 setup:
-  - run: also-nonexistent
-  - run: hello
+  - also-nonexistent
+  - hello

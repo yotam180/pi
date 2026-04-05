@@ -1,4 +1,4 @@
 project: docker-builtins-test
 
 setup:
-  - run: call-docker-up
+  - call-docker-up

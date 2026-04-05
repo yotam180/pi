@@ -1,7 +1,7 @@
 project: conditional-demo
 
 setup:
-  - run: setup-always
+  - setup-always
   - run: setup-never
     if: os.windows and os.linux
   - run: setup-platform
