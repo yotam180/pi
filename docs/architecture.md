@@ -906,6 +906,13 @@ Makefile                               build, vet, test, test-matrix targets
 - Circular dependency errors show the full chain (e.g., `a → b → c → a`)
 - Missing `pi.yaml` errors mention the start directory
 
+### Error type checking convention
+- All error type checking uses `errors.As()` instead of direct type assertions (`err.(*SomeType)`)
+- This ensures error unwrapping works correctly if errors are wrapped with `fmt.Errorf("...: %w", err)` in the future
+- Pattern: `var exitErr *ExitError; if errors.As(err, &exitErr) { ... }` — never `if exitErr, ok := err.(*ExitError); ok { ... }`
+- Applies to production code and test code alike
+- Key error types checked via `errors.As()`: `*executor.ExitError`, `*executor.ValidationError`, `*config.DuplicatePackageError`, `*config.DuplicateSetupEntryError`, `*config.ReplacedSetupEntryError`, `*exec.ExitError`
+
 ### Condition expressions (`internal/conditions`)
 - Pure-logic package with zero PI internal dependencies — receives `map[string]bool` and expression string, returns `(bool, error)`
 - Lexer tokenizes into IDENT, AND, OR, NOT, LPAREN, RPAREN, STRING, EOF with byte-position tracking

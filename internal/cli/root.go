@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -41,7 +42,8 @@ and shareable automation model.`,
 
 func Execute() {
 	if err := NewRootCmd().Execute(); err != nil {
-		if exitErr, ok := err.(*executor.ExitError); ok {
+		var exitErr *executor.ExitError
+		if errors.As(err, &exitErr) {
 			os.Exit(exitErr.Code)
 		}
 		fmt.Fprintln(os.Stderr, err)

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -61,8 +62,8 @@ func TestStep_Timeout_Exceeded(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for timed-out step")
 	}
-	exitErr, ok := err.(*ExitError)
-	if !ok {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != TimeoutExitCode {

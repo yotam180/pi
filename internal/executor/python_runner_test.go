@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,8 +42,8 @@ func TestPythonInline_Failure(t *testing.T) {
 		t.Fatal("expected error for non-zero exit")
 	}
 
-	exitErr, ok := err.(*ExitError)
-	if !ok {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != 42 {

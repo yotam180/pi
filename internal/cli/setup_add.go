@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -168,11 +169,13 @@ func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, source
 	}
 
 	if err := config.AddSetupEntry(root, entry); err != nil {
-		if _, ok := err.(*config.DuplicateSetupEntryError); ok {
+		var dupErr *config.DuplicateSetupEntryError
+		if errors.As(err, &dupErr) {
 			fmt.Fprintln(stdout, "Already in pi.yaml. No changes made.")
 			return nil
 		}
-		if _, ok := err.(*config.ReplacedSetupEntryError); ok {
+		var replErr *config.ReplacedSetupEntryError
+		if errors.As(err, &replErr) {
 			fmt.Fprintln(stdout, "Replaced in pi.yaml:")
 			fmt.Fprintln(stdout, config.FormatSetupEntry(entry))
 			return nil

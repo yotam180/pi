@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,8 @@ func (r *BashRunner) Run(ctx *RunContext) error {
 	}
 
 	if err := runStepCommand("bash", cmdArgs, ctx); err != nil {
-		if _, ok := err.(*ExitError); ok {
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
 			return err
 		}
 		return fmt.Errorf("running bash step: %w", err)
@@ -52,7 +54,8 @@ func (r *PythonRunner) Run(ctx *RunContext) error {
 	}
 
 	if err := runStepCommand(pythonBin, cmdArgs, ctx); err != nil {
-		if _, ok := err.(*ExitError); ok {
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
 			return err
 		}
 		if isCommandNotFound(err) {
@@ -101,7 +104,8 @@ func (r *TypeScriptRunner) Run(ctx *RunContext) error {
 	}
 
 	if err := runStepCommand("tsx", cmdArgs, ctx); err != nil {
-		if _, ok := err.(*ExitError); ok {
+		var exitErr *ExitError
+		if errors.As(err, &exitErr) {
 			return err
 		}
 		if isCommandNotFound(err) {
@@ -162,7 +166,8 @@ func runStepCommand(bin string, args []string, ctx *RunContext) error {
 		if ctx.Step.Timeout > 0 && err.Error() == "signal: killed" {
 			return &ExitError{Code: TimeoutExitCode}
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return &ExitError{Code: exitErr.ExitCode()}
 		}
 		return err

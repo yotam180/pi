@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,8 +85,8 @@ func TestPipe_FailureInMiddleStopsExecution(t *testing.T) {
 		t.Fatal("expected error when piped step fails")
 	}
 
-	exitErr, ok := err.(*ExitError)
-	if !ok {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != 1 {

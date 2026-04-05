@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -236,8 +237,8 @@ func TestFirstBlock_ExitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from exit 42")
 	}
-	exitErr, ok := err.(*ExitError)
-	if !ok {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *ExitError, got %T", err)
 	}
 	if exitErr.Code != 42 {

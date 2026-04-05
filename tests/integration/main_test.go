@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,7 +60,8 @@ func runPi(t *testing.T, dir string, args ...string) (string, int) {
 	out, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running pi %v: %v\n%s", args, err, string(out))
@@ -77,7 +79,8 @@ func runPiStdout(t *testing.T, dir string, args ...string) (string, int) {
 	cmd.Stderr = os.Stderr
 	exitCode := 0
 	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running pi %v: %v", args, err)
@@ -95,7 +98,8 @@ func runPiSplit(t *testing.T, dir string, args ...string) (stdout, stderr string
 	cmd.Stderr = &stderrBuf
 	exitCode = 0
 	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running pi %v: %v", args, err)
@@ -112,7 +116,8 @@ func runPiWithEnv(t *testing.T, dir string, env []string, args ...string) (strin
 	out, err := cmd.CombinedOutput()
 	exitCode := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running pi %v: %v\n%s", args, err, string(out))

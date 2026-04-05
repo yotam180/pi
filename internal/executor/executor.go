@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -125,7 +126,8 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 	}
 
 	if err := e.ValidateRequirements(a); err != nil {
-		if ve, ok := err.(*ValidationError); ok {
+		var ve *ValidationError
+		if errors.As(err, &ve) {
 			fmt.Fprint(e.stderr(), FormatValidationError(ve))
 			return &ExitError{Code: 1}
 		}

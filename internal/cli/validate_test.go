@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,8 +104,8 @@ steps:
 	if err == nil {
 		t.Fatal("expected error for broken shortcut reference")
 	}
-	exitErr, ok := err.(*executor.ExitError)
-	if !ok {
+	var exitErr *executor.ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *executor.ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != 1 {

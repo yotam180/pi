@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,8 +70,8 @@ packages:
 		t.Fatal("expected DuplicatePackageError")
 	}
 
-	dup, ok := err.(*DuplicatePackageError)
-	if !ok {
+	var dup *DuplicatePackageError
+	if !errors.As(err, &dup) {
 		t.Fatalf("expected *DuplicatePackageError, got %T: %v", err, err)
 	}
 	if dup.Source != "yotam180/pi-common@v1.2" {
@@ -457,8 +458,8 @@ setup:
 		t.Fatal("expected DuplicateSetupEntryError")
 	}
 
-	dup, ok := err.(*DuplicateSetupEntryError)
-	if !ok {
+	var dup *DuplicateSetupEntryError
+	if !errors.As(err, &dup) {
 		t.Fatalf("expected *DuplicateSetupEntryError, got %T: %v", err, err)
 	}
 	if dup.Run != "pi:install-uv" {
@@ -483,7 +484,8 @@ setup:
 	if err == nil {
 		t.Fatal("expected DuplicateSetupEntryError")
 	}
-	if _, ok := err.(*DuplicateSetupEntryError); !ok {
+	var dupTarget *DuplicateSetupEntryError
+	if !errors.As(err, &dupTarget) {
 		t.Fatalf("expected *DuplicateSetupEntryError, got %T: %v", err, err)
 	}
 }
@@ -505,7 +507,8 @@ setup:
 	if err == nil {
 		t.Fatal("expected ReplacedSetupEntryError")
 	}
-	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+	var replTarget *ReplacedSetupEntryError
+	if !errors.As(err, &replTarget) {
 		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 
@@ -536,7 +539,8 @@ setup:
 	if err == nil {
 		t.Fatal("expected ReplacedSetupEntryError")
 	}
-	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+	var replTarget *ReplacedSetupEntryError
+	if !errors.As(err, &replTarget) {
 		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 
@@ -572,7 +576,8 @@ setup:
 	if err == nil {
 		t.Fatal("expected ReplacedSetupEntryError")
 	}
-	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+	var replTarget *ReplacedSetupEntryError
+	if !errors.As(err, &replTarget) {
 		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 
@@ -611,7 +616,8 @@ setup:
 	if err == nil {
 		t.Fatal("expected ReplacedSetupEntryError")
 	}
-	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+	var replTarget *ReplacedSetupEntryError
+	if !errors.As(err, &replTarget) {
 		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 
@@ -661,7 +667,8 @@ shortcuts:
 	if err == nil {
 		t.Fatal("expected ReplacedSetupEntryError")
 	}
-	if _, ok := err.(*ReplacedSetupEntryError); !ok {
+	var replTarget *ReplacedSetupEntryError
+	if !errors.As(err, &replTarget) {
 		t.Fatalf("expected *ReplacedSetupEntryError, got %T: %v", err, err)
 	}
 

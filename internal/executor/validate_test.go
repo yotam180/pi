@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -312,8 +313,8 @@ func TestValidateRequirements_SomeMissing(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	ve, ok := err.(*ValidationError)
-	if !ok {
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *ValidationError, got %T", err)
 	}
 
@@ -446,8 +447,8 @@ func TestRunWithInputs_FailsOnMissingRequirement(t *testing.T) {
 		t.Fatal("expected error for missing requirement")
 	}
 
-	exitErr, ok := err.(*ExitError)
-	if !ok {
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != 1 {

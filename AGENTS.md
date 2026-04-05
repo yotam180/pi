@@ -50,3 +50,4 @@ Key checkpoints:
 - Language: Go. Follow standard Go best practices.
 - Test everything. Do QA before marking a task done.
 - Run `go build ./...` and `go test ./...` before committing.
+- Use `errors.As()` for error type checking — never direct type assertions (`err.(*SomeType)`). This ensures wrapped errors are handled correctly.

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -80,7 +81,8 @@ func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
 	}
 
 	if err := config.AddPackage(root, entry); err != nil {
-		if dup, ok := err.(*config.DuplicatePackageError); ok {
+		var dup *config.DuplicatePackageError
+		if errors.As(err, &dup) {
 			printer.Plain("  ✓  %s already in %s\n", dup.Source, config.FileName)
 			return nil
 		}

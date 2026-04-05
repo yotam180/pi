@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -176,7 +177,8 @@ func TestConditional_EnvCheck_WithoutVar(t *testing.T) {
 	out := string(raw)
 	exitCode := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running pi: %v\n%s", err, out)

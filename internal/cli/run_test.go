@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,8 +88,8 @@ func TestRunAutomation_ExitCode(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for failed step")
 	}
-	exitErr, ok := err.(*executor.ExitError)
-	if !ok {
+	var exitErr *executor.ExitError
+	if !errors.As(err, &exitErr) {
 		t.Fatalf("expected *executor.ExitError, got %T: %v", err, err)
 	}
 	if exitErr.Code != 42 {
