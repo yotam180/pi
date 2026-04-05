@@ -1,0 +1,8 @@
+name: build
+description: Build the project
+steps:
+  - bash: echo "compiling..."
+    description: Compile source code
+  - bash: echo "linking..."
+    description: Link binaries
+  - bash: echo "done"

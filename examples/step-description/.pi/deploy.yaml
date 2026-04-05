@@ -1,0 +1,11 @@
+name: deploy
+description: Deploy the application
+steps:
+  - bash: echo "building image..."
+    description: Build Docker image
+    silent: true
+  - bash: echo "pushing..."
+    description: Push to registry
+    dir: .
+  - bash: echo "deployed"
+    description: Verify deployment

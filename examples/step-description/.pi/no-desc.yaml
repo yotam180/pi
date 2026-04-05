@@ -1,0 +1,5 @@
+name: no-desc
+description: Automation without step descriptions
+steps:
+  - bash: echo "step one"
+  - bash: echo "step two"

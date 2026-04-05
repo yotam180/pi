@@ -2255,6 +2255,76 @@ steps:
 	}
 }
 
+func TestLoad_StepWithDescription(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "desc.yaml", `
+name: with-desc
+description: Automation with step descriptions
+steps:
+  - bash: docker-compose up -d
+    description: Start all containers in the background
+  - bash: sleep 2
+  - python: check_health.py
+    description: Verify services are healthy
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(a.Steps) != 3 {
+		t.Fatalf("steps count = %d, want 3", len(a.Steps))
+	}
+
+	if a.Steps[0].Description != "Start all containers in the background" {
+		t.Errorf("step[0].Description = %q, want %q", a.Steps[0].Description, "Start all containers in the background")
+	}
+	if a.Steps[1].Description != "" {
+		t.Errorf("step[1].Description = %q, want empty", a.Steps[1].Description)
+	}
+	if a.Steps[2].Description != "Verify services are healthy" {
+		t.Errorf("step[2].Description = %q, want %q", a.Steps[2].Description, "Verify services are healthy")
+	}
+}
+
+func TestLoad_StepDescriptionWithOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "desc-combo.yaml", `
+name: desc-combo
+steps:
+  - bash: go test ./...
+    description: Run tests in the API directory
+    dir: services/api
+    timeout: 5m
+    silent: true
+    env:
+      GO_TEST_FLAGS: -v
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	step := a.Steps[0]
+	if step.Description != "Run tests in the API directory" {
+		t.Errorf("description = %q, want %q", step.Description, "Run tests in the API directory")
+	}
+	if step.Dir != "services/api" {
+		t.Errorf("dir = %q, want %q", step.Dir, "services/api")
+	}
+	if step.Timeout.Minutes() != 5 {
+		t.Errorf("timeout = %v, want 5m", step.Timeout)
+	}
+	if !step.Silent {
+		t.Error("expected silent = true")
+	}
+	if step.Env["GO_TEST_FLAGS"] != "-v" {
+		t.Errorf("env GO_TEST_FLAGS = %q, want %q", step.Env["GO_TEST_FLAGS"], "-v")
+	}
+}
+
 func TestValidateVersionString(t *testing.T) {
 	tests := []struct {
 		input   string

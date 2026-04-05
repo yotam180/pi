@@ -116,6 +116,22 @@ steps:
 
 Steps can pass data to the next step using `pipe_to: next`. Full inter-step communication (env, named outputs) is planned for a future iteration.
 
+### Step Description (`description:`)
+
+Steps can declare an optional `description:` field to document what the step does in human-readable terms. Descriptions are displayed by `pi info` and have no effect on execution.
+
+```yaml
+steps:
+  - bash: docker-compose logs -f --tail 200
+    description: Stream container logs
+    pipe_to: next
+
+  - python: logs-formatted.py
+    description: Format and filter log output
+```
+
+Steps without `description:` behave exactly as before. The description is purely informational — it helps developers understand complex automations when browsing with `pi info`.
+
 ### Environment Variables (`env:`)
 
 Steps can declare an `env:` mapping to inject environment variables into the step's execution context:

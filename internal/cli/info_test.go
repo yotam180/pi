@@ -337,6 +337,68 @@ steps:
 	}
 }
 
+func TestShowAutomationInfo_StepDescription(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "with-desc.yaml"), []byte(`name: with-desc
+description: Automation with step descriptions
+steps:
+  - bash: docker-compose up -d
+    description: Start all containers
+  - bash: sleep 2
+  - python: check.py
+    description: Verify services are healthy
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "with-desc", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Step details:") {
+		t.Errorf("expected Step details section when descriptions present, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Start all containers") {
+		t.Errorf("expected step description shown, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Verify services are healthy") {
+		t.Errorf("expected step description shown, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_StepDescriptionWithAnnotations(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "desc-annot.yaml"), []byte(`name: desc-annot
+description: Description with annotations
+steps:
+  - bash: go test ./...
+    description: Run test suite
+    dir: src
+    timeout: 30s
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "desc-annot", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "[dir: src; timeout: 30s]") {
+		t.Errorf("expected annotations on step line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Run test suite") {
+		t.Errorf("expected description below step line, got:\n%s", out)
+	}
+}
+
 func TestShowAutomationInfo_NoStepDetailsWithoutConditions(t *testing.T) {
 	root := setupInfoWorkspace(t)
 	var buf bytes.Buffer

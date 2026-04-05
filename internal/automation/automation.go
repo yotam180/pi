@@ -190,6 +190,7 @@ type Step struct {
 	Dir         string            `yaml:"-"`
 	Timeout     time.Duration     `yaml:"-"`
 	TimeoutRaw  string            `yaml:"-"` // original string for display (e.g. "30s")
+	Description string            `yaml:"-"`
 }
 
 // InstallPhase represents a phase (test, run, verify) in an install: block.
@@ -284,6 +285,7 @@ type stepRaw struct {
 	ParentShell bool              `yaml:"parent_shell"`
 	Dir         string            `yaml:"dir"`
 	Timeout     string            `yaml:"timeout"`
+	Description string            `yaml:"description"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -403,6 +405,7 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 		Silent:      sr.Silent,
 		ParentShell: sr.ParentShell,
 		Dir:         sr.Dir,
+		Description: sr.Description,
 	}
 	if len(sr.With) > 0 {
 		if s.t != StepTypeRun {

@@ -35,7 +35,7 @@ internal/
     discover.go                    discoverAll() — discovers local + built-in automations and merges
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
-    info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, and install lifecycle for installer automations
+    info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, step descriptions, and install lifecycle for installer automations
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
@@ -43,7 +43,7 @@ internal/
     root_test.go                   CLI tests (10 tests — includes doctor subcommand)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
-    info_test.go                   pi info tests (15 tests — includes if: condition display, installer type, dir: annotation, and timeout: annotation)
+    info_test.go                   pi info tests (17 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, and step description display)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
@@ -54,8 +54,8 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, Silent, ParentShell, Dir, and Timeout fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             101 tests
+    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, Silent, ParentShell, Dir, Timeout, and Description fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             103 tests
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
@@ -166,8 +166,8 @@ pi info <name>
   │
   └─ Output
        Prints name, description, if: condition (when present), step count,
-       step details with per-step if: conditions (when any step has if:),
-       and input specs
+       step details with per-step if: conditions and descriptions (when
+       any step has if:, description:, or other annotations), and input specs
 ```
 
 ```
@@ -273,6 +273,15 @@ Makefile                               build, vet, test, test-matrix targets
 - Works across all step types (bash, python, typescript, run)
 - Exit code propagation: if a piping step fails, execution stops immediately
 - Executor fields use `io.Writer`/`io.Reader` interfaces (not `*os.File`) to support buffer-based piping
+
+### Step description (`description:` on steps)
+- Steps can declare an optional `description:` field with a human-readable string
+- Descriptions are purely informational — they have no effect on step execution
+- `pi info` shows step descriptions as an indented line below the step detail line when the "Step details" section is displayed
+- The presence of a `description:` on any step triggers the "Step details" section (same as `if:`, `env:`, etc.)
+- Steps without `description:` have an empty string (backward compatible)
+- Works with all step types: bash, python, typescript, run
+- Compatible with all other step fields: `if:`, `env:`, `dir:`, `timeout:`, `silent:`, `parent_shell:`, `pipe_to`
 
 ### Step trace lines and silent/loud
 - Before executing each non-installer step, PI prints a trace line to stderr: `  → <type>: <truncated-command>`
@@ -574,7 +583,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 665 (101 automation + 42 builtins + 61 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 170 executor [across 14 test files] + 4 project + 16 runtimes + 16 shell + 154 integration)
+Total tests: 674 (103 automation + 42 builtins + 63 CLI + 30 conditions + 17 config + 30 display + 24 discovery + 170 executor [across 14 test files] + 4 project + 16 runtimes + 16 shell + 159 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -619,3 +628,4 @@ tests/docker/
 - Step timeout tests: `step-timeout` example workspace; list automations, fast step completes within timeout, slow step exceeds timeout (exit 124), mixed timed and untimed steps, `pi info` shows timeout annotations
 - Step visibility tests: `step-visibility` example workspace; default trace lines in stderr, `silent: true` suppresses trace and output, `--loud` overrides silent, all-silent produces no output, all-silent with `--loud` shows everything, `pi info` shows silent annotation
 - Parent shell tests: `parent-shell` example workspace; list automations, parent_shell step writes to eval file, mixed normal + parent_shell steps, error without PI_PARENT_EVAL_FILE, normal automations unaffected, `pi info` shows parent_shell annotation, shell codegen includes eval wrapper and pi-setup helper
+- Step description tests: `step-description` example workspace; list automations, run with descriptions (execution unaffected), `pi info` shows step descriptions below step lines, descriptions combined with annotations (silent, dir), no "Step details" section when no descriptions or annotations present
