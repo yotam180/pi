@@ -35,6 +35,12 @@ type Automation struct {
 	Inputs    map[string]InputSpec `yaml:"-"`
 	InputKeys []string             `yaml:"-"`
 
+	// GoFunc, when non-nil, marks this automation as Go-backed. The executor
+	// calls GoFunc instead of running steps. Inputs are resolved and passed as
+	// environment variables, same as YAML automations. GoFunc receives the
+	// resolved input map (key → value) and returns nil on success.
+	GoFunc func(inputs map[string]string) error `yaml:"-"`
+
 	// FilePath is the absolute path to the YAML file this automation was loaded from.
 	// Set by Load(), not parsed from YAML.
 	FilePath string `yaml:"-"`
@@ -48,6 +54,11 @@ type Automation struct {
 // IsInstaller returns true if this automation uses the install: block schema.
 func (a *Automation) IsInstaller() bool {
 	return a.Install != nil
+}
+
+// IsGoFunc returns true if this automation is backed by a Go function.
+func (a *Automation) IsGoFunc() bool {
+	return a.GoFunc != nil
 }
 
 // Dir returns the directory containing this automation's YAML file.
@@ -234,6 +245,10 @@ func (a *Automation) validate(path string) error {
 
 	if hasSteps && hasInstall {
 		return fmt.Errorf("%s: automation cannot have both \"steps\" and \"install\"", path)
+	}
+
+	if a.GoFunc != nil {
+		return nil
 	}
 
 	if !hasSteps && !hasInstall {

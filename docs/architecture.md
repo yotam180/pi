@@ -10,8 +10,9 @@ PI is a single Go binary (`pi`) that reads a project's `.pi/` folder and `pi.yam
 cmd/pi/main.go                     Entry point, calls cli.Execute()
 internal/
   builtins/                        Embedded built-in automations
-    builtins.go                    //go:embed, Discover() — walks embedded FS, returns *discovery.Result
-    builtins_test.go               59 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility)
+    builtins.go                    //go:embed, Discover() — walks embedded FS + Go-backed builtins, returns *discovery.Result; goBackedBuiltins() registers Go-native automations
+    version_satisfies.go           pi:version-satisfies — Go-backed builtin for semver constraint checking; uses internal/semver
+    builtins_test.go               64 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility + 5 version-satisfies)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
@@ -81,7 +82,7 @@ internal/
     writer.go                      AddPackage() — reads pi.yaml, detects duplicates (DuplicatePackageError), insertPackageEntry() appends to packages: or creates the block; AddSetupEntry() — reads pi.yaml, finds matching entries via findMatchingEntry() (exact duplicate → DuplicateSetupEntryError, same run+if with different with → replaces in-place via replaceSetupEntry() → ReplacedSetupEntryError, no match → appends); FormatSetupEntry() renders setup entries as YAML; line-based raw string manipulation preserves unrelated file content
     writer_test.go                 39 tests (14 package + 25 setup: GitHub/file add, alias, duplicate, replace bare→versioned, replace versioned→bare, replace preserves position, replace multi-line, ReplacedSetupEntryError message, append, create block, missing pi.yaml, preserve content, multiple adds, format entry, insert entry, duplicate error, existing block with following content)
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
+    automation.go                  Automation struct (with If, Env, Install, Requires, Inputs, GoFunc fields) + Load(path, warnWriter), LoadFromBytes(data, filePath, warnWriter), Dir(), IsInstaller(), IsGoFunc(), validate(), buildShorthandStep(); GoFunc field for Go-backed builtins; single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env; warnWriter parameter replaces former global variable
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(index, warnWriter), toStep(index, warnWriter), toFirstStep(index, warnWriter), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
@@ -99,8 +100,8 @@ internal/
     suggest_test.go                13 tests (Levenshtein distance, symmetry, suggestion sorting, max results, exact match exclusion, empty inputs, integration with Find)
     discovery_test.go              43 tests (18 base + 6 builtin merge/prefix + 5 optional name tests + 8 package merge/alias tests + 6 on-demand fetch tests)
   executor/                        Step execution engine
-    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
-    runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
+    executor.go                    Executor struct (with ParentEvalFile, Runners, stepOutputs fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(), lastOutput(), recordOutput(), interpolateWithCtx(), interpolateWith(), interpolateValue(); GoFunc automation dispatch; pipe: true orchestration; outputs.last inter-step output capture (via io.MultiWriter); step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
+    runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir, InterpolateWith callback), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseLive(), execInstallPhaseCapture(), execInstallFirstBlockLive(), execInstallFirstBlock(), execBashLive(), execBashSuppressed(), captureVersion(), printInstallStatus(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases; run phase streams stderr live to terminal
     helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), IsFilePath() (exported), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_IN_* + PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
@@ -108,6 +109,7 @@ internal/
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
     first_block_test.go            14 tests — first: block: first/middle/fallback matches, none match, mixed steps, pipe to next, pipe no match, outer if skip, run sub-step, exit error, install phase, silent, loud override
+    outputs_test.go                16 tests — outputs.last: passed via with, multi-step chain, pipe capture, silent capture, indexed output, inputs interpolation, combined outputs+inputs, literal passthrough, GoFunc via run step, GoFunc failure, GoFunc condition skip, interpolateValue unit tests
     executor_test.go               20 tests — core execution: bash inline/file, run step chaining, circular deps, multi-step, working dir, mixed bash+run, exit error, IsFilePath, call stack isolation
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
@@ -137,6 +139,9 @@ internal/
   runtimes/                        Sandboxed runtime provisioning
     runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
     runtimes_test.go               16 tests
+  semver/                          Semver-aware version constraint checking
+    semver.go                      Satisfies() — checks version against constraint; normalises incomplete versions; wraps Masterminds/semver/v3
+    semver_test.go                 31 tests (exact, >=, ^, ~, range, v-prefix, error cases, practical installer scenarios)
   shell/                           Shell shortcut file generation and management
     shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(), GenerateCompletionScript(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function; shell completion script generation
     shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
@@ -486,7 +491,9 @@ Makefile                               build, vet, test, test-matrix targets
 - `conditions` is a pure-logic package for parsing and evaluating boolean `if:` expressions — zero dependencies on other PI packages
 - `refparser` is a pure-logic package for parsing automation reference strings into typed structs — zero dependencies on other PI packages (uses only `os` for tilde expansion)
 - `discovery` ties them together: walks the filesystem, calls `automation.Load()` for each file, builds the name→automation map; uses `refparser` to classify references in `Find()`/`FindWithAliases()`; `MergePackage()` discovers and merges package automations with alias tracking
-- `executor` runs automation steps; depends on `automation` (types) and `discovery` (for `run:` step resolution)
+- `semver` is a pure-logic package for version constraint checking — wraps `Masterminds/semver/v3` with normalisation; no dependencies on other PI packages
+- `executor` runs automation steps; depends on `automation` (types), `discovery` (for `run:` step resolution), and provides `outputs.last` interpolation
+- `builtins` embeds YAML files and registers Go-backed builtins; depends on `automation`, `discovery`, and `semver` (for `version-satisfies`)
 - `project` handles finding the repo root (directory containing `pi.yaml`)
 - `cli` ties project + config + discovery + cache + executor together; `ProjectContext` in `context.go` provides the shared resolution pipeline; `discoverAllWithConfig()` orchestrates package fetching and automation discovery
 
@@ -780,7 +787,8 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Built-in automations (`pi:` prefix)
 - Built-in automation YAML files live in `internal/builtins/embed_pi/` and are embedded into the binary at build time via `//go:embed`
-- `internal/builtins.Discover()` walks the embedded FS, parses YAML files with `automation.LoadFromBytes()`, and returns a `*discovery.Result`
+- Go-backed builtins are registered programmatically in `builtins.goBackedBuiltins()` and merged into the discovery result
+- `internal/builtins.Discover()` walks the embedded FS, parses YAML files with `automation.LoadFromBytes()`, merges Go-backed builtins, and returns a `*discovery.Result`
 - `cli.discoverAll()` discovers local automations, then calls `result.MergeBuiltins()` to incorporate built-ins
 - Precedence: local automations shadow built-ins with the same name. `Find("hello")` returns local if it exists, otherwise built-in. `Find("pi:hello")` always returns the built-in regardless of local shadowing
 - `pi list` hides built-in automations by default; `--builtins` / `-b` flag includes them with `[built-in]` in the SOURCE column
@@ -795,6 +803,7 @@ Makefile                               build, vet, test, test-matrix targets
   - `test` exits 0 → `✓  <name>  already installed  (<version>)`; no `run` executed
   - `test` exits non-zero → `→  <name>  installing...` → `run` executes → `verify` (or re-run `test`) → `✓  <name>  installed  (<version>)` or `✗  <name>  failed`
   - `install-homebrew` has `if: os.macos` at the automation level (skipped on non-macOS)
+  - `install-python`, `install-node`, `install-go`, `install-rust`, `install-terraform`, `install-kubectl`, and `install-helm` use `pi:version-satisfies` in their `test:` phase for semver-aware version checking via `outputs.last` interpolation
   - `install-python`, `install-node`, and `install-go` accept a `version` input; use `first:` blocks in the `run:` phase to try `mise` first, fall back to `brew`, with a clear error fallback
   - `install-rust` accepts a `version` input; uses `rustup` if available, otherwise installs via the official `rustup.rs` installer script
   - `install-uv` uses the official `astral.sh/uv/install.sh` script
@@ -809,6 +818,45 @@ Makefile                               build, vet, test, test-matrix targets
 - Dev tool automations (`cursor/install-extensions`, `git/install-hooks`) use single-step shorthand:
   - `cursor/install-extensions` accepts an `extensions` input (comma or newline-separated IDs), checks `cursor --list-extensions`, installs missing ones via `cursor --install-extension`
   - `git/install-hooks` accepts a `source` input (directory path relative to repo root), copies hook files to `.git/hooks/`, makes them executable; uses `cmp` for idempotency
+- Go-backed builtins (no YAML file; registered programmatically):
+  - `version-satisfies` — semver-aware version constraint checking; accepts `version` and `required` inputs; exits 0 if satisfied, 1 with error message if not; uses `internal/semver` package; intended for use in `install.test:` phases via `outputs.last` interpolation
+
+### Go-backed builtins (`GoFunc` on `Automation`)
+- Automations can have a `GoFunc func(inputs map[string]string) error` field instead of steps or install blocks
+- `IsGoFunc()` returns true when `GoFunc` is non-nil
+- `validate()` skips step/install checks for GoFunc automations
+- `Executor.RunWithInputs()` handles GoFunc dispatch: resolves inputs, calls GoFunc, prints errors to stderr, returns `ExitError{Code: 1}` on failure
+- GoFunc automations respect `if:` conditions (checked before GoFunc call)
+- GoFunc automations are registered in `builtins.goBackedBuiltins()` and merged into the discovery result during `Discover()`
+- `pi info` shows `Type: go-native` for GoFunc automations
+- Adding a new Go-backed builtin: create a constructor function in `internal/builtins/`, add it to `goBackedBuiltins()` map
+
+### Inter-step output capture (`outputs.last`)
+- Every step's stdout is captured via `io.MultiWriter` — output goes to both the original writer and a capture buffer
+- Captured output is trimmed and stored in `Executor.stepOutputs` (a `[]string` indexed by step position)
+- `stepOutputs` is scoped per-automation: saved and restored via `defer` when entering `RunWithInputs()` and install phases
+- Pipe steps: the pipe buffer content is also recorded as the step's output
+- Silent steps: output is still captured (MultiWriter to io.Discard + capture buffer)
+- Install phase steps: output capture added to `execInstallPhaseCapture()` and `execInstallPhaseLive()` so `outputs.last` works in `install.test:` pipelines
+
+### `with:` value interpolation
+- `InterpolateWith` callback on `RunContext` enables `RunStepRunner` to resolve special references in `with:` values before passing them to the called automation
+- `interpolateWithCtx(with, inputEnv)` resolves all references in a with map
+- Three interpolation sources:
+  - `outputs.last` — trimmed stdout of the most recently executed step (via `lastOutput()`)
+  - `outputs.<N>` — stdout of step N (0-indexed) from `stepOutputs` slice
+  - `inputs.<name>` — current automation's input value (looked up in `PI_IN_*` env vars)
+- Non-matching values pass through unchanged (literal strings work as before)
+- The interpolation happens in `RunStepRunner.Run()` before calling `RunAutomation`
+
+### Version constraint checking (`internal/semver`)
+- Wraps `github.com/Masterminds/semver/v3` with PI-specific normalisation
+- `Satisfies(version, constraint) error` — the public API; returns nil if satisfied, error with explanation if not
+- Normalises incomplete versions: "22" → "22.0.0", "22.3" → "22.3.0"
+- Strips `v` prefix from both version and constraint
+- Bare version numbers are treated as caret constraints: "22" → "^22.0.0" (matches any 22.x.x)
+- Supports all Masterminds/semver constraint syntax: `>=`, `<=`, `!=`, `>`, `<`, `~`, `^`, `=`, comma-separated ranges
+- Operator-prefixed constraints have their version parts normalised (e.g. ">= 20" → ">= 20.0.0")
 
 ### Sandboxed runtime provisioning (`internal/runtimes`)
 - Opt-in via `runtimes:` block in `pi.yaml` — `provision: never` (default), `ask`, or `auto`
@@ -937,13 +985,14 @@ Makefile                               build, vet, test, test-matrix targets
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML parsing
 - `golang.org/x/term` — TTY detection for color output
+- `github.com/Masterminds/semver/v3` — Semver constraint parsing and matching (used by `pi:version-satisfies`)
 - No CGO, no runtime dependencies
 
 ## Test Strategy
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1305 (170 automation + 136 builtins + 32 cache + 148 CLI [includes 11 completion, 13 init, 18 setup add] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 263 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 268 integration [includes 8 completion, 8 init, 17 setup add])
+Total tests: 1353 (170 automation + 141 builtins + 32 cache + 148 CLI [includes 11 completion, 13 init, 18 setup add] + 30 conditions + 70 config + 42 display + 56 discovery [43 base + 13 suggest] + 279 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 31 semver + 27 shell + 268 integration [includes 8 completion, 8 init, 17 setup add])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.

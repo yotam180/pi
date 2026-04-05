@@ -686,8 +686,29 @@ PI ships with a standard collection of automations for common tasks:
 - `pi:set-env` — idempotently add an environment variable export to the shell config
 - `pi:cursor/install-extensions` — install missing Cursor extensions from a list
 - `pi:git/install-hooks` — install git hooks from a source directory
+- `pi:version-satisfies` — check whether a version string satisfies a semver constraint (Go-native)
 
 These are defined in the PI repository's own `.pi/` folder and compiled into the binary.
+
+### Inter-step output capture
+
+Steps can pass their stdout to subsequent steps via `outputs.last` in `with:` values:
+
+```yaml
+steps:
+  - bash: node --version 2>/dev/null | sed 's/^v//'
+  - run: pi:version-satisfies
+    with:
+      version: outputs.last      # stdout of the previous step, trimmed
+      required: inputs.version   # current automation's input value
+```
+
+Supported interpolation references in `with:` values:
+- `outputs.last` — trimmed stdout of the immediately preceding step
+- `outputs.<N>` — stdout of step N (0-indexed)
+- `inputs.<name>` — current automation's input value
+
+Literal strings in `with:` values pass through unchanged.
 
 ---
 

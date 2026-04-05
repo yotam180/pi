@@ -3,11 +3,15 @@ description: Install Terraform at a specific version
 inputs:
   version:
     type: string
-    description: Terraform version to install (e.g. "1.7")
+    description: Terraform version to install (e.g. "1.7", ">=1.6", "^1.7")
 
 install:
   test:
-    - bash: terraform version 2>&1 | grep -q "Terraform v$PI_IN_VERSION"
+    - bash: terraform version 2>&1 | head -1 | awk '{print $2}' | tr -d 'v'
+    - run: pi:version-satisfies
+      with:
+        version: outputs.last
+        required: inputs.version
 
   run:
     - first:

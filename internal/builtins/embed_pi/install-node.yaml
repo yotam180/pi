@@ -3,14 +3,15 @@ description: Install Node.js at a specific version
 inputs:
   version:
     type: string
-    description: Node.js major version to install (e.g. "22")
+    description: Node.js version to install (e.g. "22", ">=20", "^18")
 
 install:
   test:
-    - bash: |
-        CURRENT=$(node --version 2>/dev/null | sed 's/^v//')
-        MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-        [ "$MAJOR" = "$PI_IN_VERSION" ]
+    - bash: node --version 2>/dev/null | sed 's/^v//'
+    - run: pi:version-satisfies
+      with:
+        version: outputs.last
+        required: inputs.version
 
   run:
     - first:

@@ -3,14 +3,15 @@ description: Install Rust at a specific version
 inputs:
   version:
     type: string
-    description: Rust version to install (e.g. "1.88")
+    description: Rust version to install (e.g. "1.88", ">=1.80", "^1.85")
 
 install:
   test:
-    - bash: |
-        CURRENT=$(rustc --version 2>/dev/null | awk '{print $2}')
-        MAJOR_MINOR=$(echo "$CURRENT" | cut -d. -f1,2)
-        [ "$MAJOR_MINOR" = "$PI_IN_VERSION" ]
+    - bash: rustc --version 2>/dev/null | awk '{print $2}'
+    - run: pi:version-satisfies
+      with:
+        version: outputs.last
+        required: inputs.version
 
   run:
     - bash: |

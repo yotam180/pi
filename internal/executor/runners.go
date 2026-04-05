@@ -122,7 +122,11 @@ func (r *RunStepRunner) Run(ctx *RunContext) error {
 	}
 
 	if len(ctx.Step.With) > 0 {
-		return ctx.RunAutomation(target, nil, ctx.Step.With, ctx.Stdout, ctx.Stdin)
+		with := ctx.Step.With
+		if ctx.InterpolateWith != nil {
+			with = ctx.InterpolateWith(with, ctx.InputEnv)
+		}
+		return ctx.RunAutomation(target, nil, with, ctx.Stdout, ctx.Stdin)
 	}
 	return ctx.RunAutomation(target, ctx.Args, nil, ctx.Stdout, ctx.Stdin)
 }

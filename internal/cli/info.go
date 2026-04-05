@@ -73,7 +73,9 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 		fmt.Fprintf(out, "Env:          %s\n", strings.Join(envKeys, ", "))
 	}
 
-	if a.IsInstaller() {
+	if a.IsGoFunc() {
+		fmt.Fprintf(out, "Type:         go-native\n")
+	} else if a.IsInstaller() {
 		fmt.Fprintf(out, "Type:         installer\n")
 		printInstallDetail(a.Install, out)
 	} else {

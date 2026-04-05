@@ -3,11 +3,15 @@ description: Install Helm at a specific version
 inputs:
   version:
     type: string
-    description: Helm version to install (e.g. "3.14")
+    description: Helm version to install (e.g. "3.14", ">=3.13", "^3.14")
 
 install:
   test:
-    - bash: helm version 2>&1 | grep -q "v$PI_IN_VERSION"
+    - bash: helm version --short 2>&1 | grep -o 'v[0-9]*\.[0-9]*\.[0-9]*' | tr -d 'v'
+    - run: pi:version-satisfies
+      with:
+        version: outputs.last
+        required: inputs.version
 
   run:
     - first:

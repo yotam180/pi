@@ -73,6 +73,14 @@ func Discover() (*discovery.Result, error) {
 		return nil, err
 	}
 
+	// Register Go-backed builtins
+	for name, a := range goBackedBuiltins() {
+		if _, exists := automations[name]; exists {
+			return nil, fmt.Errorf("built-in name collision: Go-backed %q collides with YAML-based %q", name, name)
+		}
+		automations[name] = a
+	}
+
 	names := make([]string, 0, len(automations))
 	for n := range automations {
 		names = append(names, n)
@@ -80,6 +88,12 @@ func Discover() (*discovery.Result, error) {
 	sort.Strings(names)
 
 	return discovery.NewResult(automations, names), nil
+}
+
+func goBackedBuiltins() map[string]*automation.Automation {
+	return map[string]*automation.Automation{
+		"version-satisfies": newVersionSatisfies(),
+	}
 }
 
 func deriveName(root, path string) (string, bool) {

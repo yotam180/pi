@@ -61,6 +61,10 @@ func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automat
 		return e.execBashLive(a, phase.Scalar, inputEnv)
 	}
 
+	savedOutputs := e.stepOutputs
+	e.stepOutputs = nil
+	defer func() { e.stepOutputs = savedOutputs }()
+
 	for i, step := range phase.Steps {
 		if step.If != "" {
 			skip, err := e.evaluateCondition(step.If)
@@ -84,12 +88,14 @@ func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automat
 			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
 		}
 
-		ctx := e.newRunContext(a, step, nil, io.Discard, nil, inputEnv)
+		var outputCapture bytes.Buffer
+		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv)
 		ctx.Stderr = e.stderr()
 
 		if err := runner.Run(ctx); err != nil {
 			return err
 		}
+		e.recordOutput(outputCapture.String())
 	}
 	return nil
 }
@@ -100,6 +106,10 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 	if phase.IsScalar {
 		return e.execBashSuppressed(a, phase.Scalar, inputEnv, stderrCapture)
 	}
+
+	savedOutputs := e.stepOutputs
+	e.stepOutputs = nil
+	defer func() { e.stepOutputs = savedOutputs }()
 
 	for i, step := range phase.Steps {
 		if step.If != "" {
@@ -129,12 +139,14 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
 		}
 
-		ctx := e.newRunContext(a, step, nil, io.Discard, nil, inputEnv)
+		var outputCapture bytes.Buffer
+		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv)
 		ctx.Stderr = stderrWriter
 
 		if err := runner.Run(ctx); err != nil {
 			return err
 		}
+		e.recordOutput(outputCapture.String())
 	}
 	return nil
 }

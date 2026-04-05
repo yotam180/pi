@@ -20,6 +20,31 @@ func collectAllSteps(steps []automation.Step) []automation.Step {
 	return all
 }
 
+// assertTestPhaseUsesVersionSatisfies checks that an installer's test phase
+// uses the pi:version-satisfies builtin via a run step with outputs.last.
+func assertTestPhaseUsesVersionSatisfies(t *testing.T, testPhase automation.InstallPhase, name string) {
+	t.Helper()
+	if testPhase.IsScalar {
+		t.Errorf("%s: expected test phase to be a step list, got scalar", name)
+		return
+	}
+	if len(testPhase.Steps) < 2 {
+		t.Errorf("%s: expected at least 2 test phase steps, got %d", name, len(testPhase.Steps))
+		return
+	}
+	lastStep := testPhase.Steps[len(testPhase.Steps)-1]
+	if lastStep.Type != automation.StepTypeRun || lastStep.Value != "pi:version-satisfies" {
+		t.Errorf("%s: expected last test step to be 'run: pi:version-satisfies', got %s: %s", name, lastStep.Type, lastStep.Value)
+		return
+	}
+	if lastStep.With["version"] != "outputs.last" {
+		t.Errorf("%s: expected with.version = 'outputs.last', got %q", name, lastStep.With["version"])
+	}
+	if lastStep.With["required"] != "inputs.version" {
+		t.Errorf("%s: expected with.required = 'inputs.version', got %q", name, lastStep.With["required"])
+	}
+}
+
 func TestDiscover_FindsEmbeddedAutomations(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
@@ -383,23 +408,7 @@ func TestDiscover_InstallPythonAcceptsVersionInput(t *testing.T) {
 	if !a.IsInstaller() {
 		t.Fatal("expected install-python to be an installer")
 	}
-	testPhase := a.Install.Test
-	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
-			t.Error("expected test phase to reference PI_IN_VERSION")
-		}
-	} else if len(testPhase.Steps) > 0 {
-		found := false
-		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_IN_VERSION") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected test phase steps to reference PI_IN_VERSION")
-		}
-	}
+	assertTestPhaseUsesVersionSatisfies(t, a.Install.Test, "install-python")
 }
 
 func TestDiscover_InstallNodeAcceptsVersionInput(t *testing.T) {
@@ -426,23 +435,7 @@ func TestDiscover_InstallNodeAcceptsVersionInput(t *testing.T) {
 	if !a.IsInstaller() {
 		t.Fatal("expected install-node to be an installer")
 	}
-	testPhase := a.Install.Test
-	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
-			t.Error("expected test phase to reference PI_IN_VERSION")
-		}
-	} else if len(testPhase.Steps) > 0 {
-		found := false
-		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_IN_VERSION") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected test phase steps to reference PI_IN_VERSION")
-		}
-	}
+	assertTestPhaseUsesVersionSatisfies(t, a.Install.Test, "install-node")
 }
 
 func TestDiscover_InstallGoAcceptsVersionInput(t *testing.T) {
@@ -469,23 +462,7 @@ func TestDiscover_InstallGoAcceptsVersionInput(t *testing.T) {
 	if !a.IsInstaller() {
 		t.Fatal("expected install-go to be an installer")
 	}
-	testPhase := a.Install.Test
-	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
-			t.Error("expected test phase to reference PI_IN_VERSION")
-		}
-	} else if len(testPhase.Steps) > 0 {
-		found := false
-		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_IN_VERSION") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected test phase steps to reference PI_IN_VERSION")
-		}
-	}
+	assertTestPhaseUsesVersionSatisfies(t, a.Install.Test, "install-go")
 }
 
 func TestDiscover_InstallRustAcceptsVersionInput(t *testing.T) {
@@ -512,23 +489,7 @@ func TestDiscover_InstallRustAcceptsVersionInput(t *testing.T) {
 	if !a.IsInstaller() {
 		t.Fatal("expected install-rust to be an installer")
 	}
-	testPhase := a.Install.Test
-	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
-			t.Error("expected test phase to reference PI_IN_VERSION")
-		}
-	} else if len(testPhase.Steps) > 0 {
-		found := false
-		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_IN_VERSION") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected test phase steps to reference PI_IN_VERSION")
-		}
-	}
+	assertTestPhaseUsesVersionSatisfies(t, a.Install.Test, "install-rust")
 }
 
 func TestDiscover_InstallRustUsesRustup(t *testing.T) {
@@ -1245,23 +1206,7 @@ func TestDiscover_InstallTerraformTestUsesVersionInput(t *testing.T) {
 	}
 
 	a := result.Automations["install-terraform"]
-	testPhase := a.Install.Test
-	if testPhase.IsScalar {
-		if !strings.Contains(testPhase.Scalar, "PI_IN_VERSION") {
-			t.Error("expected test phase to reference PI_IN_VERSION")
-		}
-	} else if len(testPhase.Steps) > 0 {
-		found := false
-		for _, s := range testPhase.Steps {
-			if strings.Contains(s.Value, "PI_IN_VERSION") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Error("expected test phase steps to reference PI_IN_VERSION")
-		}
-	}
+	assertTestPhaseUsesVersionSatisfies(t, a.Install.Test, "install-terraform")
 }
 
 func TestDiscover_UtilityAutomationsExist(t *testing.T) {
@@ -1426,5 +1371,94 @@ func TestDiscover_NpmInstallAcceptsInputs(t *testing.T) {
 	}
 	if !strings.Contains(script, "package-lock.json") {
 		t.Error("expected script to check for package-lock.json")
+	}
+}
+
+func TestDiscover_VersionSatisfiesExists(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, ok := result.Automations["version-satisfies"]
+	if !ok {
+		t.Fatal("expected to find built-in 'version-satisfies' automation")
+	}
+
+	if a.Name != "version-satisfies" {
+		t.Errorf("expected name 'version-satisfies', got %q", a.Name)
+	}
+
+	if !a.IsGoFunc() {
+		t.Error("expected version-satisfies to be a GoFunc automation")
+	}
+
+	if a.Description == "" {
+		t.Error("expected non-empty description")
+	}
+
+	if len(a.Inputs) != 2 {
+		t.Fatalf("expected 2 inputs, got %d", len(a.Inputs))
+	}
+
+	if _, ok := a.Inputs["version"]; !ok {
+		t.Error("expected 'version' input")
+	}
+	if _, ok := a.Inputs["required"]; !ok {
+		t.Error("expected 'required' input")
+	}
+}
+
+func TestDiscover_VersionSatisfiesIsResolvable(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a, err := result.Find("version-satisfies")
+	if err != nil {
+		t.Fatalf("Find('version-satisfies') returned error: %v", err)
+	}
+	if a.Name != "version-satisfies" {
+		t.Errorf("expected name 'version-satisfies', got %q", a.Name)
+	}
+}
+
+func TestDiscover_VersionSatisfiesSatisfied(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["version-satisfies"]
+	err = a.GoFunc(map[string]string{"version": "22.3.1", "required": "22"})
+	if err != nil {
+		t.Errorf("expected satisfied, got error: %v", err)
+	}
+}
+
+func TestDiscover_VersionSatisfiesNotSatisfied(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["version-satisfies"]
+	err = a.GoFunc(map[string]string{"version": "18.0.0", "required": "22"})
+	if err == nil {
+		t.Error("expected not-satisfied error, got nil")
+	}
+}
+
+func TestDiscover_VersionSatisfiesEmptyVersion(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["version-satisfies"]
+	err = a.GoFunc(map[string]string{"version": "", "required": "22"})
+	if err == nil {
+		t.Error("expected error for empty version, got nil")
 	}
 }

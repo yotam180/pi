@@ -129,6 +129,10 @@ func automationWithInputs(name string, inputs map[string]automation.InputSpec, i
 	}
 }
 
+func runStepWith(value string, with map[string]string) automation.Step {
+	return automation.Step{Type: automation.StepTypeRun, Value: value, With: with}
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func requirePython(t *testing.T) {
