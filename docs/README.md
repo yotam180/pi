@@ -186,6 +186,28 @@ steps:
 
 Environment variables are scoped to the step — they do not leak to subsequent steps. Step-level env vars override parent process env vars with the same name.
 
+### Automation-Level Environment Variables (`env:`)
+
+Automations can declare a top-level `env:` mapping so every step sees the same variables without repeating them per step. Step-level `env:` overrides automation-level `env:` for the same key.
+
+```yaml
+description: Cross-compile fzf for Linux amd64
+
+env:
+  GOOS: linux
+  GOARCH: amd64
+  CGO_ENABLED: "0"
+
+steps:
+  - bash: go build -o target/fzf-linux ./...
+  - bash: sha256sum target/fzf-linux > target/fzf-linux.sha256
+  - bash: echo "Done. Binary at target/fzf-linux"
+```
+
+Automation-level env does not propagate into sub-automations invoked by `run:` steps — each `run:` starts with that automation’s own env (and the process environment), not the caller’s declared automation env.
+
+Single-step shorthand can use a top-level `env:` next to `bash:`, `run:`, etc.; that `env:` is automation-level, the same as in multi-step files.
+
 ### Working Directory (`dir:`)
 
 Steps can declare a `dir:` field to override the working directory for that step's execution. By default, all steps run in the project root (directory containing `pi.yaml`).

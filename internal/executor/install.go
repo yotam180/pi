@@ -115,7 +115,7 @@ func (e *Executor) execBashSuppressed(a *automation.Automation, script string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = io.Discard
 	cmd.Stdin = nil
-	cmd.Env = e.buildEnv(inputEnv, nil)
+	cmd.Env = e.buildEnv(inputEnv, nil, nil)
 
 	if stderrCapture != nil {
 		cmd.Stderr = stderrCapture
@@ -143,7 +143,7 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 	cmd.Dir = e.RepoRoot
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
-	cmd.Env = e.buildEnv(inputEnv, nil)
+	cmd.Env = e.buildEnv(inputEnv, nil, nil)
 
 	if err := cmd.Run(); err != nil {
 		return ""

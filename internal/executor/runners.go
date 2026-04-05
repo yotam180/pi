@@ -149,7 +149,7 @@ func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	cmd.Stdout = ctx.Stdout
 	cmd.Stderr = ctx.Stderr
 	cmd.Stdin = ctx.Stdin
-	cmd.Env = ctx.BuildEnv(ctx.InputEnv, ctx.Step.Env)
+	cmd.Env = ctx.BuildEnv(ctx.InputEnv, ctx.Automation.Env, ctx.Step.Env)
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Step.Timeout > 0 && cmd.ProcessState != nil && !cmd.ProcessState.Exited() {

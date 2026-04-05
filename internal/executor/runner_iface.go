@@ -37,8 +37,8 @@ type RunContext struct {
 	Discovery *discovery.Result
 
 	// BuildEnv constructs the environment for command execution, merging
-	// input env vars, runtime paths, and step-level env vars.
-	BuildEnv func(inputEnv []string, stepEnv map[string]string) []string
+	// input env vars, runtime paths, automation-level env vars, and step-level env vars.
+	BuildEnv func(inputEnv []string, automationEnv map[string]string, stepEnv map[string]string) []string
 
 	// RunAutomation is the callback for run: steps to recursively execute
 	// another automation. The runner must not hold a reference to the Executor.

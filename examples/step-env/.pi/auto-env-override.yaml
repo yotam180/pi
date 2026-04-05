@@ -1,0 +1,10 @@
+description: Step env overrides automation env
+
+env:
+  MY_VAR: from_automation
+
+steps:
+  - bash: echo "auto=$MY_VAR"
+  - bash: echo "override=$MY_VAR"
+    env:
+      MY_VAR: from_step

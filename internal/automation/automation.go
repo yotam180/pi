@@ -25,6 +25,10 @@ type Automation struct {
 	// automation is skipped if the expression evaluates to false.
 	If string `yaml:"-"`
 
+	// Env declares automation-level environment variables that apply to all steps.
+	// Step-level env: overrides automation-level env for the same key.
+	Env map[string]string `yaml:"-"`
+
 	// Inputs declares the parameters this automation accepts.
 	// Keys are ordered by insertion (YAML parse order) for positional mapping.
 	Inputs    map[string]InputSpec `yaml:"-"`
@@ -101,7 +105,9 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		if raw.Install != nil {
 			return fmt.Errorf("automation cannot have both a top-level step key (bash/python/typescript/run) and \"install\"")
 		}
-		shorthand.Env = raw.Env
+		// For shorthand, top-level env: is automation-level env (not step-level).
+		// Since there's only one step, the runtime behavior is identical.
+		a.Env = raw.Env
 		shorthand.Dir = raw.Dir
 		shorthand.Timeout = raw.Timeout
 		shorthand.Silent = raw.Silent
@@ -114,6 +120,9 @@ func (a *Automation) UnmarshalYAML(value *yaml.Node) error {
 		a.Steps = append(a.Steps, step)
 		return nil
 	}
+
+	// For multi-step automations, top-level env: is automation-level env.
+	a.Env = raw.Env
 
 	for i, sr := range raw.Steps {
 		step, err := sr.toStep(i)

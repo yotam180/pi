@@ -377,11 +377,14 @@ silent: true
 	if step.Type != StepTypeBash {
 		t.Errorf("step type = %q, want %q", step.Type, StepTypeBash)
 	}
-	if step.Env["GOOS"] != "linux" {
-		t.Errorf("env GOOS = %q, want %q", step.Env["GOOS"], "linux")
+	if a.Env["GOOS"] != "linux" {
+		t.Errorf("automation env GOOS = %q, want %q", a.Env["GOOS"], "linux")
 	}
-	if step.Env["GOARCH"] != "amd64" {
-		t.Errorf("env GOARCH = %q, want %q", step.Env["GOARCH"], "amd64")
+	if a.Env["GOARCH"] != "amd64" {
+		t.Errorf("automation env GOARCH = %q, want %q", a.Env["GOARCH"], "amd64")
+	}
+	if len(step.Env) != 0 {
+		t.Errorf("step env should be empty for shorthand, got %v", step.Env)
 	}
 	if step.Dir != "services/api" {
 		t.Errorf("dir = %q, want %q", step.Dir, "services/api")
@@ -546,6 +549,113 @@ inputs:
 	}
 	if _, ok := a.Inputs["name"]; !ok {
 		t.Error("expected input 'name' to exist")
+	}
+}
+
+func TestLoad_AutomationLevelEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "with-env.yaml", `
+description: Cross-compile for Linux
+env:
+  GOOS: linux
+  GOARCH: amd64
+  CGO_ENABLED: "0"
+steps:
+  - bash: go build -o bin/app ./...
+  - bash: sha256sum bin/app
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Env) != 3 {
+		t.Fatalf("automation env count = %d, want 3", len(a.Env))
+	}
+	if a.Env["GOOS"] != "linux" {
+		t.Errorf("automation env GOOS = %q, want %q", a.Env["GOOS"], "linux")
+	}
+	if a.Env["GOARCH"] != "amd64" {
+		t.Errorf("automation env GOARCH = %q, want %q", a.Env["GOARCH"], "amd64")
+	}
+	if a.Env["CGO_ENABLED"] != "0" {
+		t.Errorf("automation env CGO_ENABLED = %q, want %q", a.Env["CGO_ENABLED"], "0")
+	}
+	if len(a.Steps) != 2 {
+		t.Fatalf("steps count = %d, want 2", len(a.Steps))
+	}
+	if len(a.Steps[0].Env) != 0 {
+		t.Errorf("step[0] should have no step-level env, got %v", a.Steps[0].Env)
+	}
+}
+
+func TestLoad_AutomationLevelEnvWithStepEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "env-override.yaml", `
+description: Mixed env
+env:
+  GOOS: linux
+  GOARCH: amd64
+steps:
+  - bash: go build ./...
+  - bash: go build ./...
+    env:
+      GOARCH: arm64
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Env["GOOS"] != "linux" {
+		t.Errorf("automation env GOOS = %q, want %q", a.Env["GOOS"], "linux")
+	}
+	if len(a.Steps[0].Env) != 0 {
+		t.Errorf("step[0] should have no step-level env, got %v", a.Steps[0].Env)
+	}
+	if a.Steps[1].Env["GOARCH"] != "arm64" {
+		t.Errorf("step[1] env GOARCH = %q, want %q", a.Steps[1].Env["GOARCH"], "arm64")
+	}
+}
+
+func TestLoad_AutomationLevelEnvEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "no-env.yaml", `
+description: No env
+steps:
+  - bash: echo hello
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(a.Env) != 0 {
+		t.Errorf("automation env should be empty, got %v", a.Env)
+	}
+}
+
+func TestLoad_ShorthandWithAutomationEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "shorthand-env.yaml", `
+description: Build for Linux
+bash: go build -o bin/app ./...
+env:
+  GOOS: linux
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.Env["GOOS"] != "linux" {
+		t.Errorf("automation env GOOS = %q, want %q", a.Env["GOOS"], "linux")
+	}
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if len(a.Steps[0].Env) != 0 {
+		t.Errorf("step env should be empty for shorthand, got %v", a.Steps[0].Env)
 	}
 }
 

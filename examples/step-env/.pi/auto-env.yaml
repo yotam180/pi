@@ -1,0 +1,8 @@
+description: Automation-level env applies to all steps
+
+env:
+  SHARED_VAR: from_automation
+
+steps:
+  - bash: echo "step1=$SHARED_VAR"
+  - bash: echo "step2=$SHARED_VAR"

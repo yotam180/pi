@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -169,7 +170,7 @@ func TestBuildEnv_WithStepEnv(t *testing.T) {
 		RepoRoot: t.TempDir(),
 	}
 
-	env := exec.buildEnv(nil, map[string]string{"FOO": "bar"})
+	env := exec.buildEnv(nil, nil, map[string]string{"FOO": "bar"})
 	if env == nil {
 		t.Fatal("expected non-nil env when step env is set")
 	}
@@ -198,7 +199,7 @@ func TestBuildEnv_StepEnvDeterministicOrder(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i++ {
-		env := exec.buildEnv(nil, stepEnv)
+		env := exec.buildEnv(nil, nil, stepEnv)
 		if env == nil {
 			t.Fatal("expected non-nil env")
 		}
@@ -225,16 +226,20 @@ func TestBuildEnv_WithAllThree(t *testing.T) {
 
 	env := exec.buildEnv(
 		[]string{"PI_INPUT_X=1"},
+		map[string]string{"AUTO_VAR": "av"},
 		map[string]string{"STEP_VAR": "sv"},
 	)
 	if env == nil {
 		t.Fatal("expected non-nil env")
 	}
 
-	hasInput, hasStep, hasPath := false, false, false
+	hasInput, hasAuto, hasStep, hasPath := false, false, false, false
 	for _, e := range env {
 		if e == "PI_INPUT_X=1" {
 			hasInput = true
+		}
+		if e == "AUTO_VAR=av" {
+			hasAuto = true
 		}
 		if e == "STEP_VAR=sv" {
 			hasStep = true
@@ -246,10 +251,166 @@ func TestBuildEnv_WithAllThree(t *testing.T) {
 	if !hasInput {
 		t.Error("missing PI_INPUT_X=1")
 	}
+	if !hasAuto {
+		t.Error("missing AUTO_VAR=av")
+	}
 	if !hasStep {
 		t.Error("missing STEP_VAR=sv")
 	}
 	if !hasPath {
 		t.Error("missing provisioned PATH")
+	}
+}
+
+func TestAutomationEnv_AppliesToAllSteps(t *testing.T) {
+	dir := t.TempDir()
+	outFile1 := filepath.Join(dir, "out1.txt")
+	outFile2 := filepath.Join(dir, "out2.txt")
+
+	a := &automation.Automation{
+		Name: "auto-env",
+		Env: map[string]string{
+			"MY_VAR": "from_automation",
+		},
+		Steps: []automation.Step{
+			bashStep(fmt.Sprintf(`echo "${MY_VAR:-empty}" > %s`, outFile1)),
+			bashStep(fmt.Sprintf(`echo "${MY_VAR:-empty}" > %s`, outFile2)),
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	exec := newExecutor(dir, newDiscovery(nil))
+
+	if err := exec.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got1, _ := os.ReadFile(outFile1)
+	if strings.TrimSpace(string(got1)) != "from_automation" {
+		t.Errorf("step1 got %q, want %q", strings.TrimSpace(string(got1)), "from_automation")
+	}
+	got2, _ := os.ReadFile(outFile2)
+	if strings.TrimSpace(string(got2)) != "from_automation" {
+		t.Errorf("step2 got %q, want %q", strings.TrimSpace(string(got2)), "from_automation")
+	}
+}
+
+func TestAutomationEnv_StepOverrides(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+
+	a := &automation.Automation{
+		Name: "auto-env-override",
+		Env: map[string]string{
+			"MY_VAR": "from_automation",
+		},
+		Steps: []automation.Step{
+			{
+				Type:  automation.StepTypeBash,
+				Value: fmt.Sprintf(`echo "${MY_VAR}" > %s`, outFile),
+				Env:   map[string]string{"MY_VAR": "from_step"},
+			},
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	exec := newExecutor(dir, newDiscovery(nil))
+
+	if err := exec.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, _ := os.ReadFile(outFile)
+	if strings.TrimSpace(string(got)) != "from_step" {
+		t.Errorf("step got %q, want %q (step env should override automation env)", strings.TrimSpace(string(got)), "from_step")
+	}
+}
+
+func TestAutomationEnv_DoesNotPropagateToRunStep(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+
+	child := &automation.Automation{
+		Name: "child",
+		Steps: []automation.Step{
+			bashStep(fmt.Sprintf(`echo "${MY_VAR:-empty}" > %s`, outFile)),
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	parent := &automation.Automation{
+		Name: "parent",
+		Env: map[string]string{
+			"MY_VAR": "from_parent",
+		},
+		Steps: []automation.Step{
+			runStep("child"),
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	disc := newDiscovery(map[string]*automation.Automation{
+		"parent": parent,
+		"child":  child,
+	})
+	exec := newExecutor(dir, disc)
+
+	if err := exec.Run(parent, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, _ := os.ReadFile(outFile)
+	if strings.TrimSpace(string(got)) != "empty" {
+		t.Errorf("child got %q, want %q (automation env should not propagate to sub-automations)", strings.TrimSpace(string(got)), "empty")
+	}
+}
+
+func TestBuildEnv_WithAutomationEnv(t *testing.T) {
+	exec := &Executor{
+		RepoRoot: t.TempDir(),
+	}
+
+	env := exec.buildEnv(nil, map[string]string{"AUTO_KEY": "auto_val"}, nil)
+	if env == nil {
+		t.Fatal("expected non-nil env when automation env is set")
+	}
+
+	found := false
+	for _, e := range env {
+		if e == "AUTO_KEY=auto_val" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected AUTO_KEY=auto_val in env")
+	}
+}
+
+func TestBuildEnv_AutomationEnvOverriddenByStepEnv(t *testing.T) {
+	exec := &Executor{
+		RepoRoot: t.TempDir(),
+	}
+
+	env := exec.buildEnv(
+		nil,
+		map[string]string{"SHARED": "auto"},
+		map[string]string{"SHARED": "step"},
+	)
+	if env == nil {
+		t.Fatal("expected non-nil env")
+	}
+
+	var sharedVals []string
+	for _, e := range env {
+		if strings.HasPrefix(e, "SHARED=") {
+			sharedVals = append(sharedVals, e)
+		}
+	}
+	if len(sharedVals) != 2 {
+		t.Fatalf("expected 2 SHARED entries (auto + step), got %d: %v", len(sharedVals), sharedVals)
+	}
+	if sharedVals[len(sharedVals)-1] != "SHARED=step" {
+		t.Errorf("last SHARED entry should be step override, got %q", sharedVals[len(sharedVals)-1])
 	}
 }

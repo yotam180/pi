@@ -35,7 +35,7 @@ internal/
     discover.go                    discoverAll() — discovers local + built-in automations and merges; passes os.Stderr for name-mismatch warnings
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
-    info.go                        pi info — shows automation name, description, input docs, if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
+    info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details, and install lifecycle for installer automations
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
@@ -45,7 +45,7 @@ internal/
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
-    info_test.go                   pi info tests (17 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, and step description display)
+    info_test.go                   pi info tests (18 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, and automation-level env display)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
@@ -56,11 +56,11 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation struct (with If, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys)
+    automation.go                  Automation struct (with If, Env, Install, Requires, Inputs fields) + Load(), LoadFromBytes(), Dir(), IsInstaller(), validate(), buildShorthandStep(); single-step shorthand support (top-level bash/python/typescript/run keys); top-level env: maps to automation-level env
     step.go                        StepType, Step (with If, Env, Silent, ParentShell, Dir, Timeout, Description, First, Pipe), stepRaw (YAML pipe + pipe_to), resolvePipe(), toStep(), toFirstStep(), IsFirst(), InstallPhase, InstallSpec, validateSteps(), validateFirstBlock(), validateInstall(), validateInstallPhase()
     inputs.go                      InputSpec, inputsRaw, ResolveInputs(), InputEnvVars()
     requirements.go                RequirementKind, Requirement, requirementRaw, parseNameVersion(), validateVersionString()
-    automation_test.go             27 tests (core load, validate, basic step parsing, single-step shorthand)
+    automation_test.go             31 tests (core load, validate, basic step parsing, single-step shorthand, automation-level env)
     step_test.go                   73 tests (if/env/silent/parent_shell/dir/timeout/description/pipe fields, install block, first: block)
     inputs_test.go                 16 tests (input spec, resolution, env vars, with: on steps)
     requirements_test.go           20 tests (requires parsing, version validation, name-version parsing)
@@ -72,11 +72,11 @@ internal/
     discovery.go                   Discover() (with warnWriter for name mismatch warnings), NewResult(), Result, Find()/FindWithAliases() (uses refparser for reference classification), MergeBuiltins(), IsBuiltin(), reconcileAutomationName()
     discovery_test.go              29 tests (18 base + 6 builtin merge/prefix + 5 optional name tests)
   executor/                        Step execution engine
-    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
+    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), execFirstBlock(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe: true orchestration; step-level and automation-level if: conditional execution; automation-level env merged per step (not passed into run: sub-automations); step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry; dir: validation before step execution; first: block first-match dispatch
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execInstallFirstBlock(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases
-    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection; step-level dir: resolution
+    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
@@ -89,7 +89,7 @@ internal/
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
     install_test.go                11 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure, step list with conditionals, with inputs, automation-level if
-    step_env_test.go               9 tests — step-level env: bash/python, multiple vars, parent override, nil env inheritance, per-step isolation, buildEnv with step env, buildEnv with all three, buildEnv step env deterministic order
+    step_env_test.go               14 tests — step-level env, automation-level env, bash/python, multiple vars, parent override, nil env inheritance, per-step isolation, buildEnv layers, buildEnv deterministic order, run: isolation
     step_dir_test.go               10 tests — step-level dir: bash inline/absolute/default, missing dir error, not-a-dir error, python step, per-step isolation, mixed with no dir, combined with env, resolveStepDir unit tests
     step_trace_test.go             6 tests — step trace lines, silent step suppression, loud override, silent still executes, silent pipe capture
     step_timeout_test.go           8 tests — step-level timeout: no timeout runs normally, not exceeded, exceeded (killed with exit 124), stops execution chain, with pipe: true, with silent, skipped by condition, multiple steps only timed-out killed
@@ -405,6 +405,14 @@ Makefile                               build, vet, test, test-matrix targets
 - `pi info` shows `[env: KEY1, KEY2]` annotations on steps that declare env vars
 - Install phases (`install:` block) do not support step-level `env:` — they use only input env vars
 
+### Automation-level environment variables (`env:` on automations)
+- Automations can declare a top-level `env:` mapping; those variables apply to every step in that automation (both `steps:` and `install:` phase steps)
+- Step-level `env:` overrides automation-level `env:` for the same key: both layers are merged into the env slice in order (automation env before step env), so duplicate keys resolve last-writer-wins when the process environment is built
+- Automation-level env does not propagate to sub-automations invoked via `run:` — each nested `Run()` uses only that automation’s declared automation env (and inputs), not the caller’s
+- Single-step shorthand: a top-level `env:` beside `bash:` / `python:` / `typescript:` / `run:` is automation-level env (not a per-step-only modifier); semantics match multi-step automations
+- `pi info` prints an `Env:` line listing automation-level keys in sorted order when present
+- `buildEnv()` in `helpers.go` takes three env layers: `inputEnv` (PI_INPUT_*), `automationEnv`, and `stepEnv` — merged in that order before subprocess execution
+
 ### Step working directory (`dir:` on steps)
 - Steps can declare a `dir:` field to override the working directory for that step's execution
 - When `dir:` is set, the path is resolved relative to the repo root; absolute paths are used as-is
@@ -585,7 +593,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Only `python` and `node` are known runtimes — `command:` requirements are never provisioned
 - Integration point: `Executor.Provisioner` field — when set, `ValidateRequirements()` calls `tryProvision()` for failed runtime requirements
 - PATH scoping: `buildEnv()` prepends provisioned bin directories to PATH for all step executions via `prependPathInEnv()`
-- `buildEnv()` handles input env vars, provisioned runtime PATH, and step-level env vars; step env keys are iterated in sorted order for deterministic behavior
+- `buildEnv()` handles input env vars, provisioned runtime PATH, automation-level env, and step-level env vars; automation and step env keys are each iterated in sorted order for deterministic behavior
 - Mise backend: calls `mise install <runtime>@<version>`, then `mise where` to find the install path, symlinks binaries into the managed directory
 - Direct backend: downloads from official CDN (nodejs.org for node, python-build-standalone for python), extracts tar.gz, places binaries
 - `Provisioner.PromptFunc` controls interactive "ask" mode — nil means non-interactive (skip provisioning)
@@ -683,7 +691,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 803 (136 automation + 42 builtins + 74 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 184 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 180 integration)
+Total tests: 819 (140 automation + 42 builtins + 75 CLI + 30 conditions + 17 config + 30 display + 29 discovery + 189 executor [across 15 test files] + 4 project + 46 refparser + 15 runtimes + 16 shell + 186 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -726,7 +734,7 @@ tests/integration/
   requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
   doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
   runtime_provisioning_test.go    7 tests — runtime provisioning: list, no-requirements, already-installed, never-mode, config parsing, auto/ask modes
-  step_env_integ_test.go          5 tests — step env: build with env, multi-env isolation, list, info, info with condition
+  step_env_integ_test.go          11 tests — step env and automation-level env: build, isolation, overrides, run: no bleed, install phases, list, info, shorthand, conditions
   step_visibility_integ_test.go   7 tests — step visibility: default trace, silent suppression, loud override, all-silent, all-silent loud, info silent annotation
   parent_shell_integ_test.go      7 tests — parent shell: list, eval file write, mixed steps, no eval file error, normal unaffected, info annotation, shell codegen
   step_dir_integ_test.go          6 tests — step dir: list, run in subdir, mixed dirs, dir with env, bad dir error, info annotation

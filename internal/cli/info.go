@@ -64,6 +64,15 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 		fmt.Fprintf(out, "Condition:    %s\n", a.If)
 	}
 
+	if len(a.Env) > 0 {
+		envKeys := make([]string, 0, len(a.Env))
+		for k := range a.Env {
+			envKeys = append(envKeys, k)
+		}
+		sort.Strings(envKeys)
+		fmt.Fprintf(out, "Env:          %s\n", strings.Join(envKeys, ", "))
+	}
+
 	if a.IsInstaller() {
 		fmt.Fprintf(out, "Type:         installer\n")
 		printInstallDetail(a.Install, out)

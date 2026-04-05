@@ -28,9 +28,11 @@ func resolveScriptPath(automationDir, scriptPath string) string {
 }
 
 // buildEnv constructs the environment for step execution, including
-// PI_INPUT_* vars, provisioned runtime PATH prepends, and step-level env vars.
-func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []string {
-	if len(inputEnv) == 0 && len(e.runtimePaths) == 0 && len(stepEnv) == 0 {
+// PI_INPUT_* vars, provisioned runtime PATH prepends, automation-level
+// env vars, and step-level env vars. Step-level env overrides automation-level
+// env for the same key (both are appended; last writer wins in exec).
+func (e *Executor) buildEnv(inputEnv []string, automationEnv map[string]string, stepEnv map[string]string) []string {
+	if len(inputEnv) == 0 && len(e.runtimePaths) == 0 && len(automationEnv) == 0 && len(stepEnv) == 0 {
 		return nil
 	}
 	env := os.Environ()
@@ -39,6 +41,16 @@ func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []stri
 	}
 	if len(inputEnv) > 0 {
 		env = append(env, inputEnv...)
+	}
+	if len(automationEnv) > 0 {
+		envKeys := make([]string, 0, len(automationEnv))
+		for k := range automationEnv {
+			envKeys = append(envKeys, k)
+		}
+		sort.Strings(envKeys)
+		for _, k := range envKeys {
+			env = append(env, k+"="+automationEnv[k])
+		}
 	}
 	if len(stepEnv) > 0 {
 		envKeys := make([]string, 0, len(stepEnv))

@@ -399,6 +399,42 @@ steps:
 	}
 }
 
+func TestShowAutomationInfo_AutomationLevelEnv(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "with-auto-env.yaml"), []byte(`description: Build for Linux
+env:
+  CGO_ENABLED: "0"
+  GOARCH: amd64
+  GOOS: linux
+steps:
+  - bash: go build -o bin/app ./...
+  - bash: sha256sum bin/app
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "with-auto-env", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Env:") {
+		t.Errorf("expected Env: line in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "CGO_ENABLED") {
+		t.Errorf("expected CGO_ENABLED in env list, got:\n%s", out)
+	}
+	if !strings.Contains(out, "GOARCH") {
+		t.Errorf("expected GOARCH in env list, got:\n%s", out)
+	}
+	if !strings.Contains(out, "GOOS") {
+		t.Errorf("expected GOOS in env list, got:\n%s", out)
+	}
+}
+
 func TestShowAutomationInfo_NoStepDetailsWithoutConditions(t *testing.T) {
 	root := setupInfoWorkspace(t)
 	var buf bytes.Buffer

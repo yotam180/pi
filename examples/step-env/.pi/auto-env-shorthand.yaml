@@ -1,0 +1,4 @@
+description: Shorthand with automation-level env
+bash: echo "value=$CROSS_VAR"
+env:
+  CROSS_VAR: shorthand_works

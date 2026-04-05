@@ -89,8 +89,8 @@ func TestShorthand_InfoWithModifiers(t *testing.T) {
 	if !strings.Contains(out, "Cross-compile for Linux") {
 		t.Errorf("expected description in info output, got: %s", out)
 	}
-	if !strings.Contains(out, "env:") || !strings.Contains(out, "GOOS") {
-		t.Errorf("expected env annotation in info output, got: %s", out)
+	if !strings.Contains(out, "Env:") || !strings.Contains(out, "GOOS") {
+		t.Errorf("expected automation-level Env: in info output, got: %s", out)
 	}
 }
 
