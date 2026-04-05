@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/shell"
 )
 
@@ -65,6 +67,8 @@ func runShellInstall(stdout, stderr io.Writer) error {
 		return err
 	}
 
+	warnShadowedShortcuts(pc.Config.Shortcuts, stderr)
+
 	shellPath, err := shell.Install(pc.Config, piBin, pc.Root)
 	if err != nil {
 		return err
@@ -80,6 +84,21 @@ func runShellInstall(stdout, stderr io.Writer) error {
 	}
 	fmt.Fprintln(stdout, "\nRestart your shell or run: source ~/.zshrc")
 	return nil
+}
+
+func warnShadowedShortcuts(shortcuts map[string]config.Shortcut, stderr io.Writer) {
+	names := make([]string, 0, len(shortcuts))
+	for name := range shortcuts {
+		names = append(names, name)
+	}
+	warnings := shell.CheckShadowedNames(names)
+	if len(warnings) == 0 {
+		return
+	}
+	p := display.NewForWriter(stderr)
+	for _, w := range warnings {
+		p.Warn("%s\n", shell.FormatWarning(w))
+	}
 }
 
 func runShellUninstall(stdout, stderr io.Writer) error {

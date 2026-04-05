@@ -80,6 +80,68 @@ func TestShellCmd_Install(t *testing.T) {
 	}
 }
 
+func TestShellCmd_Install_ShadowWarning(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte(`project: testproj
+
+shortcuts:
+  test: my-tests
+  vpup: docker/up
+  echo: my-echo
+`), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "my-tests.yaml"), []byte("bash: echo test\n"), 0o644)
+	os.WriteFile(filepath.Join(piDir, "my-echo.yaml"), []byte("bash: echo hello\n"), 0o644)
+	os.MkdirAll(filepath.Join(piDir, "docker"), 0o755)
+	os.WriteFile(filepath.Join(piDir, "docker", "up.yaml"), []byte("bash: echo up\n"), 0o644)
+	t.Chdir(root)
+
+	var stdout, stderr bytes.Buffer
+	err := runShellInstall(&stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	stderrStr := stderr.String()
+	if !strings.Contains(stderrStr, `shortcut "echo"`) {
+		t.Errorf("expected shadow warning for 'echo', got stderr:\n%s", stderrStr)
+	}
+	if !strings.Contains(stderrStr, `shortcut "test"`) {
+		t.Errorf("expected shadow warning for 'test', got stderr:\n%s", stderrStr)
+	}
+	if strings.Contains(stderrStr, "vpup") {
+		t.Errorf("should not warn about 'vpup', got stderr:\n%s", stderrStr)
+	}
+
+	// Shortcuts should still be installed despite warnings
+	stdoutStr := stdout.String()
+	if !strings.Contains(stdoutStr, "Installed 3 shortcut(s)") {
+		t.Errorf("shortcuts should still install despite warnings, got:\n%s", stdoutStr)
+	}
+}
+
+func TestShellCmd_Install_NoWarningForSafeNames(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	root := setupShellWorkspace(t)
+	t.Chdir(root)
+
+	var stdout, stderr bytes.Buffer
+	err := runShellInstall(&stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if stderr.Len() > 0 {
+		t.Errorf("expected no warnings for safe shortcut names, got stderr:\n%s", stderr.String())
+	}
+}
+
 func TestShellCmd_Uninstall(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)

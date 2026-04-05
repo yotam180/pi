@@ -53,7 +53,7 @@ internal/
     info.go                        pi info — shows automation name, description, input docs, automation-level env (sorted keys), if: conditions, dir: overrides, timeout: annotations, step descriptions, first: block details (lettered sub-steps with annotations), and install lifecycle for installer automations (scalar/step-list phases, verify presence, version); stepAnnotations() shared helper for building annotation slices from step fields
     setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE; uses ProjectContext for resolution and executor construction
     setup_add.go                   pi setup add — runs automation before appending setup entries to pi.yaml; short-form tool resolution (python → pi:install-python); --version, --if, --source, --groups flags; --only-add flag skips execution; key=value positional args; idempotent duplicate detection; auto-init when no pi.yaml
-    shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution
+    shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution; warnShadowedShortcuts() prints shadow warnings to stderr before installing
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
     validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; validates file-path step references exist on disk; uses automation.WalkSteps for traversal; reports all errors; exit 0/1
@@ -71,7 +71,7 @@ internal/
     info_test.go                   pi info tests (32 tests — includes if: condition display, installer type, installer lifecycle detail [scalar, step-list, explicit verify, no version, truncation], first: block detail [basic, block annotations, descriptions, sub-step annotations, integration], dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests)
     setup_add_test.go              pi setup add tests (18 tests — bare string, short-form expansion, pi: prefix, if flag, key=value, invalid key=value, duplicate, replace same run target, no pi.yaml yes, no pi.yaml non-interactive, local automation, source flag, groups flag, combined flags, invoke before writing, invoke failure, only-add, invoke not found)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
-    shell_test.go                  pi shell tests (3 tests)
+    shell_test.go                  pi shell tests (5 tests — includes shadow warning integration tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
   conditions/                      Boolean expression parser/evaluator for if: fields
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
@@ -146,7 +146,9 @@ internal/
     semver_test.go                 50 tests (exact, >=, ^, ~, range, v-prefix, error cases, practical installer scenarios, channel names, isChannelName unit)
   shell/                           Shell shortcut file generation and management
     shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(), GenerateCompletionScript(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function; shell completion script generation
+    shadow.go                      ShadowWarning, CheckShadowedNames(), FormatWarning(); shellBuiltins (36 POSIX builtins) and commonCommands (30 system commands) blocklists; warns when shortcut names shadow known commands
     shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
+    shadow_test.go                 13 tests (no shadows, shell builtins, common commands, multiple, empty, case-insensitive, exhaustive coverage, suggestions, formatting, sorted output)
 ```
 
 ## Data Flow

@@ -123,6 +123,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 
 	if len(cfg.Shortcuts) > 0 {
 		out.SetupHeader("==> Installing shell shortcuts...\n")
+		warnShadowedShortcuts(cfg.Shortcuts, stderr)
 		piBin, err := resolvePiBinary()
 		if err != nil {
 			return err
