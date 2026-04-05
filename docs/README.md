@@ -741,9 +741,13 @@ Literal strings in `with:` values pass through unchanged.
 | `pi validate`                 | Statically validate all config and automation files      |
 | `pi version`                  | Print the PI version                                     |
 | `pi --version`                | Same as `pi version`                                     |
-| `pi init`                         | Initialize a new PI project (`pi.yaml` + `.pi/`)         |
+| `pi init`                         | Initialize a new PI project (`pi.yaml` + `.pi/` + example) |
 | `pi init --name <name>`          | Initialize with a specific project name (non-interactive) |
 | `pi init --yes`                   | Accept inferred project name without prompting            |
+| `pi new <name>`                   | Scaffold a new automation file in `.pi/`                  |
+| `pi new <name> --bash "cmd"`     | Pre-fill with a bash command                              |
+| `pi new <name> --python "file"`  | Pre-fill with a python script reference                   |
+| `pi new <name> -d "description"` | Set the automation description                            |
 | `pi add <source> [--as <alias>]` | Append a package to `pi.yaml` (`org/repo@version` or `file:...`); fetch GitHub into cache; duplicate entry is a no-op ("already in pi.yaml") |
 | `pi completion <shell>`         | Generate shell completion script (`bash`, `zsh`, `fish`, `powershell`) |
 

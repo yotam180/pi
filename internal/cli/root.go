@@ -36,6 +36,7 @@ and shareable automation model.`,
 	root.AddCommand(newAddCmd())
 	root.AddCommand(newCompletionCmd())
 	root.AddCommand(newInitCmd())
+	root.AddCommand(newNewCmd())
 
 	return root
 }

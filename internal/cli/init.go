@@ -60,11 +60,17 @@ func initProject(root, name string, stdout io.Writer) error {
 		return fmt.Errorf("creating .pi/: %w", err)
 	}
 
+	examplePath := filepath.Join(piDirPath, "hello.yaml")
+	if err := os.WriteFile(examplePath, []byte(ExampleAutomationContent), 0o644); err != nil {
+		return fmt.Errorf("creating example automation: %w", err)
+	}
+
 	printer := display.NewForWriter(stdout)
 	printer.Green("Initialized project '%s'.\n", name)
 	fmt.Fprintln(stdout)
 	printer.Dim("  Created %s\n", config.FileName)
 	printer.Dim("  Created .pi/\n")
+	printer.Dim("  Created .pi/hello.yaml          example automation (edit or delete)\n")
 
 	printNextSteps(stdout)
 	return nil
@@ -133,9 +139,10 @@ func printNextSteps(w io.Writer) {
 	printer := display.NewForWriter(w)
 	fmt.Fprintln(w)
 	printer.Dim("Next steps:\n")
+	printer.Dim("  pi run hello                         run the example automation\n")
+	printer.Dim("  pi new build --bash \"go test ./...\"   create a new automation\n")
 	printer.Dim("  pi setup add python --version 3.13   add a setup step\n")
 	printer.Dim("  pi shell                             install shell shortcuts\n")
-	printer.Dim("  pi run <name>                        run an automation\n")
 }
 
 var kebabRe = regexp.MustCompile(`[^a-z0-9-]+`)
