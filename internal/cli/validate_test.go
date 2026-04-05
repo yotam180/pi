@@ -253,3 +253,144 @@ func TestValidate_NoPiYaml(t *testing.T) {
 		t.Fatal("expected error when no pi.yaml found")
 	}
 }
+
+func TestValidate_BrokenFileRef(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build with script
+steps:
+  - bash: build.sh
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken file reference")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "file not found") {
+		t.Errorf("expected 'file not found' error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "build.sh") {
+		t.Errorf("expected error to mention build.sh, got: %s", errOut)
+	}
+}
+
+func TestValidate_ValidFileRef(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build with script
+steps:
+  - bash: build.sh
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "build.sh"), []byte("#!/bin/bash\necho build\n"), 0755)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "✓") {
+		t.Errorf("expected success, got: %s", out)
+	}
+}
+
+func TestValidate_InlineScriptNotFlagged(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte(`description: Say hello
+steps:
+  - bash: echo hello world
+  - python: "import sys; print('hi')"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_BrokenFileRefInFirstBlock(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "multi.yaml"), []byte(`description: Multi platform
+steps:
+  - first:
+      - bash: install-mac.sh
+        if: os.macos
+      - bash: install-linux.sh
+        if: os.linux
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken file references in first: block")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "install-mac.sh") {
+		t.Errorf("expected error to mention install-mac.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install-linux.sh") {
+		t.Errorf("expected error to mention install-linux.sh, got: %s", errOut)
+	}
+}
+
+func TestValidate_BrokenFileRefInSubdir(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi", "deploy")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "push.yaml"), []byte(`description: Push image
+steps:
+  - bash: push.sh
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken file reference")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "push.sh") {
+		t.Errorf("expected error to mention push.sh, got: %s", errOut)
+	}
+}
+
+func TestValidate_MultipleFileRefErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+steps:
+  - bash: compile.sh
+  - python: transform.py
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken file references")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "compile.sh") {
+		t.Errorf("expected error for compile.sh, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "transform.py") {
+		t.Errorf("expected error for transform.py, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "2 error") {
+		t.Errorf("expected 2 errors, got: %s", errOut)
+	}
+}

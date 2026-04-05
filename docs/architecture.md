@@ -42,14 +42,14 @@ internal/
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts; uses resolveProjectStrict() for project resolution
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
-    validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; reports all errors; exit 0/1
+    validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; validates file-path step references exist on disk; reports all errors; exit 0/1
     add.go                         pi add — validates source via refparser.Parse(); fetches GitHub packages into cache; calls config.AddPackage() to update pi.yaml; --as for aliases; idempotent (duplicate sources print "already in pi.yaml" and exit successfully)
     completion.go                  pi completion — generates shell completion scripts (bash/zsh/fish/powershell) via Cobra's built-in generators; automationCompleter() — dynamic completion for automation names (used by run, info)
     root_test.go                   CLI tests (12 tests — includes doctor and validate subcommands)
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               on-demand fetch advisory tests (4 tests)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
-    validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
+    validate_test.go               pi validate tests (17 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, multiple file ref errors)
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (21 tests — includes if: condition display, installer type, dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests)
@@ -85,12 +85,12 @@ internal/
     runner_iface.go                StepRunner interface, RunContext (step execution context with WorkDir), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
     runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution with timeout support (exec.CommandContext); TimeoutExitCode (124); resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execInstallFirstBlock(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry; first: block support in install phases
-    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_IN_* + PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
+    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), IsFilePath() (exported), resolveScriptPath(), buildEnv(inputEnv, automationEnv, stepEnv), prependPathInEnv(), resolveStepDir(); PI_IN_* + PI_INPUT_* env injection; provisioned runtime PATH injection; automation-level and step-level env: injection; step-level dir: resolution
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     test_helpers_test.go           Shared test helpers: newAutomation, newAutomationInDir, newExecutor, newExecutorWithCapture, newExecutorWithEnv, step constructors (bashStep, runStep, pythonStep, typescriptStep, pipedBashStep, pipedPythonStep, bashStepIf), fakeRuntimeEnv, requirePython, requireTsx, boolPtr
     first_block_test.go            14 tests — first: block: first/middle/fallback matches, none match, mixed steps, pipe to next, pipe no match, outer if skip, run sub-step, exit error, install phase, silent, loud override
-    executor_test.go               20 tests — core execution: bash inline/file, run step chaining, circular deps, multi-step, working dir, mixed bash+run, exit error, isFilePath, call stack isolation
+    executor_test.go               20 tests — core execution: bash inline/file, run step chaining, circular deps, multi-step, working dir, mixed bash+run, exit error, IsFilePath, call stack isolation
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
     pipe_test.go                   10 tests — pipe: true: bash→bash, bash→python, python→bash, three-step chain, failure propagation, stderr passthrough, run step piping, multiline data
@@ -437,7 +437,7 @@ Makefile                               build, vet, test, test-matrix targets
 - Step runner registry: `Registry` in `runner_iface.go` maps `StepType` → `StepRunner`. `NewDefaultRegistry()` registers `BashRunner`, `PythonRunner`, `TypeScriptRunner`, `RunStepRunner`. `Executor.execStep()` dispatches through the registry instead of a switch statement. Adding a new step type only requires implementing `StepRunner` and registering it — no executor changes needed.
 - `RunContext` in `runner_iface.go` bundles everything a runner needs: automation, step, args, I/O writers, env, repo root, and `WorkDir` (the resolved working directory). Runners are decoupled from `Executor` internals — they receive a callback for recursive `run:` calls.
 - Common execution substrate: `runStepCommand()` in `runners.go` handles `exec.Command` setup (Dir from `WorkDir`, Env, Stdout, Stderr, Stdin) and error wrapping (`*ExitError` for non-zero exits). All language runners delegate to this.
-- File-path resolution: `resolveFileStep()` in `helpers.go` combines `isFilePath()` + `resolveScriptPath()` + existence check into a single call, eliminating per-runner duplication
+- File-path resolution: `resolveFileStep()` in `helpers.go` combines `IsFilePath()` + `resolveScriptPath()` + existence check into a single call, eliminating per-runner duplication. `IsFilePath()` is exported so `pi validate` can reuse the same detection logic for static file reference validation.
 - Bash inline steps: `bash -c "<script>" -- [args...]` — args available as `$1`, `$2`, etc.
 - Bash file steps: `bash <resolved_path> [args...]` — file path resolved relative to the automation YAML file's directory
 - Python inline steps: `python3 -c "<script>" [args...]` — args available as `sys.argv[1:]`
@@ -661,8 +661,9 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Validate command (`pi validate`)
 - Statically validates all config and automation files without executing anything
-- Validation layers: (1) pi.yaml schema via `config.Load()`, (2) automation discovery via `discoverAll()`, (3) cross-reference checks
+- Validation layers: (1) pi.yaml schema via `config.Load()`, (2) automation discovery via `discoverAll()`, (3) cross-reference checks, (4) file reference checks
 - Cross-reference checks: shortcuts → automations, setup entries → automations, `run:` steps → automations (including install phase steps)
+- File reference checks: when a step value looks like a file path (detected by `executor.IsFilePath()` — ends in `.sh`/`.py`/`.ts`, no newlines, no spaces), the path is resolved relative to the automation YAML file's directory and checked for existence on disk. Built-in automations are skipped (they use inline scripts only). Covers steps, `first:` block sub-steps, and install phase steps (including scalar install phases).
 - Reports all errors (not just the first) with `✗` prefixed lines to stderr
 - Prints summary on success: `✓ Validated N automation(s), M shortcut(s), K setup entry(ies)`
 - Exit code 0 on success, 1 on validation errors (uses `*executor.ExitError{Code: 1}` for CLI exit handling)
@@ -854,7 +855,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1142 (170 automation + 81 builtins + 32 cache + 111 CLI [includes 11 completion] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 236 integration [includes 8 completion])
+Total tests: 1151 (170 automation + 81 builtins + 32 cache + 117 CLI [includes 11 completion] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 239 integration [includes 8 completion])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -904,7 +905,7 @@ tests/integration/
   step_dir_integ_test.go          6 tests — step dir: list, run in subdir, mixed dirs, dir with env, bad dir error, info annotation
   step_timeout_integ_test.go      5 tests — step timeout: list, fast completes, slow exceeds (exit 124), mixed timed/untimed, info annotation
   step_description_integ_test.go  5 tests — step description: list, run, info descriptions, info with annotations, info no-desc no-details
-  validate_integ_test.go          5 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs
+  validate_integ_test.go          8 tests — pi validate: valid project, invalid project, all errors reported, basic project, builtin refs, broken file references, valid file reference, inline scripts not flagged
   first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
   packages_test.go                11 tests — packages: list (SOURCE column), list --all (grouped sections), run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package

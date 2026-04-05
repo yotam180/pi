@@ -104,7 +104,7 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 // execBashSuppressed runs inline bash with stdout suppressed and stderr optionally captured.
 func (e *Executor) execBashSuppressed(a *automation.Automation, script string, inputEnv []string, stderrCapture *bytes.Buffer) error {
 	var cmdArgs []string
-	if isFilePath(script) {
+	if IsFilePath(script) {
 		resolved := resolveScriptPath(a.Dir(), script)
 		cmdArgs = []string{resolved}
 	} else {

@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// isFilePath returns true if the value looks like a file path rather than inline script.
+// IsFilePath returns true if the value looks like a file path rather than inline script.
 // A file path ends in a known script extension, contains no newlines, and contains no spaces.
-func isFilePath(value string) bool {
+func IsFilePath(value string) bool {
 	hasKnownExt := strings.HasSuffix(value, ".sh") ||
 		strings.HasSuffix(value, ".py") ||
 		strings.HasSuffix(value, ".ts")
@@ -69,7 +69,7 @@ func (e *Executor) buildEnv(inputEnv []string, automationEnv map[string]string, 
 // to the automation directory, and verifies the file exists. Returns the
 // resolved path and true if it's a file, or ("", false) for inline scripts.
 func resolveFileStep(automationDir, value, lang string) (string, bool, error) {
-	if !isFilePath(value) {
+	if !IsFilePath(value) {
 		return "", false, nil
 	}
 	resolved := resolveScriptPath(automationDir, value)

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
@@ -16,8 +18,8 @@ func newValidateCmd() *cobra.Command {
 		Use:   "validate",
 		Short: "Validate all automation files and config",
 		Long: `Statically validate pi.yaml and all automation YAML files in .pi/ without
-executing anything. Checks for schema errors, broken references, and
-configuration mistakes.
+executing anything. Checks for schema errors, broken references, missing
+script files, and configuration mistakes.
 
 Checks performed:
   - pi.yaml parsing and schema validation
@@ -25,6 +27,7 @@ Checks performed:
   - Shortcut targets reference existing automations
   - Setup entry targets reference existing automations
   - run: steps reference existing automations
+  - File-path step values (*.sh, *.py, *.ts) reference existing files
 
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -88,6 +91,7 @@ func validateProject(root string) ValidationResult {
 	validateShortcutRefs(cfg, disc, &result)
 	validateSetupRefs(cfg, disc, &result)
 	validateRunStepRefs(disc, &result)
+	validateFileReferences(disc, &result)
 
 	return result
 }
@@ -176,5 +180,83 @@ func validatePhaseStepRefs(automationName, phaseName string, phase *automation.I
 				fmt.Sprintf("%s: install.%s step[%d] run: references unknown automation %q",
 					automationName, phaseName, i, step.Value))
 		}
+	}
+}
+
+// validateFileReferences checks that file-path step values reference files
+// that actually exist on disk. Built-in automations are skipped since they
+// use inline scripts only and have no real filesystem directory.
+func validateFileReferences(disc *discovery.Result, result *ValidationResult) {
+	for _, name := range disc.Names() {
+		if disc.IsBuiltin(name) {
+			continue
+		}
+		a := disc.Automations[name]
+		validateAutomationFileRefs(a, result)
+	}
+}
+
+func validateAutomationFileRefs(a *automation.Automation, result *ValidationResult) {
+	for i, step := range a.Steps {
+		if step.IsFirst() {
+			for j, sub := range step.First {
+				checkStepFileRef(a, sub, fmt.Sprintf("%s: step[%d].first[%d]", a.Name, i, j), result)
+			}
+			continue
+		}
+		checkStepFileRef(a, step, fmt.Sprintf("%s: step[%d]", a.Name, i), result)
+	}
+
+	if a.Install == nil {
+		return
+	}
+	validatePhaseFileRefs(a, "test", &a.Install.Test, result)
+	validatePhaseFileRefs(a, "run", &a.Install.Run, result)
+	if a.Install.Verify != nil {
+		validatePhaseFileRefs(a, "verify", a.Install.Verify, result)
+	}
+}
+
+func validatePhaseFileRefs(a *automation.Automation, phaseName string, phase *automation.InstallPhase, result *ValidationResult) {
+	if phase.IsScalar {
+		checkScalarFileRef(a, phase.Scalar, fmt.Sprintf("%s: install.%s", a.Name, phaseName), result)
+		return
+	}
+	for i, step := range phase.Steps {
+		if step.IsFirst() {
+			for j, sub := range step.First {
+				checkStepFileRef(a, sub, fmt.Sprintf("%s: install.%s step[%d].first[%d]", a.Name, phaseName, i, j), result)
+			}
+			continue
+		}
+		checkStepFileRef(a, step, fmt.Sprintf("%s: install.%s step[%d]", a.Name, phaseName, i), result)
+	}
+}
+
+// checkStepFileRef checks a single step for a file-path value and reports
+// if the referenced file doesn't exist.
+func checkStepFileRef(a *automation.Automation, step automation.Step, prefix string, result *ValidationResult) {
+	if step.Type == automation.StepTypeRun {
+		return
+	}
+	if !executor.IsFilePath(step.Value) {
+		return
+	}
+	resolved := filepath.Join(a.Dir(), step.Value)
+	if _, err := os.Stat(resolved); err != nil {
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("%s %s: file not found: %s (resolved to %s)", prefix, step.Type, step.Value, resolved))
+	}
+}
+
+// checkScalarFileRef checks a scalar install phase value for file references.
+func checkScalarFileRef(a *automation.Automation, value, prefix string, result *ValidationResult) {
+	if !executor.IsFilePath(value) {
+		return
+	}
+	resolved := filepath.Join(a.Dir(), value)
+	if _, err := os.Stat(resolved); err != nil {
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("%s bash: file not found: %s (resolved to %s)", prefix, value, resolved))
 	}
 }

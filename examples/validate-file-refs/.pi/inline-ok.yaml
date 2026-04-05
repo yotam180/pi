@@ -1,0 +1,4 @@
+description: Inline scripts are fine
+steps:
+  - bash: echo "this is inline"
+  - python: "import sys; print('hello')"

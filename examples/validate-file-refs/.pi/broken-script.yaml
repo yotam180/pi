@@ -1,0 +1,4 @@
+description: Automation with broken file reference
+steps:
+  - bash: does-not-exist.sh
+  - python: also-missing.py

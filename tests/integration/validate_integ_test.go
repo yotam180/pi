@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -77,5 +78,78 @@ func TestValidate_BuiltinRefsValid(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "✓") {
 		t.Errorf("expected success for builtins project, got: %s", stdout)
+	}
+}
+
+func TestValidate_BrokenFileReferences(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "validate-file-refs")
+	_, stderr, code := runPiSplit(t, dir, "validate")
+	if code != 1 {
+		t.Fatalf("expected exit 1 for broken file references, got %d", code)
+	}
+	if !strings.Contains(stderr, "does-not-exist.sh") {
+		t.Errorf("expected error for does-not-exist.sh, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "also-missing.py") {
+		t.Errorf("expected error for also-missing.py, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "file not found") {
+		t.Errorf("expected 'file not found' message, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "2 error") {
+		t.Errorf("expected 2 errors, got: %s", stderr)
+	}
+}
+
+func TestValidate_ValidFileReferencePasses(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), "project: test\n")
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "build.yaml"), `description: Build
+steps:
+  - bash: build.sh
+`)
+	writeFile(t, filepath.Join(piDir, "build.sh"), "#!/bin/bash\necho build\n")
+
+	stdout, _, code := runPiSplit(t, dir, "validate")
+	if code != 0 {
+		t.Fatalf("expected exit 0 for valid file references, got %d", code)
+	}
+	if !strings.Contains(stdout, "✓") {
+		t.Errorf("expected success marker, got: %s", stdout)
+	}
+}
+
+func TestValidate_InlineScriptsNotFlagged(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), "project: test\n")
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "hello.yaml"), `description: Inline
+steps:
+  - bash: echo hello world
+`)
+
+	stdout, _, code := runPiSplit(t, dir, "validate")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if !strings.Contains(stdout, "✓") {
+		t.Errorf("expected success, got: %s", stdout)
+	}
+}
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+func mkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("creating %s: %v", path, err)
 	}
 }

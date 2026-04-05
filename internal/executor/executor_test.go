@@ -408,9 +408,9 @@ func TestIsFilePath(t *testing.T) {
 		{"print('hello.py')", false},
 	}
 	for _, tt := range tests {
-		got := isFilePath(tt.input)
+		got := IsFilePath(tt.input)
 		if got != tt.want {
-			t.Errorf("isFilePath(%q) = %v, want %v", tt.input, got, tt.want)
+			t.Errorf("IsFilePath(%q) = %v, want %v", tt.input, got, tt.want)
 		}
 	}
 }
