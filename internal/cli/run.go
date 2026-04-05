@@ -51,6 +51,7 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 	cmd.Flags().StringArrayVar(&withFlags, "with", nil, "pass named input as key=value (repeatable)")
 	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")
 	cmd.Flags().BoolVar(&loud, "loud", false, "force trace lines and output for all steps (overrides silent: true)")
+	cmd.ValidArgsFunction = automationCompleter()
 
 	return cmd
 }

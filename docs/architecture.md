@@ -44,7 +44,9 @@ internal/
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
     validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; reports all errors; exit 0/1
     add.go                         pi add — validates source via refparser.Parse(); fetches GitHub packages into cache; calls config.AddPackage() to update pi.yaml; --as for aliases; idempotent (duplicate sources print "already in pi.yaml" and exit successfully)
+    completion.go                  pi completion — generates shell completion scripts (bash/zsh/fish/powershell) via Cobra's built-in generators; automationCompleter() — dynamic completion for automation names (used by run, info)
     root_test.go                   CLI tests (12 tests — includes doctor and validate subcommands)
+    completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               on-demand fetch advisory tests (4 tests)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     validate_test.go               pi validate tests (11 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml)
@@ -118,8 +120,8 @@ internal/
     runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
     runtimes_test.go               16 tests
   shell/                           Shell shortcut file generation and management
-    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function
-    shell_test.go                  16 tests
+    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(), GenerateCompletionScript(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function; shell completion script generation
+    shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
 ```
 
 ## Data Flow
@@ -263,6 +265,31 @@ pi validate
        Checks setup entry targets → automation names
        Checks run: step values → automation names (incl. install phases)
        Collects all errors, prints to stderr, exit 0 or 1
+```
+
+```
+pi completion <shell>
+  │
+  ├─ CLI (internal/cli/completion.go)
+  │    Parses shell name (bash/zsh/fish/powershell)
+  │
+  └─ Cobra built-in generators
+       GenBashCompletionV2() / GenZshCompletion() / GenFishCompletion() / GenPowerShellCompletionWithDesc()
+       Outputs completion script to stdout
+```
+
+```
+pi run <TAB>  (dynamic completion)
+  │
+  ├─ automationCompleter() (internal/cli/completion.go)
+  │    os.Getwd() → resolveProject() → Discover()
+  │
+  ├─ Discovery (internal/discovery)
+  │    Names() → filtered (no builtins)
+  │
+  └─ Output
+       Returns automation names with descriptions as tab-separated completion entries
+       Errors silently return empty list
 ```
 
 ```
@@ -732,6 +759,18 @@ Makefile                               build, vet, test, test-matrix targets
 - Backward compatible: tests use `bytes.Buffer` (not `*os.File`) so color is always off in tests; identical text output
 - Used by: `Executor.printInstallStatus()`, `Executor.RunWithInputs()` for step trace lines, `cli/setup.go` headers, `cli/doctor.go` health output
 
+### Shell completion (`pi completion`)
+- `pi completion <shell>` generates a completion script for bash, zsh, fish, or powershell using Cobra's built-in generators
+- Dynamic completion for automation names: `automationCompleter()` returns a `ValidArgsFunction` that resolves the project, discovers automations, and returns names with descriptions
+- Wired to `pi run` and `pi info` via `cmd.ValidArgsFunction` — `pi run <TAB>` and `pi info <TAB>` complete automation names
+- Built-in automations are excluded from completion results (consistent with `pi list` default behavior)
+- Completion functions silently return empty on any error — completion should never crash the shell
+- When more than one arg is already provided (the automation name), no further completions are offered
+- `pi shell` automatically generates a `_pi-completion.sh` file in `~/.pi/shell/` that sets up completion for both bash and zsh
+- The completion file detects `$ZSH_VERSION` / `$BASH_VERSION` and eval's the appropriate `pi completion <shell>` output
+- `_pi-completion.sh` is sourced via the existing `*.sh` glob in the source block, alongside the wrapper and shortcut files
+- Cleanup: `Uninstall()` removes `_pi-completion.sh` when the last project is uninstalled; `ListInstalled()` excludes it from the project list
+
 ### Error philosophy
 - Parse errors include file path and field name
 - `Find()` not-found errors list all available automations
@@ -815,7 +854,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1119 (170 automation + 81 builtins + 32 cache + 100 CLI + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 23 shell + 228 integration)
+Total tests: 1142 (170 automation + 81 builtins + 32 cache + 111 CLI [includes 11 completion] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 236 integration [includes 8 completion])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -869,6 +908,7 @@ tests/integration/
   first_block_integ_test.go       8 tests — first: block: list, pick-platform, no-match, with-pipe, mixed, info, validate, installer
   shorthand_integ_test.go         8 tests — single-step shorthand: list, run bash, run with env, run step delegation, run with input, info, info with modifiers, validate
   packages_test.go                11 tests — packages: list (SOURCE column), list --all (grouped sections), run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
+  completion_test.go              8 tests — completion: bash/zsh/fish output, no arg error, works without pi.yaml, shell install creates completion file, dynamic run/info completion, builtin exclusion
   on_demand_test.go               6 tests — on-demand fetch: file: ref never on-demand, GitHub ref undeclared shows advisory, declared package no advisory, cached package silent, file: missing path clear error, advisory to stderr
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)

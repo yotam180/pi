@@ -707,6 +707,7 @@ These are defined in the PI repository's own `.pi/` folder and compiled into the
 | `pi version`                  | Print the PI version                                     |
 | `pi --version`                | Same as `pi version`                                     |
 | `pi add <source> [--as <alias>]` | Append a package to `pi.yaml` (`org/repo@version` or `file:...`); fetch GitHub into cache; duplicate entry is a no-op ("already in pi.yaml") |
+| `pi completion <shell>`         | Generate shell completion script (`bash`, `zsh`, `fish`, `powershell`) |
 
 ---
 

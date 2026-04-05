@@ -11,7 +11,7 @@ import (
 )
 
 func newInfoCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "info <automation>",
 		Short: "Show details about an automation",
 		Long: `Print the name, description, and input documentation for a given automation.
@@ -26,6 +26,8 @@ any subdirectory of the project.`,
 			return showAutomationInfo(cwd, args[0], cmd.OutOrStdout())
 		},
 	}
+	cmd.ValidArgsFunction = automationCompleter()
+	return cmd
 }
 
 // showAutomationInfo resolves an automation by name and prints its details.

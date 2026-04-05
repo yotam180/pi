@@ -564,6 +564,106 @@ func TestGenerateFunction_EvalInsideSubshell(t *testing.T) {
 	}
 }
 
+func TestGenerateCompletionScript(t *testing.T) {
+	content := GenerateCompletionScript("/usr/local/bin/pi")
+
+	if !strings.Contains(content, "ZSH_VERSION") {
+		t.Error("expected ZSH_VERSION check for zsh completion")
+	}
+	if !strings.Contains(content, "BASH_VERSION") {
+		t.Error("expected BASH_VERSION check for bash completion")
+	}
+	if !strings.Contains(content, "/usr/local/bin/pi completion zsh") {
+		t.Error("expected pi completion zsh command")
+	}
+	if !strings.Contains(content, "/usr/local/bin/pi completion bash") {
+		t.Error("expected pi completion bash command")
+	}
+	if !strings.Contains(content, "do not edit manually") {
+		t.Error("expected auto-generated warning")
+	}
+}
+
+func TestInstall_CreatesCompletionScript(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte("# existing\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "testproj",
+		Shortcuts: map[string]config.Shortcut{
+			"hello": {Run: "greet"},
+		},
+	}
+
+	_, err := Install(cfg, "pi", "/repo")
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	completionPath := filepath.Join(tmpHome, piShellDir, piCompletionFile)
+	data, err := os.ReadFile(completionPath)
+	if err != nil {
+		t.Fatalf("reading completion file: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "completion zsh") {
+		t.Error("completion file should contain zsh completion setup")
+	}
+	if !strings.Contains(content, "completion bash") {
+		t.Error("completion file should contain bash completion setup")
+	}
+}
+
+func TestUninstall_RemovesCompletionWhenLastProject(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "only-proj",
+		Shortcuts: map[string]config.Shortcut{
+			"a": {Run: "auto/a"},
+		},
+	}
+
+	Install(cfg, "pi", "/repo")
+	completionPath := filepath.Join(tmpHome, piShellDir, piCompletionFile)
+	if _, err := os.Stat(completionPath); err != nil {
+		t.Fatalf("completion script should exist after install: %v", err)
+	}
+
+	Uninstall("only-proj")
+	if _, err := os.Stat(completionPath); !os.IsNotExist(err) {
+		t.Error("completion script should be removed when last project is uninstalled")
+	}
+}
+
+func TestListInstalled_ExcludesCompletion(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	shellDir := filepath.Join(tmpHome, piShellDir)
+	os.MkdirAll(shellDir, 0o755)
+	os.WriteFile(filepath.Join(shellDir, piCompletionFile), []byte("# completion"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, piWrapperFile), []byte("# wrapper"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "myproj.sh"), []byte("# shortcuts"), 0o644)
+
+	projects, err := ListInstalled()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d: %v", len(projects), projects)
+	}
+	if projects[0] != "myproj" {
+		t.Errorf("expected myproj, got %s", projects[0])
+	}
+}
+
 func TestGenerateFunction_WithInputs_EvalInsideSubshell(t *testing.T) {
 	sc := config.Shortcut{
 		Run:  "docker/logs",
