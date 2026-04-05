@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/executor"
 )
 
@@ -555,5 +556,442 @@ install:
 	}
 	if !strings.Contains(stdout.String(), "✓") {
 		t.Errorf("expected success for inline installer scripts, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_ShortcutWithValidInputs(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  py:
+    run: install-python
+    with:
+      version: "3.13"
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_ShortcutWithUnknownInput(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  py:
+    run: install-python
+    with:
+      vrsion: "3.13"
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown input key")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "vrsion") {
+		t.Errorf("expected error to mention the typo key, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "shortcut") {
+		t.Errorf("expected error to mention shortcut context, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "version") {
+		t.Errorf("expected error to mention available inputs, got: %s", errOut)
+	}
+}
+
+func TestValidate_ShortcutWithNoInputsOnTarget(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  greet:
+    run: hello
+    with:
+      name: world
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte(`description: Say hello
+bash: echo hello
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for with: on target with no inputs")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "no declared inputs") {
+		t.Errorf("expected 'no declared inputs' message, got: %s", errOut)
+	}
+}
+
+func TestValidate_SetupWithUnknownInput(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+setup:
+  - run: install-python
+    with:
+      vrsion: "3.13"
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown setup input key")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "setup[0]") {
+		t.Errorf("expected error to mention setup index, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "vrsion") {
+		t.Errorf("expected error to mention the typo key, got: %s", errOut)
+	}
+}
+
+func TestValidate_SetupWithValidInputs(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+setup:
+  - run: install-python
+    with:
+      version: "3.13"
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_RunStepWithUnknownInput(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "setup-all.yaml"), []byte(`description: Setup everything
+steps:
+  - run: install-python
+    with:
+      vrsion: "3.13"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown run step input key")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "vrsion") {
+		t.Errorf("expected error to mention the typo key, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "install-python") {
+		t.Errorf("expected error to mention target automation, got: %s", errOut)
+	}
+}
+
+func TestValidate_RunStepWithValidInputs(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "setup-all.yaml"), []byte(`description: Setup everything
+steps:
+  - run: install-python
+    with:
+      version: "3.13"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_RunStepWithNoInputsOnTarget(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte(`description: Say hello
+bash: echo hello
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "caller.yaml"), []byte(`description: Calls hello with bogus inputs
+steps:
+  - run: hello
+    with:
+      name: world
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for with: on target with no inputs")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "no declared inputs") {
+		t.Errorf("expected 'no declared inputs' message, got: %s", errOut)
+	}
+}
+
+func TestValidate_RunStepWithInFirstBlock(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "setup-all.yaml"), []byte(`description: Setup everything
+steps:
+  - first:
+      - run: install-python
+        with:
+          vrsion: "3.13"
+        if: os.macos
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown input in first: block run step")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "vrsion") {
+		t.Errorf("expected error to mention the typo key, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "first") {
+		t.Errorf("expected error to mention first: block context, got: %s", errOut)
+	}
+}
+
+func TestValidate_ShortcutWithBrokenRefSkipsInputCheck(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  bad:
+    run: nonexistent
+    with:
+      version: "3.13"
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte(`description: Say hello
+bash: echo hello
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for broken reference")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "nonexistent") {
+		t.Errorf("expected error to mention broken ref, got: %s", errOut)
+	}
+	// Should only have the broken ref error, not an input error
+	if strings.Contains(errOut, "no declared inputs") {
+		t.Errorf("should not report input errors when target is unresolvable, got: %s", errOut)
+	}
+}
+
+func TestValidate_MultipleWithErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  py:
+    run: install-python
+    with:
+      vrsion: "3.13"
+      platform: linux
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-python.yaml"), []byte(`description: Install Python
+inputs:
+  version:
+    type: string
+    description: Python version
+bash: echo "installing python $PI_IN_VERSION"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for multiple unknown input keys")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "vrsion") {
+		t.Errorf("expected error for 'vrsion', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "platform") {
+		t.Errorf("expected error for 'platform', got: %s", errOut)
+	}
+}
+
+func TestValidate_SetupWithNoInputsOnTarget(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+setup:
+  - run: hello
+    with:
+      name: world
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte(`description: Say hello
+bash: echo hello
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for with: on target with no inputs")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "setup[0]") {
+		t.Errorf("expected error to mention setup index, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "no declared inputs") {
+		t.Errorf("expected 'no declared inputs' message, got: %s", errOut)
+	}
+}
+
+func TestCheckWithInputs_NoWith(t *testing.T) {
+	a := &automation.Automation{Name: "test"}
+	msgs := checkWithInputs(nil, a)
+	if len(msgs) != 0 {
+		t.Errorf("expected no errors for nil with, got: %v", msgs)
+	}
+	msgs = checkWithInputs(map[string]string{}, a)
+	if len(msgs) != 0 {
+		t.Errorf("expected no errors for empty with, got: %v", msgs)
+	}
+}
+
+func TestCheckWithInputs_AllValid(t *testing.T) {
+	a := &automation.Automation{
+		Name:      "test",
+		Inputs:    map[string]automation.InputSpec{"version": {}, "arch": {}},
+		InputKeys: []string{"version", "arch"},
+	}
+	msgs := checkWithInputs(map[string]string{"version": "3.13", "arch": "arm64"}, a)
+	if len(msgs) != 0 {
+		t.Errorf("expected no errors, got: %v", msgs)
+	}
+}
+
+func TestCheckWithInputs_UnknownKey(t *testing.T) {
+	a := &automation.Automation{
+		Name:      "test",
+		Inputs:    map[string]automation.InputSpec{"version": {}},
+		InputKeys: []string{"version"},
+	}
+	msgs := checkWithInputs(map[string]string{"vrsion": "3.13"}, a)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(msgs), msgs)
+	}
+	if !strings.Contains(msgs[0], "vrsion") {
+		t.Errorf("expected error to mention 'vrsion', got: %s", msgs[0])
+	}
+	if !strings.Contains(msgs[0], "version") {
+		t.Errorf("expected error to list available inputs, got: %s", msgs[0])
+	}
+}
+
+func TestCheckWithInputs_NoInputsOnTarget(t *testing.T) {
+	a := &automation.Automation{Name: "hello"}
+	msgs := checkWithInputs(map[string]string{"name": "world"}, a)
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(msgs), msgs)
+	}
+	if !strings.Contains(msgs[0], "no declared inputs") {
+		t.Errorf("expected 'no declared inputs' message, got: %s", msgs[0])
+	}
+}
+
+func TestCheckWithInputs_MultipleUnknownSorted(t *testing.T) {
+	a := &automation.Automation{
+		Name:      "test",
+		Inputs:    map[string]automation.InputSpec{"version": {}},
+		InputKeys: []string{"version"},
+	}
+	msgs := checkWithInputs(map[string]string{"platform": "linux", "arch": "arm64"}, a)
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 errors, got %d: %v", len(msgs), msgs)
+	}
+	if !strings.Contains(msgs[0], "arch") {
+		t.Errorf("expected first error (sorted) to be about 'arch', got: %s", msgs[0])
+	}
+	if !strings.Contains(msgs[1], "platform") {
+		t.Errorf("expected second error (sorted) to be about 'platform', got: %s", msgs[1])
 	}
 }
