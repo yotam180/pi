@@ -1462,3 +1462,27 @@ func TestDiscover_VersionSatisfiesEmptyVersion(t *testing.T) {
 		t.Error("expected error for empty version, got nil")
 	}
 }
+
+func TestDiscover_VersionSatisfiesChannelName(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["version-satisfies"]
+
+	err = a.GoFunc(map[string]string{"version": "1.88.0", "required": "stable"})
+	if err != nil {
+		t.Errorf("expected 'stable' channel to accept any version, got error: %v", err)
+	}
+
+	err = a.GoFunc(map[string]string{"version": "1.89.0", "required": "nightly"})
+	if err != nil {
+		t.Errorf("expected 'nightly' channel to accept any version, got error: %v", err)
+	}
+
+	err = a.GoFunc(map[string]string{"version": "1.88.1", "required": "beta"})
+	if err != nil {
+		t.Errorf("expected 'beta' channel to accept any version, got error: %v", err)
+	}
+}

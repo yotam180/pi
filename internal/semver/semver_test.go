@@ -56,6 +56,12 @@ func TestSatisfies(t *testing.T) {
 		{name: "empty constraint", version: "22.0.0", constraint: "", wantErr: true, errMsg: "invalid constraint"},
 		{name: "garbage version", version: "abc", constraint: "22", wantErr: true, errMsg: "invalid version"},
 
+		// Channel name constraints (non-semver, e.g. Rust's stable/nightly/beta)
+		{name: "channel stable", version: "1.88.0", constraint: "stable", wantErr: false},
+		{name: "channel nightly", version: "1.89.0", constraint: "nightly", wantErr: false},
+		{name: "channel beta", version: "1.88.1", constraint: "beta", wantErr: false},
+		{name: "channel any version satisfies", version: "0.1.0", constraint: "stable", wantErr: false},
+
 		// Practical installer cases
 		{name: "node major check", version: "22.12.0", constraint: "22", wantErr: false},
 		{name: "python version check", version: "3.13.2", constraint: "3.13", wantErr: false},
@@ -100,6 +106,37 @@ func TestNormalise(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("normalise(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsChannelName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"stable", true},
+		{"nightly", true},
+		{"beta", true},
+		{"lts", true},
+		{"latest", true},
+		{"22", false},
+		{"22.3", false},
+		{"1.88.0", false},
+		{">= 1.0", false},
+		{"^1.0", false},
+		{"", false},
+		{"Stable", false},
+		{"NIGHTLY", false},
+		{"stable-2024", false},
+		{"beta1", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isChannelName(tt.input)
+			if got != tt.want {
+				t.Errorf("isChannelName(%q) = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}

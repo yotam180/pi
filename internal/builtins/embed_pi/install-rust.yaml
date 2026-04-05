@@ -3,7 +3,7 @@ description: Install Rust at a specific version
 inputs:
   version:
     type: string
-    description: Rust version to install (e.g. "1.88", ">=1.80", "^1.85")
+    description: Rust version or channel to install (e.g. "1.88", ">=1.80", "^1.85", "stable", "nightly", "beta")
 
 install:
   test:

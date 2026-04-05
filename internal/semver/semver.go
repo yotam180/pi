@@ -11,6 +11,10 @@ import (
 // It normalises incomplete versions (e.g. "22" → "22.0.0") and supports the
 // constraint syntax from Masterminds/semver: exact ("22"), >=, ^, ~, ranges.
 //
+// When the constraint is a non-semver channel name (e.g. "stable", "nightly",
+// "beta"), any valid version is accepted. This supports tools like Rust's
+// rustup that use channel names alongside version numbers.
+//
 // Returns nil if satisfied, or an error describing the mismatch.
 func Satisfies(version, constraint string) error {
 	version = strings.TrimPrefix(version, "v")
@@ -26,6 +30,10 @@ func Satisfies(version, constraint string) error {
 		return fmt.Errorf("invalid version %q: %w", version, err)
 	}
 
+	if isChannelName(constraint) {
+		return nil
+	}
+
 	c, err := parseConstraint(constraint)
 	if err != nil {
 		return fmt.Errorf("invalid constraint %q: %w", constraint, err)
@@ -35,6 +43,23 @@ func Satisfies(version, constraint string) error {
 		return fmt.Errorf("%s does not satisfy %s", version, constraint)
 	}
 	return nil
+}
+
+// isChannelName returns true if the constraint is a non-semver channel name
+// (e.g. "stable", "nightly", "beta"). These are purely alphabetic strings with
+// no digits, dots, or semver operators. When a channel name is used as a
+// constraint, any valid installed version satisfies it.
+func isChannelName(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < 'a' || r > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 // parseConstraint handles the constraint string, normalising bare major/minor

@@ -12,7 +12,7 @@ internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS + Go-backed builtins, returns *discovery.Result; goBackedBuiltins() registers Go-native automations
     version_satisfies.go           pi:version-satisfies — Go-backed builtin for semver constraint checking; uses internal/semver
-    builtins_test.go               64 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility + 5 version-satisfies)
+    builtins_test.go               65 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility + 6 version-satisfies)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
@@ -142,8 +142,8 @@ internal/
     runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
     runtimes_test.go               16 tests
   semver/                          Semver-aware version constraint checking
-    semver.go                      Satisfies() — checks version against constraint; normalises incomplete versions; wraps Masterminds/semver/v3
-    semver_test.go                 31 tests (exact, >=, ^, ~, range, v-prefix, error cases, practical installer scenarios)
+    semver.go                      Satisfies() — checks version against constraint; normalises incomplete versions; wraps Masterminds/semver/v3; isChannelName() — detects non-semver channel names (stable, nightly, beta) and accepts any valid version
+    semver_test.go                 50 tests (exact, >=, ^, ~, range, v-prefix, error cases, practical installer scenarios, channel names, isChannelName unit)
   shell/                           Shell shortcut file generation and management
     shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(), GenerateCompletionScript(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function; shell completion script generation
     shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
