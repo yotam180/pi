@@ -36,7 +36,7 @@ internal/
     run.go                         pi run — resolves and executes automations; --repo flag; --with key=value flag; --silent flag; --loud flag; wires Provisioner from config
     list.go                        pi list — discovers and prints automations with [built-in] markers
     info.go                        pi info — shows automation name, description, input docs, if: conditions, and install lifecycle for installer automations
-    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer
+    setup.go                       pi setup — runs setup entries (with if: support), then pi shell (CI-aware); --silent flag; --loud flag; color-coded headers via display.Printer; auto-source rc file via PI_PARENT_EVAL_FILE
     shell.go                       pi shell — installs/uninstalls/lists shell shortcuts
     version.go                     pi version — prints version string
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
@@ -44,7 +44,7 @@ internal/
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
     list_test.go                   pi list tests (7 tests — includes INPUTS column and built-in marker tests)
     info_test.go                   pi info tests (13 tests — includes if: condition display and installer type)
-    setup_test.go                  pi setup tests (6 tests — includes --silent)
+    setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (3 tests)
     doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
   conditions/                      Boolean expression parser/evaluator for if: fields
@@ -54,8 +54,8 @@ internal/
     config.go                      ProjectConfig, Shortcut (with With field), SetupEntry (with If field), RuntimesConfig + Load()
     config_test.go                 17 tests
   automation/                      Individual automation YAML parsing
-    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, and Silent fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
-    automation_test.go             80 tests
+    automation.go                  Automation (with If, Install, and Requires fields), Step (with If, Env, Silent, and ParentShell fields), StepType, InputSpec, InstallSpec, InstallPhase, RequirementKind, Requirement + Load(), LoadFromBytes(), FilePath, Dir(), ResolveInputs(), InputEnvVars(), IsInstaller()
+    automation_test.go             84 tests
   display/                         Styled terminal output (color, TTY detection)
     display.go                     Printer struct, color methods (Plain, Dim, Green, Red, Bold), InstallStatus, SetupHeader, StepTrace, truncateTrace, shouldColor
     tty.go                         isTerminal() via golang.org/x/term
@@ -64,13 +64,13 @@ internal/
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor struct, ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), evaluateCondition(), pushCall()/popCall(), printer(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override
+    executor.go                    Executor struct (with ParentEvalFile field), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation
     runners.go                     Step runner implementations: execBash(), execPython(), execTypeScript(), execRun(), resolvePythonBin(), isCommandNotFound()
     install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), execScriptSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer
     helpers.go                     Shared utilities: isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
-    executor_test.go               102 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env + 7 step-trace/silent/loud)
+    executor_test.go               109 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env + 7 step-trace/silent/loud + 7 parent-shell)
     validate_test.go               40 tests (version extraction, version comparison, requirement checking, validation integration, error formatting, install hints, CheckRequirementForDoctor, InstallHintFor, provisioning integration, buildEnv with step env, prependPathInEnv)
     predicates_test.go             11 tests (+ subtests covering all predicate types)
   project/                         Project root detection
@@ -80,8 +80,8 @@ internal/
     runtimes.go                    Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath()
     runtimes_test.go               17 tests
   shell/                           Shell shortcut file generation and management
-    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(); with: shortcut codegen
-    shell_test.go                  14 tests
+    shell.go                       GenerateShellFile(), Install(), Uninstall(), ListInstalled(), PrimaryRCFile(); with: shortcut codegen; PI_PARENT_EVAL_FILE eval wrapper pattern; pi-setup-<project> helper function
+    shell_test.go                  16 tests
 ```
 
 ## Data Flow
@@ -268,6 +268,34 @@ Makefile                               build, vet, test, test-matrix targets
 - When a silent step uses `pipe_to: next`, pipe capture still works (only non-pipe stdout is discarded)
 - `pi info` shows `[silent]` annotation on steps with `silent: true`
 
+### Parent shell execution (`parent_shell: true` on steps)
+- Bash steps can declare `parent_shell: true` to run in the calling shell instead of as a subprocess
+- `parent_shell` is only valid on bash steps — error on python, typescript, or run steps
+- `parent_shell` cannot be combined with `pipe_to` — error at parse time
+- When a parent_shell step executes, PI does **not** run it; instead it appends the command to `Executor.ParentEvalFile`
+- `ParentEvalFile` is populated from the `PI_PARENT_EVAL_FILE` env var by `cli/run.go` and `cli/setup.go`
+- If `ParentEvalFile` is empty and a parent_shell step is encountered, an error is returned with a message about `PI_PARENT_EVAL_FILE`
+- After PI exits, the shell wrapper function (generated by `pi shell`) sources the eval file, running the commands in the parent shell
+- `execParentShell()` prints a trace line `  → parent: <command>` before writing to the eval file
+- `AppendToParentEval(path, command)` is the public helper that appends a line to the eval file
+- The `if:` condition check on parent_shell steps happens before the parent_shell check — skipped steps don't write to the eval file
+- `pi info` shows `[parent_shell]` annotation on steps with `parent_shell: true`
+- Use cases: `source venv/bin/activate`, `cd /some/dir`, `export VAR=value`
+
+### Auto-sourcing after `pi setup`
+- After `pi setup` installs shell shortcuts, if `PI_PARENT_EVAL_FILE` is set, PI writes `source <rc-file>` to the eval file
+- The rc file is determined by `shell.PrimaryRCFile()` — prefers `.zshrc`, falls back to `.bashrc`
+- This makes shortcuts immediately available in the current terminal without manual sourcing
+- `pi shell` generates a `pi-setup-<project>` helper function that wraps `pi setup` with the eval pattern
+- First-run bootstrapping: on the very first `pi setup` (before any shell wrapper exists), auto-sourcing doesn't work — the user runs `source ~/.zshrc` once, then `pi-setup-<project>` handles it automatically going forward
+
+### Shell wrapper eval pattern
+- All shell shortcut functions generated by `pi shell` use the `PI_PARENT_EVAL_FILE` eval pattern
+- Pattern: create a temp file → set `PI_PARENT_EVAL_FILE` → run `pi run` → source the file if non-empty → clean up → preserve exit code
+- `pi-setup-<project>` uses the same pattern wrapping `pi setup`
+- The temp file is always cleaned up, even if PI exits with an error
+- The exit code from `pi run` is preserved via `local _pi_exit=$?` → `return $_pi_exit`
+
 ### Step-level environment variables (`env:` on steps)
 - Steps can declare an `env:` mapping of key-value pairs to inject into the step's execution environment
 - `env:` vars are merged into the process environment after PI_INPUT_* vars and provisioned runtime PATH
@@ -309,12 +337,15 @@ Makefile                               build, vet, test, test-matrix targets
 - `pi shell` writes shell functions to `~/.pi/shell/<project>.sh` — one file per project
 - A source block (`for f in ~/.pi/shell/*.sh; do source "$f"; done`) is injected into `.zshrc` (and `.bashrc` if it exists)
 - Source line injection is idempotent — checked before appending
+- All shortcut functions use the `PI_PARENT_EVAL_FILE` eval wrapper pattern: create temp file → set env var → run `pi run` → source eval file if non-empty → clean up → preserve exit code
 - Default shortcuts `cd` to the repo root and call `pi run <automation> "$@"`
 - `anywhere: true` shortcuts use `pi run --repo <root> <automation> "$@"` without cd
+- Each project's shell file includes a `pi-setup-<project>` helper that wraps `pi setup` with the same eval pattern
 - `pi shell uninstall` removes the project file and cleans the source line if no repos remain
 - `pi shell list` shows all installed shortcut files
 - `pi setup` runs `pi shell` as its final step, skipping in CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.)
 - `pi setup --no-shell` explicitly skips the shell step
+- After `pi setup` installs shortcuts, if `PI_PARENT_EVAL_FILE` is set, `source <rc-file>` is written to the eval file for auto-sourcing
 
 ### Pre-execution requirement validation
 - Before executing any steps, `RunWithInputs()` calls `ValidateRequirements()` on the automation
@@ -497,7 +528,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 601 (80 automation + 42 builtins + 57 CLI + 30 conditions + 17 config + 35 display + 24 discovery + 146 executor + 4 project + 16 runtimes + 14 shell + 136 integration)
+Total tests: 622 (84 automation + 42 builtins + 59 CLI + 30 conditions + 17 config + 35 display + 24 discovery + 153 executor + 4 project + 16 runtimes + 16 shell + 142 integration)
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -539,3 +570,4 @@ tests/docker/
 - Runtime provisioning tests: `runtime-provisioning` and `runtime-provisioning-never` example workspaces; list automations, no-requirements runs normally, python already installed (no provisioning needed), never-mode errors, config parsing with auto/ask/direct modes
 - Step env tests: `step-env` example workspace; env vars injected into step execution, per-step isolation (no leaking between steps), `pi info` shows env annotations, env combined with if: conditions
 - Step visibility tests: `step-visibility` example workspace; default trace lines in stderr, `silent: true` suppresses trace and output, `--loud` overrides silent, all-silent produces no output, all-silent with `--loud` shows everything, `pi info` shows silent annotation
+- Parent shell tests: `parent-shell` example workspace; list automations, parent_shell step writes to eval file, mixed normal + parent_shell steps, error without PI_PARENT_EVAL_FILE, normal automations unaffected, `pi info` shows parent_shell annotation, shell codegen includes eval wrapper and pi-setup helper

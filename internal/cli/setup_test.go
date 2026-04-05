@@ -200,6 +200,64 @@ steps:
 	}
 }
 
+func TestSetup_WritesParentEvalFile(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	clearCIEnvVars(t)
+
+	evalFile := filepath.Join(tmpHome, "eval.sh")
+	t.Setenv("PI_PARENT_EVAL_FILE", evalFile)
+
+	root := setupSetupWorkspace(t)
+	t.Chdir(root)
+
+	zshrc := filepath.Join(tmpHome, ".zshrc")
+	os.WriteFile(zshrc, []byte("# existing config\n"), 0o644)
+
+	var stdout, stderr bytes.Buffer
+	err := runSetup(&stdout, &stderr, false, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(evalFile)
+	if err != nil {
+		t.Fatalf("reading eval file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "source") {
+		t.Errorf("eval file should contain source command, got: %q", content)
+	}
+	if !strings.Contains(content, ".zshrc") {
+		t.Errorf("eval file should reference .zshrc, got: %q", content)
+	}
+}
+
+func TestSetup_NoParentEvalFileWhenNoShell(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	clearCIEnvVars(t)
+
+	evalFile := filepath.Join(tmpHome, "eval.sh")
+	t.Setenv("PI_PARENT_EVAL_FILE", evalFile)
+
+	root := setupSetupWorkspace(t)
+	t.Chdir(root)
+
+	var stdout, stderr bytes.Buffer
+	err := runSetup(&stdout, &stderr, true, false, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := os.Stat(evalFile); !os.IsNotExist(err) {
+		data, _ := os.ReadFile(evalFile)
+		if len(data) > 0 {
+			t.Errorf("eval file should not be written when --no-shell, got: %q", string(data))
+		}
+	}
+}
+
 func TestSetup_Empty(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: empty\n"), 0o644)

@@ -1,0 +1,7 @@
+name: activate-venv
+description: Activate virtualenv in parent shell
+
+steps:
+  - bash: echo "preparing environment"
+  - bash: source venv/bin/activate
+    parent_shell: true

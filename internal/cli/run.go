@@ -92,12 +92,13 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 	}
 
 	exec := &executor.Executor{
-		RepoRoot:  root,
-		Discovery: result,
-		Stdout:    stdout,
-		Stderr:    stderr,
-		Silent:    silent,
-		Loud:      loud,
+		RepoRoot:       root,
+		Discovery:      result,
+		Stdout:         stdout,
+		Stderr:         stderr,
+		Silent:         silent,
+		Loud:           loud,
+		ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
 	}
 
 	cfg, cfgErr := config.Load(root)

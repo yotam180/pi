@@ -1814,6 +1814,96 @@ steps:
 	}
 }
 
+func TestLoad_ParentShellStep(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "activate.yaml", `
+name: activate-venv
+description: Activate virtualenv in parent shell
+
+steps:
+  - bash: source venv/bin/activate
+    parent_shell: true
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(a.Steps) != 1 {
+		t.Fatalf("steps count = %d, want 1", len(a.Steps))
+	}
+	if !a.Steps[0].ParentShell {
+		t.Error("expected parent_shell to be true")
+	}
+	if a.Steps[0].Type != StepTypeBash {
+		t.Errorf("step type = %q, want bash", a.Steps[0].Type)
+	}
+}
+
+func TestLoad_ParentShellOnNonBashStep_Error(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: bad-parent-shell
+description: Invalid parent_shell on python
+
+steps:
+  - python: print("hello")
+    parent_shell: true
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for parent_shell on non-bash step")
+	}
+	if !strings.Contains(err.Error(), "parent_shell") {
+		t.Errorf("error should mention parent_shell, got: %v", err)
+	}
+}
+
+func TestLoad_ParentShellWithPipeTo_Error(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+name: bad-pipe-parent
+description: Invalid parent_shell with pipe_to
+
+steps:
+  - bash: echo test
+    parent_shell: true
+    pipe_to: next
+  - bash: cat
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for parent_shell with pipe_to")
+	}
+	if !strings.Contains(err.Error(), "pipe_to") {
+		t.Errorf("error should mention pipe_to, got: %v", err)
+	}
+}
+
+func TestLoad_ParentShellFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "normal.yaml", `
+name: normal
+description: Normal step
+
+steps:
+  - bash: echo hello
+    parent_shell: false
+`)
+
+	a, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if a.Steps[0].ParentShell {
+		t.Error("expected parent_shell to be false")
+	}
+}
+
 func TestValidateVersionString(t *testing.T) {
 	tests := []struct {
 		input   string

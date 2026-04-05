@@ -35,6 +35,12 @@ func TestGenerateShellFile_BasicShortcuts(t *testing.T) {
 	if !strings.Contains(content, "pi run docker/up") {
 		t.Error("expected pi run docker/up")
 	}
+	if !strings.Contains(content, "PI_PARENT_EVAL_FILE") {
+		t.Error("expected PI_PARENT_EVAL_FILE eval wrapper")
+	}
+	if !strings.Contains(content, "function pi-setup-myproject()") {
+		t.Error("expected pi-setup helper function")
+	}
 }
 
 func TestGenerateShellFile_AnywhereShortcut(t *testing.T) {
@@ -47,15 +53,32 @@ func TestGenerateShellFile_AnywhereShortcut(t *testing.T) {
 
 	content := GenerateShellFile(cfg, "pi", "/home/dev/myproject")
 
-	if strings.Contains(content, "(cd") {
+	// The deploy function itself should not cd (pi-setup helper does cd, which is fine)
+	deployFn := extractFunction(content, "deploy")
+	if strings.Contains(deployFn, "(cd") {
 		t.Error("anywhere shortcut should not cd")
 	}
-	if !strings.Contains(content, "--repo") {
+	if !strings.Contains(deployFn, "--repo") {
 		t.Error("anywhere shortcut should use --repo flag")
 	}
-	if !strings.Contains(content, `deploy/push "$@"`) {
+	if !strings.Contains(deployFn, `deploy/push "$@"`) {
 		t.Error("expected args forwarding")
 	}
+}
+
+// extractFunction extracts a single function definition from shell content by name.
+func extractFunction(content, name string) string {
+	marker := "function " + name + "()"
+	idx := strings.Index(content, marker)
+	if idx < 0 {
+		return ""
+	}
+	rest := content[idx:]
+	end := strings.Index(rest[1:], "\nfunction ")
+	if end < 0 {
+		return rest
+	}
+	return rest[:end+1]
 }
 
 func TestGenerateShellFile_Empty(t *testing.T) {
@@ -94,12 +117,23 @@ func TestGenerateFunction_Default(t *testing.T) {
 	sc := config.Shortcut{Run: "docker/up"}
 	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo")
 
-	expected := `function dup() {
-  (cd "/home/dev/repo" && /usr/local/bin/pi run docker/up "$@")
-}
-`
-	if fn != expected {
-		t.Errorf("unexpected function:\ngot:\n%s\nwant:\n%s", fn, expected)
+	if !strings.Contains(fn, "function dup()") {
+		t.Errorf("expected function dup(), got:\n%s", fn)
+	}
+	if !strings.Contains(fn, `cd "/home/dev/repo"`) {
+		t.Errorf("expected cd to repo root, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, `/usr/local/bin/pi run docker/up "$@"`) {
+		t.Errorf("expected pi run command, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, "PI_PARENT_EVAL_FILE") {
+		t.Errorf("expected PI_PARENT_EVAL_FILE eval wrapper, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, `source "$_pi_eval_file"`) {
+		t.Errorf("expected source of eval file, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, `rm -f "$_pi_eval_file"`) {
+		t.Errorf("expected cleanup of eval file, got:\n%s", fn)
 	}
 }
 
@@ -107,12 +141,17 @@ func TestGenerateFunction_Anywhere(t *testing.T) {
 	sc := config.Shortcut{Run: "deploy/push", Anywhere: true}
 	fn := generateFunction("deploy", sc, "/usr/local/bin/pi", "/home/dev/repo")
 
-	expected := `function deploy() {
-  /usr/local/bin/pi run --repo "/home/dev/repo" deploy/push "$@"
-}
-`
-	if fn != expected {
-		t.Errorf("unexpected function:\ngot:\n%s\nwant:\n%s", fn, expected)
+	if !strings.Contains(fn, "function deploy()") {
+		t.Errorf("expected function deploy(), got:\n%s", fn)
+	}
+	if strings.Contains(fn, "(cd") {
+		t.Errorf("anywhere shortcut should not cd, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, `--repo "/home/dev/repo"`) {
+		t.Errorf("expected --repo flag, got:\n%s", fn)
+	}
+	if !strings.Contains(fn, "PI_PARENT_EVAL_FILE") {
+		t.Errorf("expected PI_PARENT_EVAL_FILE eval wrapper, got:\n%s", fn)
 	}
 }
 
@@ -284,8 +323,53 @@ func TestGenerateShellFile_WithMapping(t *testing.T) {
 	if !strings.Contains(content, "--with tail=\"$2\"") {
 		t.Errorf("expected --with tail=\"$2\" in output, got:\n%s", content)
 	}
-	if strings.Contains(content, "\"$@\"") {
-		t.Errorf("with-mapped shortcut should not include $@ passthrough, got:\n%s", content)
+	// The dlogs function itself should not contain "$@" — only the pi-setup helper uses it
+	dlogsFn := extractFunction(content, "dlogs")
+	if strings.Contains(dlogsFn, "\"$@\"") {
+		t.Errorf("with-mapped shortcut should not include $@ passthrough, got:\n%s", dlogsFn)
+	}
+}
+
+func TestGenerateShellFile_SetupHelper(t *testing.T) {
+	cfg := &config.ProjectConfig{
+		Project: "myproject",
+		Shortcuts: map[string]config.Shortcut{
+			"up": {Run: "docker/up"},
+		},
+	}
+
+	content := GenerateShellFile(cfg, "pi", "/home/dev/myproject")
+
+	if !strings.Contains(content, "function pi-setup-myproject()") {
+		t.Error("expected pi-setup-myproject helper function")
+	}
+	setupFn := extractFunction(content, "pi-setup-myproject")
+	if !strings.Contains(setupFn, "PI_PARENT_EVAL_FILE") {
+		t.Error("setup helper should use PI_PARENT_EVAL_FILE")
+	}
+	if !strings.Contains(setupFn, "pi setup") {
+		t.Error("setup helper should call pi setup")
+	}
+	if !strings.Contains(setupFn, `source "$_pi_eval_file"`) {
+		t.Error("setup helper should source eval file")
+	}
+}
+
+func TestGenerateShellFile_EvalWrapperExitCode(t *testing.T) {
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Shortcuts: map[string]config.Shortcut{
+			"build": {Run: "build/run"},
+		},
+	}
+
+	content := GenerateShellFile(cfg, "pi", "/repo")
+	buildFn := extractFunction(content, "build")
+	if !strings.Contains(buildFn, "return $_pi_exit") {
+		t.Error("eval wrapper should preserve exit code")
+	}
+	if !strings.Contains(buildFn, "local _pi_exit=$?") {
+		t.Error("eval wrapper should capture exit code")
 	}
 }
 

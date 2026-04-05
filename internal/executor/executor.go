@@ -61,6 +61,12 @@ type Executor struct {
 
 	// Printer handles styled output. If nil, a printer is created lazily from Stderr.
 	Printer *display.Printer
+
+	// ParentEvalFile is the path to a file where parent-shell commands are written.
+	// Steps with parent_shell: true append their commands to this file instead of
+	// executing them. The calling shell wrapper evals the file after PI exits.
+	// If empty, parent_shell steps produce an error.
+	ParentEvalFile string
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -142,6 +148,13 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 				}
 				continue
 			}
+		}
+
+		if step.ParentShell {
+			if err := e.execParentShell(step); err != nil {
+				return fmt.Errorf("automation %q step[%d]: %w", a.Name, i, err)
+			}
+			continue
 		}
 
 		suppress := step.Silent && !e.Loud
@@ -257,6 +270,30 @@ func (e *Executor) popCall() {
 	if len(e.callStack) > 0 {
 		e.callStack = e.callStack[:len(e.callStack)-1]
 	}
+}
+
+// execParentShell writes a parent_shell step's command to the eval file
+// instead of executing it. The calling shell wrapper sources the file after PI exits.
+func (e *Executor) execParentShell(step automation.Step) error {
+	if e.ParentEvalFile == "" {
+		return fmt.Errorf("parent_shell step requires PI_PARENT_EVAL_FILE to be set (run via a PI shell shortcut)")
+	}
+	e.printer().StepTrace("parent", step.Value)
+	return AppendToParentEval(e.ParentEvalFile, step.Value)
+}
+
+// AppendToParentEval appends a command to the parent eval file.
+// The file is created if it doesn't exist.
+func AppendToParentEval(path, command string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("opening parent eval file: %w", err)
+	}
+	defer f.Close()
+	if _, err := fmt.Fprintln(f, command); err != nil {
+		return fmt.Errorf("writing to parent eval file: %w", err)
+	}
+	return nil
 }
 
 func (e *Executor) stdout() io.Writer {

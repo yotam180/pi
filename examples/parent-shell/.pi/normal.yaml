@@ -1,0 +1,5 @@
+name: normal
+description: Normal automation without parent_shell
+
+steps:
+  - bash: echo "normal step"

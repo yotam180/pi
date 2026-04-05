@@ -1,7 +1,7 @@
 # Improve Display UX
 
 ## Status
-todo
+done
 
 ## Priority
 medium

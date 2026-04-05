@@ -1,0 +1,4 @@
+project: parent-shell-test
+
+shortcuts:
+  ps-activate: activate-venv

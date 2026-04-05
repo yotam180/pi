@@ -83,13 +83,14 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 		}
 
 		exec := &executor.Executor{
-			RepoRoot:  root,
-			Discovery: result,
-			Stdout:    stdout,
-			Stderr:    stderr,
-			Silent:    silent,
-			Loud:      loud,
-			Printer:   stderrPrinter,
+			RepoRoot:       root,
+			Discovery:      result,
+			Stdout:         stdout,
+			Stderr:         stderr,
+			Silent:         silent,
+			Loud:           loud,
+			Printer:        stderrPrinter,
+			ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
 		}
 
 		if cfg.EffectiveProvisionMode() != config.ProvisionNever {
@@ -139,6 +140,14 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 			return err
 		}
 		fmt.Fprintf(stdout, "Installed %d shortcut(s) to %s\n", len(cfg.Shortcuts), shellPath)
+
+		if evalFile := os.Getenv("PI_PARENT_EVAL_FILE"); evalFile != "" {
+			if rc := shell.PrimaryRCFile(); rc != "" {
+				if err := executor.AppendToParentEval(evalFile, fmt.Sprintf("source %q", rc)); err != nil {
+					fmt.Fprintf(stderr, "warning: could not write parent eval file: %v\n", err)
+				}
+			}
+		}
 	}
 
 	out.Green("Setup complete.\n")

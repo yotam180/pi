@@ -184,13 +184,14 @@ func (s InputSpec) IsRequired() bool {
 
 // Step represents a single step within an automation.
 type Step struct {
-	Type   StepType          `yaml:"-"`
-	Value  string            `yaml:"-"`
-	PipeTo string            `yaml:"pipe_to"`
-	With   map[string]string `yaml:"-"`
-	If     string            `yaml:"-"`
-	Env    map[string]string `yaml:"-"`
-	Silent bool              `yaml:"-"`
+	Type        StepType          `yaml:"-"`
+	Value       string            `yaml:"-"`
+	PipeTo      string            `yaml:"pipe_to"`
+	With        map[string]string `yaml:"-"`
+	If          string            `yaml:"-"`
+	Env         map[string]string `yaml:"-"`
+	Silent      bool              `yaml:"-"`
+	ParentShell bool              `yaml:"-"`
 }
 
 // InstallPhase represents a phase (test, run, verify) in an install: block.
@@ -273,15 +274,16 @@ func (a *Automation) IsInstaller() bool {
 // stepRaw is the intermediate representation used during YAML unmarshalling.
 // Each step is a mapping that may contain one of the step type keys.
 type stepRaw struct {
-	Bash       *string           `yaml:"bash"`
-	Run        *string           `yaml:"run"`
-	Python     *string           `yaml:"python"`
-	TypeScript *string           `yaml:"typescript"`
-	PipeTo     string            `yaml:"pipe_to"`
-	With       map[string]string `yaml:"with"`
-	If         string            `yaml:"if"`
-	Env        map[string]string `yaml:"env"`
-	Silent     bool              `yaml:"silent"`
+	Bash        *string           `yaml:"bash"`
+	Run         *string           `yaml:"run"`
+	Python      *string           `yaml:"python"`
+	TypeScript  *string           `yaml:"typescript"`
+	PipeTo      string            `yaml:"pipe_to"`
+	With        map[string]string `yaml:"with"`
+	If          string            `yaml:"if"`
+	Env         map[string]string `yaml:"env"`
+	Silent      bool              `yaml:"silent"`
+	ParentShell bool              `yaml:"parent_shell"`
 }
 
 // inputsRaw preserves declaration order for positional mapping.
@@ -393,18 +395,27 @@ func (sr *stepRaw) toStep(index int) (Step, error) {
 	}
 
 	step := Step{
-		Type:   s.t,
-		Value:  s.v,
-		PipeTo: sr.PipeTo,
-		If:     sr.If,
-		Env:    sr.Env,
-		Silent: sr.Silent,
+		Type:        s.t,
+		Value:       s.v,
+		PipeTo:      sr.PipeTo,
+		If:          sr.If,
+		Env:         sr.Env,
+		Silent:      sr.Silent,
+		ParentShell: sr.ParentShell,
 	}
 	if len(sr.With) > 0 {
 		if s.t != StepTypeRun {
 			return Step{}, fmt.Errorf("step[%d]: 'with' is only valid on 'run' steps", index)
 		}
 		step.With = sr.With
+	}
+	if sr.ParentShell {
+		if s.t != StepTypeBash {
+			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' is only valid on 'bash' steps", index)
+		}
+		if sr.PipeTo != "" {
+			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' cannot be combined with 'pipe_to'", index)
+		}
 	}
 	return step, nil
 }
