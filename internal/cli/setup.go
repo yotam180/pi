@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
 	"github.com/vyper-tooling/pi/internal/runtimes"
@@ -64,6 +65,9 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 		return err
 	}
 
+	out := display.New(stdout)
+	stderrPrinter := display.New(stderr)
+
 	if len(cfg.Setup) == 0 && len(cfg.Shortcuts) == 0 {
 		fmt.Fprintln(stdout, "Nothing to set up (no setup entries or shortcuts in pi.yaml).")
 		return nil
@@ -81,6 +85,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 			Stdout:    stdout,
 			Stderr:    stderr,
 			Silent:    silent,
+			Printer:   stderrPrinter,
 		}
 
 		if cfg.EffectiveProvisionMode() != config.ProvisionNever {
@@ -94,11 +99,11 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 					return fmt.Errorf("setup[%d] if: %w", i, err)
 				}
 				if skip {
-					fmt.Fprintf(stdout, "==> setup[%d]: %s [skipped] (condition: %s)\n", i, entry.Run, entry.If)
+					out.SetupHeader("==> setup[%d]: %s [skipped] (condition: %s)\n", i, entry.Run, entry.If)
 					continue
 				}
 			}
-			fmt.Fprintf(stdout, "==> setup[%d]: %s\n", i, entry.Run)
+			out.SetupHeader("==> setup[%d]: %s\n", i, entry.Run)
 			a, err := result.Find(entry.Run)
 			if err != nil {
 				return fmt.Errorf("setup[%d]: %w", i, err)
@@ -120,7 +125,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 	}
 
 	if len(cfg.Shortcuts) > 0 {
-		fmt.Fprintln(stdout, "==> Installing shell shortcuts...")
+		out.SetupHeader("==> Installing shell shortcuts...\n")
 		piBin, err := resolvePiBinary()
 		if err != nil {
 			return err
@@ -132,7 +137,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent bool) error {
 		fmt.Fprintf(stdout, "Installed %d shortcut(s) to %s\n", len(cfg.Shortcuts), shellPath)
 	}
 
-	fmt.Fprintln(stdout, "Setup complete.")
+	out.Green("Setup complete.\n")
 	return nil
 }
 

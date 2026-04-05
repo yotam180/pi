@@ -12,6 +12,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
+	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
@@ -55,6 +56,9 @@ type Executor struct {
 	// runtimePaths accumulates provisioned bin directories to prepend to PATH
 	// for all step executions within the current automation.
 	runtimePaths []string
+
+	// Printer handles styled output. If nil, a printer is created lazily from Stderr.
+	Printer *display.Printer
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -337,11 +341,15 @@ func (e *Executor) printInstallStatus(icon, name, status, version string) {
 	if e.Silent {
 		return
 	}
-	if version != "" {
-		fmt.Fprintf(e.stderr(), "  %s  %-25s %s (%s)\n", icon, name, status, version)
-	} else {
-		fmt.Fprintf(e.stderr(), "  %s  %-25s %s\n", icon, name, status)
+	e.printer().InstallStatus(icon, name, status, version)
+}
+
+// printer returns the executor's display Printer, lazily creating one from Stderr.
+func (e *Executor) printer() *display.Printer {
+	if e.Printer != nil {
+		return e.Printer
 	}
+	return display.New(e.stderr())
 }
 
 // printIndentedStderr prints stderr output indented for the error block.

@@ -1,0 +1,121 @@
+package display
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+// ANSI escape sequences for styling terminal output.
+const (
+	reset     = "\033[0m"
+	bold      = "\033[1m"
+	dim       = "\033[2m"
+	red       = "\033[31m"
+	green     = "\033[32m"
+	boldRed   = "\033[1;31m"
+	boldGreen = "\033[1;32m"
+)
+
+// Printer writes styled output to a writer. When color is disabled
+// (non-TTY, NO_COLOR set, or explicitly disabled), all style methods
+// produce plain text.
+type Printer struct {
+	w     io.Writer
+	color bool
+}
+
+// New creates a Printer that writes to w. Color is enabled only when
+// w is a TTY and the NO_COLOR environment variable is not set.
+func New(w io.Writer) *Printer {
+	return &Printer{w: w, color: shouldColor(w)}
+}
+
+// NewWithColor creates a Printer with an explicit color toggle.
+// Useful for testing or when the caller has already determined the mode.
+func NewWithColor(w io.Writer, color bool) *Printer {
+	return &Printer{w: w, color: color}
+}
+
+// Plain writes unformatted text (respects Printf-style format).
+func (p *Printer) Plain(format string, a ...any) {
+	fmt.Fprintf(p.w, format, a...)
+}
+
+// Dim writes text in dim/grey style.
+func (p *Printer) Dim(format string, a ...any) {
+	p.styled(dim, format, a...)
+}
+
+// Green writes text in bold green style.
+func (p *Printer) Green(format string, a ...any) {
+	p.styled(boldGreen, format, a...)
+}
+
+// Red writes text in bold red style.
+func (p *Printer) Red(format string, a ...any) {
+	p.styled(boldRed, format, a...)
+}
+
+// Bold writes text in bold style.
+func (p *Printer) Bold(format string, a ...any) {
+	p.styled(bold, format, a...)
+}
+
+// InstallStatus prints a formatted installer status line with the
+// appropriate color for the icon/status combination:
+//   - "✓" + "already installed" → dim
+//   - "✓" + other (e.g. "installed") → bold green
+//   - "→" → plain
+//   - "✗" → bold red
+func (p *Printer) InstallStatus(icon, name, status, version string) {
+	var line string
+	if version != "" {
+		line = fmt.Sprintf("  %s  %-25s %s (%s)\n", icon, name, status, version)
+	} else {
+		line = fmt.Sprintf("  %s  %-25s %s\n", icon, name, status)
+	}
+
+	switch {
+	case icon == "✗":
+		p.Red("%s", line)
+	case icon == "✓" && strings.Contains(status, "already"):
+		p.Dim("%s", line)
+	case icon == "✓":
+		p.Green("%s", line)
+	default:
+		p.Plain("%s", line)
+	}
+}
+
+// SetupHeader prints a setup entry header line (e.g. "==> setup[0]: docker/up")
+// in dim style.
+func (p *Printer) SetupHeader(format string, a ...any) {
+	p.Dim(format, a...)
+}
+
+// styled wraps text in ANSI codes when color is enabled.
+func (p *Printer) styled(code, format string, a ...any) {
+	if !p.color {
+		fmt.Fprintf(p.w, format, a...)
+		return
+	}
+	text := fmt.Sprintf(format, a...)
+	fmt.Fprintf(p.w, "%s%s%s", code, text, reset)
+}
+
+// shouldColor returns true when the writer supports color output.
+// Color is disabled when:
+//   - NO_COLOR environment variable is set (any value)
+//   - The writer is not a *os.File backed by a terminal
+func shouldColor(w io.Writer) bool {
+	if _, ok := os.LookupEnv("NO_COLOR"); ok {
+		return false
+	}
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return isTerminal(f)
+}

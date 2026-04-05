@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
 )
@@ -47,6 +48,7 @@ func runDoctor(startDir string, out io.Writer) error {
 		return nil
 	}
 
+	p := display.New(out)
 	env := executor.DefaultRuntimeEnv()
 	anyFailed := false
 	anyPrinted := false
@@ -60,7 +62,7 @@ func runDoctor(startDir string, out io.Writer) error {
 		if anyPrinted {
 			fmt.Fprintln(out)
 		}
-		fmt.Fprintf(out, "  %s\n", name)
+		p.Bold("  %s\n", name)
 		anyPrinted = true
 
 		for _, req := range a.Requires {
@@ -68,17 +70,17 @@ func runDoctor(startDir string, out io.Writer) error {
 			if check.Satisfied {
 				label := formatDoctorLabel(req)
 				if check.DetectedVersion != "" {
-					fmt.Fprintf(out, "    ✓ %-25s (%s)\n", label, check.DetectedVersion)
+					p.Green("    ✓ %-25s (%s)\n", label, check.DetectedVersion)
 				} else {
-					fmt.Fprintf(out, "    ✓ %s\n", label)
+					p.Green("    ✓ %s\n", label)
 				}
 			} else {
 				label := formatDoctorLabel(req)
 				hint := executor.InstallHintFor(req)
 				if hint != "" {
-					fmt.Fprintf(out, "    ✗ %-25s %s → %s\n", label, check.Error, hint)
+					p.Red("    ✗ %-25s %s → %s\n", label, check.Error, hint)
 				} else {
-					fmt.Fprintf(out, "    ✗ %-25s %s\n", label, check.Error)
+					p.Red("    ✗ %-25s %s\n", label, check.Error)
 				}
 				anyFailed = true
 			}
