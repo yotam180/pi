@@ -2,18 +2,24 @@ package cli
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/config"
 )
 
+func writeTestPiDir(t *testing.T, dir, name, content string) {
+	t.Helper()
+	writeTestFile(t, dir, filepath.Join(".pi", name), content)
+}
+
 func TestRunSetupAdd_BareString(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -40,7 +46,7 @@ func TestRunSetupAdd_ShortFormExpansion(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "python", nil, "3.13", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "python", nil, "3.13", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +76,7 @@ func TestRunSetupAdd_PiPrefixExpansion(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:go", nil, "1.23", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:go", nil, "1.23", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +96,7 @@ func TestRunSetupAdd_WithIfFlag(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-homebrew", nil, "", "os.macos", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-homebrew", nil, "", "os.macos", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,7 +116,7 @@ func TestRunSetupAdd_KeyValueArgs(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:cursor/install-extensions", []string{"file=.pi/cursor/extensions.txt"}, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:cursor/install-extensions", []string{"file=.pi/cursor/extensions.txt"}, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +136,7 @@ func TestRunSetupAdd_InvalidKeyValue(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-uv", []string{"badarg"}, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-uv", []string{"badarg"}, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err == nil {
 		t.Fatal("expected error for invalid key=value")
 	}
@@ -147,7 +153,7 @@ setup:
 `)
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error (idempotent): %v", err)
 	}
@@ -161,7 +167,7 @@ func TestRunSetupAdd_NoPiYaml_YesFlag(t *testing.T) {
 	dir := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", true, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", true, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -190,7 +196,7 @@ func TestRunSetupAdd_NoPiYaml_NonInteractive(t *testing.T) {
 	dir := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-uv", nil, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -213,7 +219,7 @@ func TestRunSetupAdd_LocalAutomation(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "setup/install-deps", nil, "", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "setup/install-deps", nil, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -237,7 +243,7 @@ func TestRunSetupAdd_SourceFlag(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:git/install-hooks", nil, "", "", ".pi/hooks", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:git/install-hooks", nil, "", "", ".pi/hooks", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,7 +263,7 @@ func TestRunSetupAdd_GroupsFlag(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:uv/sync", nil, "", "", "", "dev,local", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:uv/sync", nil, "", "", "", "dev,local", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -277,7 +283,7 @@ func TestRunSetupAdd_ReplaceSameRunTarget(t *testing.T) {
 	writeTestFile(t, dir, "pi.yaml", "project: test\nsetup:\n  - pi:install-node\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "pi:install-node", nil, "22", "", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "pi:install-node", nil, "22", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -302,12 +308,100 @@ func TestRunSetupAdd_ReplaceSameRunTarget(t *testing.T) {
 	}
 }
 
+func TestRunSetupAdd_InvokesBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "pi.yaml", "project: test\n")
+	writeTestPiDir(t, dir, "greet.yaml", "description: Say hello\nbash: echo hello\n")
+
+	var stdout, stderr bytes.Buffer
+	err := runSetupAdd(dir, "greet", nil, "", "", "", "", false, false, strings.NewReader(""), &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(stdout.String(), "Added to setup") {
+		t.Errorf("stdout should say 'Added to setup', got: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "hello") {
+		t.Errorf("stdout should contain automation output 'hello', got: %q", stdout.String())
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("reload error: %v", err)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+}
+
+func TestRunSetupAdd_InvokeFailure_NoPiYamlModification(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "pi.yaml", "project: test\n")
+	writeTestPiDir(t, dir, "fail.yaml", "description: Failing automation\nbash: exit 1\n")
+
+	var stdout, stderr bytes.Buffer
+	err := runSetupAdd(dir, "fail", nil, "", "", "", "", false, false, strings.NewReader(""), &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for failing automation")
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("reload error: %v", err)
+	}
+	if len(cfg.Setup) != 0 {
+		t.Errorf("setup count = %d, want 0 (pi.yaml should not be modified on failure)", len(cfg.Setup))
+	}
+}
+
+func TestRunSetupAdd_OnlyAddSkipsExecution(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "pi.yaml", "project: test\n")
+
+	var stdout, stderr bytes.Buffer
+	err := runSetupAdd(dir, "nonexistent/automation", nil, "", "", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error with --only-add: %v", err)
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("reload error: %v", err)
+	}
+	if len(cfg.Setup) != 1 {
+		t.Fatalf("setup count = %d, want 1", len(cfg.Setup))
+	}
+	if cfg.Setup[0].Run != "nonexistent/automation" {
+		t.Errorf("run = %q, want %q", cfg.Setup[0].Run, "nonexistent/automation")
+	}
+}
+
+func TestRunSetupAdd_InvokeNotFound_NoPiYamlModification(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "pi.yaml", "project: test\n")
+
+	var stdout, stderr bytes.Buffer
+	err := runSetupAdd(dir, "nonexistent/automation", nil, "", "", "", "", false, false, strings.NewReader(""), &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for not-found automation")
+	}
+
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatalf("reload error: %v", err)
+	}
+	if len(cfg.Setup) != 0 {
+		t.Errorf("setup count = %d, want 0 (pi.yaml should not be modified when automation not found)", len(cfg.Setup))
+	}
+}
+
 func TestRunSetupAdd_CombinedFlags(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "pi.yaml", "project: test\n")
 
 	var stdout, stderr bytes.Buffer
-	err := runSetupAdd(dir, "python", nil, "3.13", "os.macos", "", "", false, strings.NewReader(""), &stdout, &stderr)
+	err := runSetupAdd(dir, "python", nil, "3.13", "os.macos", "", "", false, true, strings.NewReader(""), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

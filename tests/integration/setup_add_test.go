@@ -11,7 +11,7 @@ func TestSetupAdd_BareString(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:install-uv")
+	out, code := runPi(t, dir, "setup", "add", "pi:install-uv", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -30,7 +30,7 @@ func TestSetupAdd_ShortFormResolution(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "python", "--version", "3.13")
+	out, code := runPi(t, dir, "setup", "add", "python", "--version", "3.13", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -56,7 +56,7 @@ func TestSetupAdd_WithIfFlag(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "homebrew", "--if", "os.macos")
+	out, code := runPi(t, dir, "setup", "add", "homebrew", "--if", "os.macos", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -72,7 +72,7 @@ func TestSetupAdd_IdempotentDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\nsetup:\n  - pi:install-uv\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:install-uv")
+	out, code := runPi(t, dir, "setup", "add", "pi:install-uv", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -86,7 +86,7 @@ func TestSetupAdd_KeyValueArgs(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:cursor/install-extensions", "file=.pi/cursor/extensions.txt")
+	out, code := runPi(t, dir, "setup", "add", "pi:cursor/install-extensions", "file=.pi/cursor/extensions.txt", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -104,7 +104,7 @@ func TestSetupAdd_KeyValueArgs(t *testing.T) {
 func TestSetupAdd_NoPiYaml_InitsProject(t *testing.T) {
 	dir := t.TempDir()
 
-	out, code := runPi(t, dir, "setup", "add", "uv", "--yes")
+	out, code := runPi(t, dir, "setup", "add", "uv", "--yes", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -130,7 +130,7 @@ func TestSetupAdd_LocalAutomation(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "setup/install-deps")
+	out, code := runPi(t, dir, "setup", "add", "setup/install-deps", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -149,13 +149,13 @@ func TestSetupAdd_MultipleAdds(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	if _, code := runPi(t, dir, "setup", "add", "homebrew", "--if", "os.macos"); code != 0 {
+	if _, code := runPi(t, dir, "setup", "add", "homebrew", "--if", "os.macos", "--only-add"); code != 0 {
 		t.Fatal("first add failed")
 	}
-	if _, code := runPi(t, dir, "setup", "add", "uv"); code != 0 {
+	if _, code := runPi(t, dir, "setup", "add", "uv", "--only-add"); code != 0 {
 		t.Fatal("second add failed")
 	}
-	if _, code := runPi(t, dir, "setup", "add", "python", "--version", "3.13"); code != 0 {
+	if _, code := runPi(t, dir, "setup", "add", "python", "--version", "3.13", "--only-add"); code != 0 {
 		t.Fatal("third add failed")
 	}
 
@@ -186,7 +186,7 @@ func TestSetupAdd_PiPrefixExpansion(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:go", "--version", "1.23")
+	out, code := runPi(t, dir, "setup", "add", "pi:go", "--version", "1.23", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -205,7 +205,7 @@ func TestSetupAdd_ReplaceSameRunTarget(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\nsetup:\n  - pi:install-node\n"), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:install-node", "--version", "22")
+	out, code := runPi(t, dir, "setup", "add", "pi:install-node", "--version", "22", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -229,7 +229,7 @@ func TestSetupAdd_ReplacePreservesPosition(t *testing.T) {
 	initial := "project: test\nsetup:\n  - pi:install-uv\n  - pi:install-node\n  - pi:install-python\n"
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(initial), 0o644)
 
-	out, code := runPi(t, dir, "setup", "add", "pi:install-node", "--version", "22")
+	out, code := runPi(t, dir, "setup", "add", "pi:install-node", "--version", "22", "--only-add")
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
 	}
@@ -249,7 +249,7 @@ func TestSetupAdd_PreservesExistingContent(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: my-app\n\nshortcuts:\n  up: docker/up\n"), 0o644)
 
-	_, code := runPi(t, dir, "setup", "add", "uv")
+	_, code := runPi(t, dir, "setup", "add", "uv", "--only-add")
 	if code != 0 {
 		t.Fatal("add failed")
 	}
@@ -264,5 +264,76 @@ func TestSetupAdd_PreservesExistingContent(t *testing.T) {
 	}
 	if !strings.Contains(content, "pi:install-uv") {
 		t.Error("new entry should be added")
+	}
+}
+
+func TestSetupAdd_InvokesBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, ".pi"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".pi", "greet.yaml"), []byte("description: Say hello\nbash: echo hello-from-greet\n"), 0o644)
+
+	out, code := runPi(t, dir, "setup", "add", "greet")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
+	}
+
+	if !strings.Contains(out, "hello-from-greet") {
+		t.Errorf("output should contain automation output, got: %q", out)
+	}
+	if !strings.Contains(out, "Added to setup") {
+		t.Errorf("output should say 'Added to setup', got: %q", out)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if !strings.Contains(string(data), "greet") {
+		t.Errorf("pi.yaml should contain greet, got: %q", string(data))
+	}
+}
+
+func TestSetupAdd_InvokeFailure_DoesNotModifyPiYaml(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, ".pi"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".pi", "fail.yaml"), []byte("description: Fail\nbash: exit 1\n"), 0o644)
+
+	_, code := runPi(t, dir, "setup", "add", "fail")
+	if code == 0 {
+		t.Fatal("expected non-zero exit code for failing automation")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if strings.Contains(string(data), "fail") {
+		t.Errorf("pi.yaml should not be modified on failure, got: %q", string(data))
+	}
+}
+
+func TestSetupAdd_OnlyAddSkipsExecution(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
+
+	out, code := runPi(t, dir, "setup", "add", "nonexistent/automation", "--only-add")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\noutput: %s", code, out)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if !strings.Contains(string(data), "nonexistent/automation") {
+		t.Errorf("pi.yaml should contain entry, got: %q", string(data))
+	}
+}
+
+func TestSetupAdd_NotFoundWithoutOnlyAdd(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
+
+	_, code := runPi(t, dir, "setup", "add", "nonexistent/automation")
+	if code == 0 {
+		t.Fatal("expected non-zero exit code for not-found automation without --only-add")
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "pi.yaml"))
+	if strings.Contains(string(data), "nonexistent") {
+		t.Errorf("pi.yaml should not be modified when automation is not found, got: %q", string(data))
 	}
 }

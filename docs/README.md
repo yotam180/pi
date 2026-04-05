@@ -705,9 +705,10 @@ These are defined in the PI repository's own `.pi/` folder and compiled into the
 | `pi setup --no-shell`         | Run setup automations without installing shortcuts       |
 | `pi setup --silent`           | Suppress PI status lines for installer automations       |
 | `pi setup --loud`             | Force all steps to print trace lines and output          |
-| `pi setup add <name> [key=value ...]` | Add a setup entry to `pi.yaml`; resolves short-form names (`python` → `pi:install-python`); idempotent |
+| `pi setup add <name> [key=value ...]` | Run automation then add to `pi.yaml`; resolves short-form names (`python` → `pi:install-python`); idempotent |
 | `pi setup add <name> --version <v>`   | Add with `with: version: "<v>"`                          |
 | `pi setup add <name> --if <expr>`     | Add with `if: <expr>` condition                          |
+| `pi setup add <name> --only-add`      | Skip execution, write entry directly (CI/pre-configured) |
 | `pi setup add <name> --yes`           | Auto-confirm project initialization if no `pi.yaml`      |
 | `pi shell`                    | Install shortcut functions into the current shell config |
 | `pi shell uninstall`          | Remove shortcuts for the current project                 |

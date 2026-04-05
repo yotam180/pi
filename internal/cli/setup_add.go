@@ -12,6 +12,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
+	"github.com/vyper-tooling/pi/internal/project"
 )
 
 // setupAddKnownTools maps short-form names (and pi: prefix variants) to their
@@ -64,11 +65,18 @@ func newSetupAddCmd() *cobra.Command {
 	var sourceFlag string
 	var groupsFlag string
 	var yesFlag bool
+	var onlyAddFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "add <name> [key=value ...]",
 		Short: "Add a setup entry to pi.yaml",
 		Long: `Add a setup automation to the setup section of pi.yaml.
+
+By default, the automation is executed first. If it succeeds, the entry is
+written to pi.yaml. If it fails, pi.yaml is not modified.
+
+Use --only-add to skip execution and write the entry directly (useful for CI
+bootstrapping or when the tool is already set up).
 
 Tool names are resolved automatically:
   python  →  pi:install-python
@@ -81,14 +89,15 @@ Examples:
   pi setup add pi:install-node --version 22
   pi setup add setup/install-deps
   pi setup add pi:install-homebrew --if os.macos
-  pi setup add pi:cursor/install-extensions file=.pi/cursor/extensions.txt`,
+  pi setup add pi:cursor/install-extensions file=.pi/cursor/extensions.txt
+  pi setup add uv --only-add`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := getwd()
 			if err != nil {
 				return err
 			}
-			return runSetupAdd(cwd, args[0], args[1:], versionFlag, ifFlag, sourceFlag, groupsFlag, yesFlag, os.Stdin, os.Stdout, os.Stderr)
+			return runSetupAdd(cwd, args[0], args[1:], versionFlag, ifFlag, sourceFlag, groupsFlag, yesFlag, onlyAddFlag, os.Stdin, os.Stdout, os.Stderr)
 		},
 	}
 
@@ -97,11 +106,12 @@ Examples:
 	cmd.Flags().StringVar(&sourceFlag, "source", "", "sets with: source: \"<path>\"")
 	cmd.Flags().StringVar(&groupsFlag, "groups", "", "sets with: groups: \"<list>\"")
 	cmd.Flags().BoolVarP(&yesFlag, "yes", "y", false, "skip all prompts (auto-confirm)")
+	cmd.Flags().BoolVar(&onlyAddFlag, "only-add", false, "skip execution and write the entry directly")
 
 	return cmd
 }
 
-func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, sourceFlag, groupsFlag string, yesFlag bool, stdin io.Reader, stdout, stderr io.Writer) error {
+func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, sourceFlag, groupsFlag string, yesFlag, onlyAdd bool, stdin io.Reader, stdout, stderr io.Writer) error {
 	printer := display.NewForWriter(stdout)
 
 	piYamlExists := fileExists(root, config.FileName)
@@ -151,6 +161,12 @@ func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, source
 		entry.With = withMap
 	}
 
+	if !onlyAdd {
+		if err := invokeSetupAutomation(root, entry, stdout, stderr); err != nil {
+			return err
+		}
+	}
+
 	if err := config.AddSetupEntry(root, entry); err != nil {
 		if _, ok := err.(*config.DuplicateSetupEntryError); ok {
 			fmt.Fprintln(stdout, "Already in pi.yaml. No changes made.")
@@ -166,6 +182,51 @@ func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, source
 
 	fmt.Fprintln(stdout, "Added to setup in pi.yaml:")
 	fmt.Fprintln(stdout, config.FormatSetupEntry(entry))
+
+	return nil
+}
+
+// invokeSetupAutomation runs a single setup automation before writing it to
+// pi.yaml. It reuses the same resolution and execution pipeline as pi setup.
+// Stdout/stderr are streamed live to the caller's terminal.
+func invokeSetupAutomation(root string, entry config.SetupEntry, stdout, stderr io.Writer) error {
+	projRoot, err := project.FindRoot(root)
+	if err != nil {
+		projRoot = root
+	}
+
+	cfg, _ := config.Load(projRoot)
+	pc := &ProjectContext{Root: projRoot, Config: cfg}
+
+	result, err := pc.Discover(stderr)
+	if err != nil {
+		return fmt.Errorf("discovery failed: %w", err)
+	}
+
+	if entry.If != "" {
+		skip, err := evaluateSetupCondition(entry.If, projRoot)
+		if err != nil {
+			return fmt.Errorf("if: %w", err)
+		}
+		if skip {
+			return nil
+		}
+	}
+
+	a, err := result.Find(entry.Run)
+	if err != nil {
+		return fmt.Errorf("automation %q: %w", entry.Run, err)
+	}
+
+	exec := pc.NewExecutor(result, ExecutorOpts{
+		Stdout: stdout,
+		Stderr: stderr,
+	})
+
+	if err := exec.RunWithInputs(a, nil, entry.With); err != nil {
+		return fmt.Errorf("automation %q failed: %w", entry.Run, err)
+	}
+	fmt.Fprintln(stdout)
 
 	return nil
 }
