@@ -32,6 +32,7 @@ and shareable automation model.`,
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newValidateCmd())
+	root.AddCommand(newAddCmd())
 
 	return root
 }

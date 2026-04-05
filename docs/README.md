@@ -604,7 +604,7 @@ A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root
 | `pi validate`                 | Statically validate all config and automation files      |
 | `pi version`                  | Print the PI version                                     |
 | `pi --version`                | Same as `pi version`                                     |
-| `pi add org/package@version`  | Download and cache a marketplace automation              |
+| `pi add <source> [--as <alias>]` | Append a package to `pi.yaml` (`org/repo@version` or `file:...`); fetch GitHub into cache; duplicate entry is a no-op ("already in pi.yaml") |
 
 ---
 

@@ -1,7 +1,7 @@
 # External Packages
 
 ## Status
-todo
+in_progress
 
 ## Priority
 high
@@ -41,16 +41,16 @@ PI's built-in library is intentionally thin. The natural next layer is a public 
 - Package scoping / access control beyond what GitHub provides
 
 ## Success Criteria
-- [ ] `run: org/repo@version/path` in any automation works end-to-end
-- [ ] `run: file:~/my-automations/path` works; changes to the folder are reflected immediately
-- [ ] Declared packages in `pi.yaml` are fetched during `pi setup`
-- [ ] Undeclared GitHub reference triggers a fetch + advisory message with copy-pasteable `pi.yaml` snippet
-- [ ] `pi add org/repo@version` adds to `pi.yaml` and fetches
-- [ ] `pi add file:~/path --as alias` adds aliased file source to `pi.yaml`
-- [ ] Private repos accessible via SSH work transparently
-- [ ] `pi list` shows source indicator per automation
-- [ ] `pi list --all` lists automations from all declared packages
-- [ ] Missing or malformed package ref produces a clear, actionable error
+- [x] `run: org/repo@version/path` in any automation works end-to-end
+- [x] `run: file:~/my-automations/path` works; changes to the folder are reflected immediately
+- [x] Declared packages in `pi.yaml` are fetched during `pi setup`
+- [x] Undeclared GitHub reference triggers a fetch + advisory message with copy-pasteable `pi.yaml` snippet
+- [x] `pi add org/repo@version` adds to `pi.yaml` and fetches
+- [x] `pi add file:~/path --as alias` adds aliased file source to `pi.yaml`
+- [x] Private repos accessible via SSH work transparently
+- [x] `pi list` shows source indicator per automation
+- [x] `pi list --all` lists automations from all declared packages
+- [x] Missing or malformed package ref produces a clear, actionable error
 - [ ] All new behavior documented in `docs/README.md`
 
 ## Notes
