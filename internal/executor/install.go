@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os/exec"
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
@@ -57,15 +56,16 @@ func (e *Executor) execInstallPhase(a *automation.Automation, phase *automation.
 // streamed live to the terminal. This gives the user immediate visibility into
 // errors and progress from install commands.
 func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
+	steps := phase.Steps
 	if phase.IsScalar {
-		return e.execBashLive(a, phase.Scalar, inputEnv)
+		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
 	}
 
 	savedOutputs := e.stepOutputs
 	e.stepOutputs = nil
 	defer func() { e.stepOutputs = savedOutputs }()
 
-	for i, step := range phase.Steps {
+	for i, step := range steps {
 		if step.If != "" {
 			skip, err := e.evaluateCondition(step.If)
 			if err != nil {
@@ -103,15 +103,16 @@ func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automat
 // execInstallPhaseCapture runs an install phase, suppressing stdout and optionally
 // capturing stderr to the given buffer (in addition to suppressing it).
 func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrCapture *bytes.Buffer) error {
+	steps := phase.Steps
 	if phase.IsScalar {
-		return e.execBashSuppressed(a, phase.Scalar, inputEnv, stderrCapture)
+		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
 	}
 
 	savedOutputs := e.stepOutputs
 	e.stepOutputs = nil
 	defer func() { e.stepOutputs = savedOutputs }()
 
-	for i, step := range phase.Steps {
+	for i, step := range steps {
 		if step.If != "" {
 			skip, err := e.evaluateCondition(step.If)
 			if err != nil {
@@ -151,77 +152,22 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 	return nil
 }
 
-// execBashLive runs inline bash with stdout suppressed but stderr streamed live to the terminal.
-func (e *Executor) execBashLive(a *automation.Automation, script string, inputEnv []string) error {
-	var cmdArgs []string
-	if IsFilePath(script) {
-		resolved := resolveScriptPath(a.Dir(), script)
-		cmdArgs = []string{resolved}
-	} else {
-		cmdArgs = []string{"-c", script}
-	}
-
-	cmd := exec.Command("bash", cmdArgs...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = io.Discard
-	cmd.Stdin = nil
-	cmd.Env = e.buildEnv(inputEnv, nil, nil)
-	cmd.Stderr = e.stderr()
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
-		}
-		return fmt.Errorf("running install bash: %w", err)
-	}
-	return nil
-}
-
-// execBashSuppressed runs inline bash with stdout suppressed and stderr optionally captured.
-func (e *Executor) execBashSuppressed(a *automation.Automation, script string, inputEnv []string, stderrCapture *bytes.Buffer) error {
-	var cmdArgs []string
-	if IsFilePath(script) {
-		resolved := resolveScriptPath(a.Dir(), script)
-		cmdArgs = []string{resolved}
-	} else {
-		cmdArgs = []string{"-c", script}
-	}
-
-	cmd := exec.Command("bash", cmdArgs...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = io.Discard
-	cmd.Stdin = nil
-	cmd.Env = e.buildEnv(inputEnv, nil, nil)
-
-	if stderrCapture != nil {
-		cmd.Stderr = stderrCapture
-	} else {
-		cmd.Stderr = io.Discard
-	}
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
-		}
-		return fmt.Errorf("running install bash: %w", err)
-	}
-	return nil
-}
-
 // captureVersion runs the version command and returns the trimmed output.
 func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, inputEnv []string) string {
 	if versionCmd == "" {
 		return ""
 	}
 
+	step := automation.Step{Type: automation.StepTypeBash, Value: versionCmd}
 	var buf bytes.Buffer
-	cmd := exec.Command("bash", "-c", versionCmd)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = &buf
-	cmd.Stderr = io.Discard
-	cmd.Env = e.buildEnv(inputEnv, nil, nil)
+	ctx := e.newRunContext(a, step, nil, &buf, nil, inputEnv)
+	ctx.Stderr = io.Discard
 
-	if err := cmd.Run(); err != nil {
+	runner := e.registry().Get(automation.StepTypeBash)
+	if runner == nil {
+		return ""
+	}
+	if err := runner.Run(ctx); err != nil {
 		return ""
 	}
 	return strings.TrimSpace(buf.String())

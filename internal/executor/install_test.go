@@ -433,6 +433,75 @@ func TestExecInstall_FirstBlockFailStderrSurfaced(t *testing.T) {
 	}
 }
 
+func TestExecInstall_ScalarPhaseUsesAutomationEnv(t *testing.T) {
+	root := t.TempDir()
+	marker := filepath.Join(root, "env-marker")
+	var stderr bytes.Buffer
+
+	a := &automation.Automation{
+		Name: "install-with-env",
+		Env:  map[string]string{"MY_INSTALL_VAR": "hello-from-env"},
+		Install: &automation.InstallSpec{
+			Test:    automation.InstallPhase{IsScalar: true, Scalar: "test -f " + marker},
+			Run:     automation.InstallPhase{IsScalar: true, Scalar: "echo $MY_INSTALL_VAR > " + marker},
+			Version: "echo 1.0.0",
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+	}
+
+	err := e.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	content, readErr := os.ReadFile(marker)
+	if readErr != nil {
+		t.Fatalf("marker file not created: %v", readErr)
+	}
+	if got := strings.TrimSpace(string(content)); got != "hello-from-env" {
+		t.Errorf("expected 'hello-from-env' in marker, got: %q", got)
+	}
+}
+
+func TestExecInstall_VersionCaptureUsesAutomationEnv(t *testing.T) {
+	root := t.TempDir()
+	var stderr bytes.Buffer
+
+	a := &automation.Automation{
+		Name: "install-version-env",
+		Env:  map[string]string{"MY_VERSION": "42.0.0"},
+		Install: &automation.InstallSpec{
+			Test:    automation.InstallPhase{IsScalar: true, Scalar: "true"},
+			Run:     automation.InstallPhase{IsScalar: true, Scalar: "true"},
+			Version: "echo $MY_VERSION",
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+	}
+
+	err := e.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := stderr.String()
+	if !strings.Contains(output, "42.0.0") {
+		t.Errorf("expected version '42.0.0' from automation env, got: %q", output)
+	}
+}
+
 func TestExecInstall_WithAutomationLevelIf(t *testing.T) {
 	root := t.TempDir()
 	var stderr bytes.Buffer
