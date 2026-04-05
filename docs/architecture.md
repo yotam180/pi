@@ -64,10 +64,11 @@ internal/
     discovery.go                   Discover(), NewResult(), Result, Find() (with pi: prefix support), MergeBuiltins(), IsBuiltin()
     discovery_test.go              24 tests (18 base + 6 builtin merge/prefix tests)
   executor/                        Step execution engine
-    executor.go                    Executor struct (with ParentEvalFile field), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation
-    runners.go                     Step runner implementations: execBash(), execPython(), execTypeScript(), execRun(), resolvePythonBin(), isCommandNotFound(); all runners delegate to runCommand() for command execution
-    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), execScriptSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer
-    helpers.go                     Shared utilities: runCommand() (common command execution substrate), resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection
+    executor.go                    Executor struct (with ParentEvalFile and Runners fields), ExitError, Run(), RunWithInputs(), execStep(), execStepSuppressed(), execParentShell(), AppendToParentEval(), evaluateCondition(), pushCall()/popCall(), printer(), registry(), newRunContext(), stdout()/stderr()/stdin(); pipe_to:next orchestration; step-level and automation-level if: conditional execution; step-level silent: true suppression; --loud override; parent_shell: true eval-file delegation; step dispatch via Registry
+    runner_iface.go                StepRunner interface, RunContext (step execution context), Registry (maps StepType→StepRunner), NewRegistry(), NewDefaultRegistry()
+    runners.go                     Step runner implementations: BashRunner, PythonRunner, TypeScriptRunner, RunStepRunner; each implements StepRunner interface; runStepCommand() shared command execution; resolvePythonBin(), isCommandNotFound()
+    install.go                     Installer lifecycle: execInstall(), execInstallPhase(), execInstallPhaseCapture(), execBashSuppressed(), captureVersion(), printInstallStatus(), printIndentedStderr(); structured test→run→verify→version lifecycle; color-coded installer status via display.Printer; install phase step dispatch uses Registry
+    helpers.go                     Shared utilities: resolveFileStep() (file-path resolution + existence check), isFilePath(), resolveScriptPath(), appendInputEnv(), buildEnv(), prependPathInEnv(); PI_INPUT_* env injection; provisioned runtime PATH injection; step-level env: injection
     validate.go                    ValidateRequirements() (with provisioning fallback), tryProvision(), checkRequirementImpl() (shared logic with alwaysDetectVersion flag), checkRequirement(), CheckRequirementForDoctor(), detectVersion(), extractVersion(), compareVersions(), FormatValidationError(), InstallHintFor(), CheckResult, ValidationError, installHints; pre-execution requirement validation
     predicates.go                  RuntimeEnv (with ExecOutput field), DefaultRuntimeEnv(), ResolvePredicates(), ResolvePredicatesWithEnv(); resolves if: predicate names to booleans
     executor_test.go               109 tests (55 base + 13 step-conditional + 7 automation-conditional + 12 installer + 8 step-env + 7 step-trace/silent/loud + 7 parent-shell)
@@ -222,7 +223,9 @@ Makefile                               build, vet, test, test-matrix targets
 
 ### Execution model
 - All steps run with the repo root (directory containing `pi.yaml`) as their working directory
-- Common execution substrate: `runCommand()` in `helpers.go` handles `exec.Command` setup (Dir, Env, Stdout, Stderr, Stdin) and error wrapping (`*ExitError` for non-zero exits). All language runners delegate to this.
+- Step runner registry: `Registry` in `runner_iface.go` maps `StepType` → `StepRunner`. `NewDefaultRegistry()` registers `BashRunner`, `PythonRunner`, `TypeScriptRunner`, `RunStepRunner`. `Executor.execStep()` dispatches through the registry instead of a switch statement. Adding a new step type only requires implementing `StepRunner` and registering it — no executor changes needed.
+- `RunContext` in `runner_iface.go` bundles everything a runner needs: automation, step, args, I/O writers, env, repo root. Runners are decoupled from `Executor` internals — they receive a callback for recursive `run:` calls.
+- Common execution substrate: `runStepCommand()` in `runners.go` handles `exec.Command` setup (Dir, Env, Stdout, Stderr, Stdin) and error wrapping (`*ExitError` for non-zero exits). All language runners delegate to this.
 - File-path resolution: `resolveFileStep()` in `helpers.go` combines `isFilePath()` + `resolveScriptPath()` + existence check into a single call, eliminating per-runner duplication
 - Bash inline steps: `bash -c "<script>" -- [args...]` — args available as `$1`, `$2`, etc.
 - Bash file steps: `bash <resolved_path> [args...]` — file path resolved relative to the automation YAML file's directory
@@ -234,7 +237,7 @@ Makefile                               build, vet, test, test-matrix targets
 - TypeScript requires `tsx` in PATH; clear error with install hint (`npm install -g tsx`) if not found
 - `run:` steps: recursive execution via `Executor.Run()` — args forwarded, circular dependencies detected via call stack
 - If any step exits non-zero, execution stops immediately and the exit code propagates
-- Adding a new step type: register the `StepType` in `automation.go`, add the runner function in `runners.go` (using `resolveFileStep()` for file-path handling and `runCommand()` for execution), and add the case in `execStep()` in `executor.go`
+- Adding a new step type: (1) register the `StepType` constant in `automation.go` and add it to `supportedStepTypes`/`implementedStepTypes`, (2) implement `StepRunner` in `runners.go` (using `resolveFileStep()` for file-path handling and `runStepCommand()` for execution), (3) register it in `NewDefaultRegistry()` in `runner_iface.go` — no changes to `executor.go` needed
 
 ### Installer automation lifecycle (`install:` block)
 - Automations can use `install:` instead of `steps:` — the two are mutually exclusive
@@ -246,7 +249,7 @@ Makefile                               build, vet, test, test-matrix targets
 - `version:` command stdout is trimmed and displayed in the status line
 - PI prints one formatted status line per installer: `✓ / → / ✗  name  status  (version)`
 - `--silent` flag on `pi run` and `pi setup` suppresses PI status lines (stderr from failures always shown)
-- Step lists in install phases support `if:` conditions, all step types (bash, python, typescript), and `run:` references
+- Step lists in install phases support `if:` conditions, all step types (bash, python, typescript), and `run:` references. Step dispatch uses the same `Registry` as normal steps.
 - A `run:` step inside an `install:` phase that references another installer automation runs that automation's own `install:` lifecycle
 
 ### Pipe support (`pipe_to: next`)

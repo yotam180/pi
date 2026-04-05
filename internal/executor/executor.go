@@ -67,6 +67,9 @@ type Executor struct {
 	// executing them. The calling shell wrapper evals the file after PI exits.
 	// If empty, parent_shell steps produce an error.
 	ParentEvalFile string
+
+	// Runners is the step runner registry. If nil, NewDefaultRegistry() is used.
+	Runners *Registry
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -206,17 +209,48 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 		stdin = stdinOverride
 	}
 
-	switch step.Type {
-	case automation.StepTypeBash:
-		return e.execBash(a, step, args, stdout, stdin, inputEnv)
-	case automation.StepTypePython:
-		return e.execPython(a, step, args, stdout, stdin, inputEnv)
-	case automation.StepTypeTypeScript:
-		return e.execTypeScript(a, step, args, stdout, stdin, inputEnv)
-	case automation.StepTypeRun:
-		return e.execRun(step, args, stdout, stdin, inputEnv)
-	default:
+	runner := e.registry().Get(step.Type)
+	if runner == nil {
 		return fmt.Errorf("step[%d]: step type %q is not implemented", index, step.Type)
+	}
+
+	return runner.Run(e.newRunContext(a, step, args, stdout, stdin, inputEnv))
+}
+
+// registry returns the executor's runner registry, lazily creating the default.
+func (e *Executor) registry() *Registry {
+	if e.Runners != nil {
+		return e.Runners
+	}
+	return NewDefaultRegistry()
+}
+
+// newRunContext builds a RunContext from the executor's current state.
+func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) *RunContext {
+	return &RunContext{
+		Automation:   a,
+		Step:         step,
+		Args:         args,
+		Stdout:       stdout,
+		Stderr:       e.stderr(),
+		Stdin:        stdin,
+		InputEnv:     inputEnv,
+		RepoRoot:     e.RepoRoot,
+		RuntimePaths: e.runtimePaths,
+		Discovery:    e.Discovery,
+		BuildEnv:     e.buildEnv,
+		RunAutomation: func(target *automation.Automation, args []string, withArgs map[string]string, targetStdout io.Writer, targetStdin io.Reader) error {
+			origStdout, origStdin := e.Stdout, e.Stdin
+			e.Stdout, e.Stdin = targetStdout, targetStdin
+			var runErr error
+			if len(withArgs) > 0 {
+				runErr = e.RunWithInputs(target, nil, withArgs)
+			} else {
+				runErr = e.RunWithInputs(target, args, nil)
+			}
+			e.Stdout, e.Stdin = origStdout, origStdin
+			return runErr
+		},
 	}
 }
 

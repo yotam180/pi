@@ -2,9 +2,7 @@ package executor
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -55,27 +53,6 @@ func (e *Executor) buildEnv(inputEnv []string, stepEnv map[string]string) []stri
 		env = append(env, k+"="+v)
 	}
 	return env
-}
-
-// runCommand executes a command with standard PI conventions: working directory,
-// environment, and error wrapping. This is the common substrate for all step runners.
-// Non-zero exit codes are returned as *ExitError. Other exec failures (including
-// command-not-found) are returned as-is for callers to handle with context-specific messages.
-func (e *Executor) runCommand(bin string, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, stepEnv map[string]string) error {
-	cmd := exec.Command(bin, args...)
-	cmd.Dir = e.RepoRoot
-	cmd.Stdout = stdout
-	cmd.Stderr = e.stderr()
-	cmd.Stdin = stdin
-	cmd.Env = e.buildEnv(inputEnv, stepEnv)
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return &ExitError{Code: exitErr.ExitCode()}
-		}
-		return err
-	}
-	return nil
 }
 
 // resolveFileStep checks if a step value is a file path, resolves it relative

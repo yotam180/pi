@@ -74,38 +74,21 @@ func (e *Executor) execInstallPhaseCapture(a *automation.Automation, phase *auto
 			}
 		}
 
-		switch step.Type {
-		case automation.StepTypeBash:
-			if err := e.execBashSuppressed(a, step.Value, inputEnv, stderrCapture); err != nil {
-				return err
-			}
-		case automation.StepTypeRun:
-			target, err := e.Discovery.Find(step.Value)
-			if err != nil {
-				return fmt.Errorf("install phase run step: %w", err)
-			}
-			origStdout, origStdin, origSilent := e.Stdout, e.Stdin, e.Silent
-			e.Stdout, e.Stdin = io.Discard, nil
-			var runErr error
-			if len(step.With) > 0 {
-				runErr = e.RunWithInputs(target, nil, step.With)
-			} else {
-				runErr = e.RunWithInputs(target, nil, nil)
-			}
-			e.Stdout, e.Stdin, e.Silent = origStdout, origStdin, origSilent
-			if runErr != nil {
-				return runErr
-			}
-		case automation.StepTypePython:
-			if err := e.execScriptSuppressed(a, "python", step.Value, inputEnv, stderrCapture); err != nil {
-				return err
-			}
-		case automation.StepTypeTypeScript:
-			if err := e.execScriptSuppressed(a, "typescript", step.Value, inputEnv, stderrCapture); err != nil {
-				return err
-			}
-		default:
+		stderrWriter := io.Writer(io.Discard)
+		if stderrCapture != nil {
+			stderrWriter = stderrCapture
+		}
+
+		runner := e.registry().Get(step.Type)
+		if runner == nil {
 			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
+		}
+
+		ctx := e.newRunContext(a, step, nil, io.Discard, nil, inputEnv)
+		ctx.Stderr = stderrWriter
+
+		if err := runner.Run(ctx); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -140,37 +123,6 @@ func (e *Executor) execBashSuppressed(a *automation.Automation, script string, i
 		return fmt.Errorf("running install bash: %w", err)
 	}
 	return nil
-}
-
-// execScriptSuppressed runs a python or typescript step with stdout suppressed.
-func (e *Executor) execScriptSuppressed(a *automation.Automation, lang, script string, inputEnv []string, stderrCapture *bytes.Buffer) error {
-	step := automation.Step{Value: script}
-	switch lang {
-	case "python":
-		step.Type = automation.StepTypePython
-	case "typescript":
-		step.Type = automation.StepTypeTypeScript
-	}
-
-	origStdout, origStderr, origStdin := e.Stdout, e.Stderr, e.Stdin
-	e.Stdout = io.Discard
-	if stderrCapture != nil {
-		e.Stderr = stderrCapture
-	} else {
-		e.Stderr = io.Discard
-	}
-	e.Stdin = nil
-
-	var err error
-	switch step.Type {
-	case automation.StepTypePython:
-		err = e.execPython(a, step, nil, e.Stdout, e.Stdin, inputEnv)
-	case automation.StepTypeTypeScript:
-		err = e.execTypeScript(a, step, nil, e.Stdout, e.Stdin, inputEnv)
-	}
-
-	e.Stdout, e.Stderr, e.Stdin = origStdout, origStderr, origStdin
-	return err
 }
 
 // captureVersion runs the version command and returns the trimmed output.

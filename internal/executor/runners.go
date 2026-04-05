@@ -2,28 +2,29 @@ package executor
 
 import (
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/vyper-tooling/pi/internal/automation"
 )
 
-func (e *Executor) execBash(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
+// BashRunner executes bash steps (inline scripts or .sh files).
+type BashRunner struct{}
+
+func (r *BashRunner) Run(ctx *RunContext) error {
 	var cmdArgs []string
 
-	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "bash")
+	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "bash")
 	if err != nil {
 		return err
 	}
 	if isFile {
-		cmdArgs = append([]string{resolved}, args...)
+		cmdArgs = append([]string{resolved}, ctx.Args...)
 	} else {
-		cmdArgs = append([]string{"-c", step.Value, "--"}, args...)
+		cmdArgs = append([]string{"-c", ctx.Step.Value, "--"}, ctx.Args...)
 	}
 
-	if err := e.runCommand("bash", cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+	if err := runStepCommand("bash", cmdArgs, ctx); err != nil {
 		if _, ok := err.(*ExitError); ok {
 			return err
 		}
@@ -32,21 +33,24 @@ func (e *Executor) execBash(a *automation.Automation, step automation.Step, args
 	return nil
 }
 
-func (e *Executor) execPython(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
-	pythonBin := e.resolvePythonBin()
+// PythonRunner executes python steps (inline scripts or .py files).
+type PythonRunner struct{}
+
+func (r *PythonRunner) Run(ctx *RunContext) error {
+	pythonBin := resolvePythonBin()
 
 	var cmdArgs []string
-	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "python")
+	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "python")
 	if err != nil {
 		return err
 	}
 	if isFile {
-		cmdArgs = append([]string{resolved}, args...)
+		cmdArgs = append([]string{resolved}, ctx.Args...)
 	} else {
-		cmdArgs = append([]string{"-c", step.Value}, args...)
+		cmdArgs = append([]string{"-c", ctx.Step.Value}, ctx.Args...)
 	}
 
-	if err := e.runCommand(pythonBin, cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+	if err := runStepCommand(pythonBin, cmdArgs, ctx); err != nil {
 		if _, ok := err.(*ExitError); ok {
 			return err
 		}
@@ -60,22 +64,25 @@ func (e *Executor) execPython(a *automation.Automation, step automation.Step, ar
 
 // resolvePythonBin returns the python binary to use. If VIRTUAL_ENV is set,
 // uses $VIRTUAL_ENV/bin/python; otherwise falls back to python3.
-func (e *Executor) resolvePythonBin() string {
+func resolvePythonBin() string {
 	if venv := os.Getenv("VIRTUAL_ENV"); venv != "" {
 		return filepath.Join(venv, "bin", "python")
 	}
 	return "python3"
 }
 
-func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
+// TypeScriptRunner executes typescript steps (inline scripts or .ts files).
+type TypeScriptRunner struct{}
+
+func (r *TypeScriptRunner) Run(ctx *RunContext) error {
 	var cmdArgs []string
 
-	resolved, isFile, err := resolveFileStep(a.Dir(), step.Value, "typescript")
+	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, "typescript")
 	if err != nil {
 		return err
 	}
 	if isFile {
-		cmdArgs = append([]string{resolved}, args...)
+		cmdArgs = append([]string{resolved}, ctx.Args...)
 	} else {
 		tmp, err := os.CreateTemp("", "pi-ts-*.ts")
 		if err != nil {
@@ -83,16 +90,16 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 		}
 		defer os.Remove(tmp.Name())
 
-		if _, err := tmp.WriteString(step.Value); err != nil {
+		if _, err := tmp.WriteString(ctx.Step.Value); err != nil {
 			tmp.Close()
 			return fmt.Errorf("writing typescript temp file: %w", err)
 		}
 		tmp.Close()
 
-		cmdArgs = append([]string{tmp.Name()}, args...)
+		cmdArgs = append([]string{tmp.Name()}, ctx.Args...)
 	}
 
-	if err := e.runCommand("tsx", cmdArgs, stdout, stdin, inputEnv, step.Env); err != nil {
+	if err := runStepCommand("tsx", cmdArgs, ctx); err != nil {
 		if _, ok := err.(*ExitError); ok {
 			return err
 		}
@@ -104,22 +111,38 @@ func (e *Executor) execTypeScript(a *automation.Automation, step automation.Step
 	return nil
 }
 
-func (e *Executor) execRun(step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) error {
-	target, err := e.Discovery.Find(step.Value)
+// RunStepRunner executes run: steps by recursively invoking another automation.
+type RunStepRunner struct{}
+
+func (r *RunStepRunner) Run(ctx *RunContext) error {
+	target, err := ctx.Discovery.Find(ctx.Step.Value)
 	if err != nil {
 		return fmt.Errorf("run step: %w", err)
 	}
 
-	origStdout, origStdin := e.Stdout, e.Stdin
-	e.Stdout, e.Stdin = stdout, stdin
-	var runErr error
-	if len(step.With) > 0 {
-		runErr = e.RunWithInputs(target, nil, step.With)
-	} else {
-		runErr = e.RunWithInputs(target, args, nil)
+	if len(ctx.Step.With) > 0 {
+		return ctx.RunAutomation(target, nil, ctx.Step.With, ctx.Stdout, ctx.Stdin)
 	}
-	e.Stdout, e.Stdin = origStdout, origStdin
-	return runErr
+	return ctx.RunAutomation(target, ctx.Args, nil, ctx.Stdout, ctx.Stdin)
+}
+
+// runStepCommand executes a command using the RunContext for directory, env, and I/O.
+// Non-zero exit codes are returned as *ExitError. Other exec failures are returned as-is.
+func runStepCommand(bin string, args []string, ctx *RunContext) error {
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = ctx.RepoRoot
+	cmd.Stdout = ctx.Stdout
+	cmd.Stderr = ctx.Stderr
+	cmd.Stdin = ctx.Stdin
+	cmd.Env = ctx.BuildEnv(ctx.InputEnv, ctx.Step.Env)
+
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return &ExitError{Code: exitErr.ExitCode()}
+		}
+		return err
+	}
+	return nil
 }
 
 // isCommandNotFound checks if an exec error indicates the binary wasn't found.
