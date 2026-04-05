@@ -44,8 +44,10 @@ internal/
     doctor.go                      pi doctor — scans all automations, checks requires: entries, prints health table; color-coded ✓/✗ via display.Printer
     validate.go                    pi validate — statically validates pi.yaml and .pi/ automations; cross-checks shortcut, setup, and run: step references; validates file-path step references exist on disk; reports all errors; exit 0/1
     add.go                         pi add — validates source via refparser.Parse(); fetches GitHub packages into cache; calls config.AddPackage() to update pi.yaml; --as for aliases; idempotent (duplicate sources print "already in pi.yaml" and exit successfully)
+    init.go                        pi init — creates pi.yaml + .pi/ directory; interactive prompt with inferred kebab-case name; --name and --yes flags; non-interactive when piped; initProject() reusable by other commands; idempotent (already-initialized prints project name and exits 0)
     completion.go                  pi completion — generates shell completion scripts (bash/zsh/fish/powershell) via Cobra's built-in generators; automationCompleter() — dynamic completion for automation names (used by run, info)
     root_test.go                   CLI tests (12 tests — includes doctor and validate subcommands)
+    init_test.go                   pi init tests (13 tests — creates files, name flag, already initialized, .pi exists, yes flag, prompt, non-interactive, next steps, kebab-case, reusable initProject)
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               on-demand fetch advisory tests (4 tests)
     run_test.go                    pi run tests (14 tests — includes --with, inputs, --silent tests)
@@ -293,6 +295,26 @@ pi run <TAB>  (dynamic completion)
 ```
 
 ```
+pi init [--name <name>] [--yes]
+  │
+  ├─ CLI (internal/cli/init.go)
+  │    Parses flags (--name, --yes/-y)
+  │
+  ├─ Already initialized?
+  │    os.Stat(pi.yaml) → print "Already initialized" + next steps, exit 0
+  │
+  ├─ Resolve project name
+  │    --name flag → use directly
+  │    --yes or non-interactive → infer from directory (kebab-case)
+  │    Interactive → prompt with inferred default
+  │
+  └─ initProject(root, name)
+       Write pi.yaml (project: <name>)
+       Create .pi/ directory
+       Print confirmation + "Next steps" guide
+```
+
+```
 pi add <source> [--as <alias>]
   │
   ├─ CLI (internal/cli/add.go)
@@ -382,6 +404,18 @@ Makefile                               build, vet, test, test-matrix targets
 - Advisory is written to stderr so it doesn't interfere with piped automation output
 - `file:` refs are never fetched on demand — `findInPackage()` checks `ref.Type == refparser.RefFile` and returns an error immediately
 - `PackageAutomations()` method on `Result` exposes the per-source automation map for lookup after on-demand merge
+
+### `pi init` command (`internal/cli/init.go`)
+- `pi init [--name <name>] [--yes]` bootstraps a new PI project
+- Creates `pi.yaml` with `project: <name>` and an empty `.pi/` directory
+- Project name resolution: `--name` flag → use as-is; `--yes` flag or non-interactive stdin → infer from directory name (kebab-cased); interactive → prompt with inferred default
+- Kebab-case conversion: lowercase, spaces/underscores → hyphens, strip non-alphanumeric characters, trim leading/trailing hyphens
+- Non-interactive detection: `isInteractive()` checks if stdin is a `*os.File` backed by a character device; piped input (CI, scripts) silently uses the inferred name
+- Already-initialized handling: if `pi.yaml` exists, prints "Already initialized (project: <name>)" with the existing project name, shows "Next steps", exits 0 — not an error
+- If `.pi/` exists but `pi.yaml` does not, only `pi.yaml` is created (`.pi/` creation is a no-op via `MkdirAll`)
+- `initProject(root, name, stdout)` is the exported core logic — writes the files and prints confirmation; callable from other commands (e.g. `pi setup add` when no project exists)
+- "Next steps" block shown on both success and already-initialized paths: suggests `pi setup add`, `pi shell`, `pi run`
+- Output uses `display.Printer` for consistent styling: green for "Initialized project", dim for file creation lines and next steps
 
 ### `pi add` command (`internal/cli/add.go`, `internal/config/writer.go`)
 - `pi add <source> [--as <alias>]` is the ergonomic entry point for declaring a package dependency
@@ -855,7 +889,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1151 (170 automation + 81 builtins + 32 cache + 117 CLI [includes 11 completion] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 239 integration [includes 8 completion])
+Total tests: 1172 (170 automation + 81 builtins + 32 cache + 130 CLI [includes 11 completion, 13 init] + 30 conditions + 45 config + 42 display + 43 discovery + 259 executor [across 15 test files] + 4 project + 46 refparser + 16 runtimes + 27 shell + 247 integration [includes 8 completion, 8 init])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -887,6 +921,7 @@ tests/integration/
   main_test.go                    TestMain (builds pi binary), shared helpers (runPi, runPiStdout, runPiSplit, runPiWithEnv, examplesDir, findRepoRoot)
   helpers_test.go                 Runtime skip guards: requirePython, requireNode, requireTsx
   add_test.go                     8 tests — pi add: file source, file with alias, idempotent, no version error, no args, creates packages block, appends to existing, invalid source
+  init_test.go                    8 tests — pi init: creates project files, --yes flag, already initialized, .pi exists, next steps, non-interactive fallback, created project is valid, already-initialized next steps
   basic_test.go                   7 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, from subdirectory
   docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
   pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)

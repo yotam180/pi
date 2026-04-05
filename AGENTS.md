@@ -35,6 +35,16 @@ This document contains persistent instructions for all agents working on this re
 
 Balance work across: infrastructure, self-improvement, and feature development. Don't let any one area starve the others.
 
+## User-facing features
+
+Before designing or implementing any feature the developer interacts with directly (commands, flags, error messages, output format, builtin automations, YAML fields), read `docs/philosophy.md`. Every user-facing decision must be evaluated against the eight principles there.
+
+Key checkpoints:
+- Does the command understand intent, or does it just validate syntax?
+- Is the simplest form shown first?
+- Is every operation idempotent?
+- Are similar things named consistently (same input names, same flag names, same output format)?
+
 ## Code
 
 - Language: Go. Follow standard Go best practices.
