@@ -1,7 +1,7 @@
 # External Packages
 
 ## Status
-in_progress
+done
 
 ## Priority
 high
@@ -51,7 +51,7 @@ PI's built-in library is intentionally thin. The natural next layer is a public 
 - [x] `pi list` shows source indicator per automation
 - [x] `pi list --all` lists automations from all declared packages
 - [x] Missing or malformed package ref produces a clear, actionable error
-- [ ] All new behavior documented in `docs/README.md`
+- [x] All new behavior documented in `docs/README.md`
 
 ## Notes
 - Resolution priority: local `.pi/` > `file:` sources > GitHub packages > builtins. Local always wins.

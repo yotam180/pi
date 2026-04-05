@@ -515,26 +515,139 @@ packages:
 
 | Source | Format | Caching |
 |--------|--------|---------|
-| GitHub | `org/repo@version` | Cached in `~/.pi/cache/`; fetched once |
+| GitHub | `org/repo@version` | Cached in `~/.pi/cache/`; fetched once per version |
 | File | `file:~/path` or `file:./relative` | Read directly from disk; no caching |
+
+GitHub packages require a version tag after `@` — there is no implicit "latest". Mutable refs like `@main` or `@HEAD` are accepted but emit a reproducibility warning and use a date-stamped cache key (e.g. `main~20260405`). Pin to a tag for stable, reproducible builds.
+
+File sources use `~` for the home directory and `./` for paths relative to the project root. Changes to a `file:` source are reflected immediately (no cache invalidation needed).
 
 ### Aliases (`as:`)
 
-The `as:` key lets you write `run: mytools/docker/up` instead of referencing the full source. Aliases must be unique within a `pi.yaml`. An alias that collides with a local `.pi/` automation path emits a warning (local wins per resolution order).
+The `as:` key lets you write `run: mytools/docker/up` instead of referencing the full source. Aliases must be unique within a `pi.yaml`. An alias that collides with a local `.pi/` automation path emits a warning (local wins per resolution order). Aliases must not contain `/`.
+
+### `pi add`
+
+The `pi add` command is the ergonomic way to declare a package dependency:
+
+```bash
+# Add a GitHub package (fetches into cache immediately)
+pi add yotam180/pi-common@v1.2
+
+# Add a local folder source
+pi add file:~/shared-automations
+
+# Add a local folder with an alias
+pi add file:~/my-automations --as mytools
+```
+
+The command validates the source, fetches GitHub packages into `~/.pi/cache/`, and appends the entry to `pi.yaml`. Adding the same source twice is a no-op — PI prints "already in pi.yaml" and exits successfully.
+
+GitHub sources without `@version` are rejected with a clear message: `version required — use pi add org/repo@<tag>`.
 
 ### `pi setup` integration
 
-Before running any setup automations, `pi setup` fetches all GitHub packages that aren't already cached. `file:` entries are verified to exist on disk (print a warning if not, but don't fail). The user sees:
+Before running any setup automations, `pi setup` fetches all declared GitHub packages that aren't already cached. `file:` entries are verified to exist on disk (a warning is printed if not, but setup continues). Status output:
 
 ```
-  ==> Fetching packages...
+  ↓  yotam180/pi-common@v1.2          fetching...
   ✓  yotam180/pi-common@v1.2          cached
   ✓  file:~/my-automations            found  (alias: mytools)
+  ⚠  file:~/missing-path              not found
 ```
+
+### On-demand fetching
+
+When a `run:` step references an undeclared GitHub package (e.g. `org/repo@v1.0/docker/up`), PI fetches it automatically instead of failing. After fetching, PI prints an advisory to stderr with a ready-to-paste `packages:` snippet:
+
+```
+  ↓  org/repo@v1.0          fetched (on demand)
+
+  tip: add to pi.yaml to avoid fetching on every fresh clone:
+
+    packages:
+      - org/repo@v1.0
+```
+
+On-demand fetching uses the same cache — subsequent runs in the same environment won't re-fetch. The advisory only appears when a live network fetch happens, not when the package is already cached.
+
+`file:` sources are never fetched on demand — they must be declared in `pi.yaml`.
 
 ### Package automations in `pi list` / `pi run`
 
-Package automations that don't collide with local names appear in `pi list` and are directly runnable via `pi run`. If a package has `docker/up`, you can `pi run docker/up` or `pi run mytools/docker/up` (via alias).
+Package automations that don't collide with local names appear in `pi list` with a SOURCE column showing the package source or alias. They are directly runnable via `pi run`:
+
+```bash
+# Run a package automation by its plain name (if no local collision)
+pi run docker/up
+
+# Run via alias
+pi run mytools/docker/up
+
+# Run via full GitHub reference (works even if not declared in packages:)
+pi run org/repo@v1.0/docker/up
+```
+
+Use `pi list --all` to browse automations from all declared packages, grouped by source with separator headers.
+
+### Private repositories
+
+PI tries multiple auth methods when fetching a GitHub package, in order:
+
+1. **SSH** — `git@github.com:org/repo.git`. Works if you have an SSH key configured for GitHub.
+2. **HTTPS with token** — uses the `GITHUB_TOKEN` environment variable if set.
+3. **Plain HTTPS** — works for public repos only.
+
+For private repos, ensure either:
+- An SSH key is configured (`ssh -T git@github.com` should succeed), or
+- `GITHUB_TOKEN` is set to a personal access token with repo read access
+
+If all methods fail, PI prints an error with instructions:
+```
+could not fetch org/repo: check network and that the repo exists.
+For private repos:
+  • Ensure an SSH key is configured (git@github.com:org/repo.git)
+  • Or set GITHUB_TOKEN env var for HTTPS auth
+```
+
+### Writing a package repo
+
+A PI package is just a GitHub repo with automations in a `.pi/` folder — the same structure as any PI project. No registry, no special tooling required.
+
+Minimal example:
+```
+my-pi-package/
+  .pi/
+    docker/
+      up.yaml
+      down.yaml
+    setup/
+      install-deps.yaml
+  pi-package.yaml          ← optional
+```
+
+Tag a release to make it available:
+```bash
+git tag v1.0
+git push origin v1.0
+```
+
+Users consume it with:
+```bash
+pi add your-org/my-pi-package@v1.0
+```
+
+### `pi-package.yaml`
+
+An optional file at the root of a package repo. Its only supported field is `min_pi_version`:
+
+```yaml
+min_pi_version: "0.5.0"
+```
+
+When present, PI checks the running version against `min_pi_version` at fetch time. If the running PI is older, the fetch fails with a clear upgrade message. Dev builds (`version == "dev"`) skip this check.
+
+If `pi-package.yaml` is absent or empty, the package works with any PI version.
 
 ---
 
@@ -543,9 +656,11 @@ Package automations that don't collide with local names appear in `pi list` and 
 When PI encounters an automation name, it resolves in this order:
 
 1. **Local** — `.pi/<name>.yaml` or `.pi/<name>/automation.yaml`
-2. **Package** — automations from declared `packages:` sources
+2. **Package** — automations from declared `packages:` sources (GitHub or `file:`)
 3. **Built-in** — automations shipped with the PI binary (prefixed `pi:`)
-4. **Marketplace** — cached from GitHub, referenced as `org/package@version`
+4. **On-demand** — undeclared GitHub references (`org/repo@version/path`) are fetched automatically
+
+Local always wins. If a local automation shadows a package automation, a warning is printed.
 
 ### Built-in library (`pi:`)
 
@@ -564,19 +679,6 @@ PI ships with a standard collection of automations for common tasks:
 - `pi:git/install-hooks` — install git hooks from a source directory
 
 These are defined in the PI repository's own `.pi/` folder and compiled into the binary.
-
-### Marketplace (`org/package@version`)
-
-Marketplace automations live in GitHub repos and are referenced by `org/package-name@version` (version = git tag). PI downloads and caches them in `~/.pi/cache/`.
-
-```yaml
-setup:
-  - run: python-foundation/install-python@v3.13.0
-    with:
-      version: "3.13"
-```
-
-A marketplace package is just a GitHub repo with a `pi-package.yaml` at the root — no registry needed.
 
 ---
 

@@ -4,7 +4,7 @@
 chore
 
 ## Status
-todo
+done
 
 ## Priority
 medium
@@ -28,21 +28,27 @@ Sections to add/update:
 9. **`pi-package.yaml` reference** — optional file, supported fields
 
 ## Acceptance Criteria
-- [ ] All four reference formats documented with examples
-- [ ] `packages:` block fully documented (both simple and object form)
-- [ ] `pi add` documented with all flag variants
-- [ ] On-demand advisory behavior explained
-- [ ] Private repo auth documented
-- [ ] "Writing a package repo" section exists and is concise
-- [ ] `pi-package.yaml` documented as optional
-- [ ] CLI reference table updated with any new/changed commands
+- [x] All four reference formats documented with examples
+- [x] `packages:` block fully documented (both simple and object form)
+- [x] `pi add` documented with all flag variants
+- [x] On-demand advisory behavior explained
+- [x] Private repo auth documented
+- [x] "Writing a package repo" section exists and is concise
+- [x] `pi-package.yaml` documented as optional
+- [x] CLI reference table updated with any new/changed commands
 
 ## Implementation Notes
+- Expanded the existing Packages section with new subsections: `pi add`, On-demand fetching, Private repositories, Writing a package repo, `pi-package.yaml`
+- Replaced the outdated "Marketplace" subsection in Automation Resolution with "On-demand" entry in the resolution priority list
+- Added detail about mutable refs, date-stamped cache keys, and reproducibility warnings to Source types
+- Added alias validation rule (`/` not allowed) to Aliases section
+- CLI reference table already had `pi add` and `pi list --all` — no changes needed
+- Verified all docs match the implemented behavior in `cli/add.go`, `cli/discover.go`, `config/config.go`, `cache/cache.go`, `refparser/refparser.go`
 
 ## Subtasks
-- [ ] Draft documentation for all sections
-- [ ] Review against implemented behavior
-- [ ] Update CLI reference table
+- [x] Draft documentation for all sections
+- [x] Review against implemented behavior
+- [x] Update CLI reference table
 
 ## Blocked By
 68-automation-reference-parser, 69-github-package-cache, 70-packages-declaration-in-pi-yaml, 71-on-demand-fetch-with-advisory, 72-pi-add-command, 73-pi-list-source-indicators
