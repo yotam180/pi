@@ -218,10 +218,14 @@ pi run --silent build --release --verbose
                       ^^^^^^^^^^^^^^^^^^ automation arguments
 ```
 
-For automations **without** `inputs:`, forwarded args are available in two ways:
+For automations **without** `inputs:`, forwarded args are available in several ways:
 
 1. **`$PI_ARGS`** — environment variable containing all extra args, space-joined
-2. **`$@`, `$1`, `$2`** — bash positional parameters (bash steps only)
+2. **`$PI_ARG_1`, `$PI_ARG_2`, ...** — individual positional args as env vars (all step types)
+3. **`$PI_ARG_COUNT`** — the number of extra args passed
+4. **`$@`, `$1`, `$2`** — bash positional parameters (bash steps only)
+
+`PI_ARG_N` env vars work in all step types — bash, python, and typescript — making individual arg access ergonomic across languages:
 
 ```yaml
 # .pi/test.yaml
@@ -229,9 +233,20 @@ description: Run tests with optional extra flags
 bash: cargo test $PI_ARGS
 ```
 
+```yaml
+# .pi/greet.py — python step accessing individual args
+python: |
+  import os
+  name = os.environ.get("PI_ARG_1", "world")
+  print(f"Hello, {name}!")
+```
+
 ```bash
 pi run test --ignored --nocapture
 # Executes: cargo test --ignored --nocapture
+
+pi run greet Alice
+# PI_ARG_1=Alice, PI_ARG_COUNT=1
 ```
 
 For automations **with** `inputs:`, positional args are mapped to declared inputs by declaration order (not to `PI_ARGS`). Excess positional args beyond the declared inputs produce an error.

@@ -144,6 +144,10 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 	if len(args) > 0 {
 		inputEnv = append(inputEnv, "PI_ARGS="+strings.Join(args, " "))
+		for i, arg := range args {
+			inputEnv = append(inputEnv, fmt.Sprintf("PI_ARG_%d=%s", i+1, arg))
+		}
+		inputEnv = append(inputEnv, fmt.Sprintf("PI_ARG_COUNT=%d", len(args)))
 	}
 
 	if err := e.ValidateRequirements(a); err != nil {

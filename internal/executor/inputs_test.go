@@ -290,3 +290,87 @@ func TestRunWithInputs_PIArgsSingleArg(t *testing.T) {
 		t.Errorf("output = %q, want %q", got, "cmd --ignored")
 	}
 }
+
+func TestRunWithInputs_PIArgN_BashPositional(t *testing.T) {
+	dir := t.TempDir()
+	a := newAutomation("test", bashStep(`echo "$PI_ARG_1:$PI_ARG_2:$PI_ARG_COUNT"`))
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"hello", "world"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "hello:world:2" {
+		t.Errorf("output = %q, want %q", got, "hello:world:2")
+	}
+}
+
+func TestRunWithInputs_PIArgN_SingleArg(t *testing.T) {
+	dir := t.TempDir()
+	a := newAutomation("test", bashStep(`echo "$PI_ARG_1:$PI_ARG_COUNT"`))
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"only"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "only:1" {
+		t.Errorf("output = %q, want %q", got, "only:1")
+	}
+}
+
+func TestRunWithInputs_PIArgN_NotSetWhenNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+	a := newAutomation("test", bashStep(`echo ">${PI_ARG_1}<>${PI_ARG_COUNT}<" > `+outFile))
+
+	exec := newExecutor(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, _ := os.ReadFile(outFile)
+	got := strings.TrimSpace(string(data))
+	if got != "><><" {
+		t.Errorf("output = %q, want %q (PI_ARG_N should be empty)", got, "><><")
+	}
+}
+
+func TestRunWithInputs_PIArgN_NotSetWhenInputsConsumeArgs(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"target": {Description: "build target"},
+		},
+		[]string{"target"},
+		bashStep(`echo "target=$PI_IN_TARGET arg1=$PI_ARG_1 count=$PI_ARG_COUNT"`),
+	)
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"release"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "target=release arg1= count=" {
+		t.Errorf("output = %q, want %q", got, "target=release arg1= count=")
+	}
+}
+
+func TestRunWithInputs_PIArgN_PythonAccess(t *testing.T) {
+	requirePython(t)
+	dir := t.TempDir()
+	a := newAutomation("test", pythonStep(`import os; print(os.environ.get("PI_ARG_1", "") + ":" + os.environ.get("PI_ARG_2", "") + ":" + os.environ.get("PI_ARG_COUNT", ""))`))
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"alpha", "beta"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "alpha:beta:2" {
+		t.Errorf("output = %q, want %q", got, "alpha:beta:2")
+	}
+}

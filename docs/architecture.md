@@ -122,7 +122,7 @@ internal/
     python_runner_test.go          9 tests — python inline/file, venv detection, mixed bash+python
     typescript_runner_test.go      8 tests — typescript inline/file, tsx not found, mixed bash+typescript
     pipe_test.go                   10 tests — pipe: true: bash→bash, bash→python, python→bash, three-step chain, failure propagation, stderr passthrough, run step piping, multiline data
-    inputs_test.go                 14 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, excess positional args, args passthrough, short prefix, both prefixes, run step with with, PI_ARGS set/not-set/consumed/single
+    inputs_test.go                 20 tests — RunWithInputs: env var injection, positional, defaults, missing required, mixing error, excess positional args, args passthrough, short prefix, both prefixes, run step with with, PI_ARGS set/not-set/consumed/single, PI_ARG_N bash positional/single/not-set-no-args/not-set-inputs-consume/python-access
     conditional_step_test.go       13 tests — step-level if: true/false/not/complex, mixed conditional+unconditional, pipe passthrough on skip, file.exists/not
     conditional_automation_test.go 7 tests — automation-level if: true/false, run step calling skipped/executed automation, complex condition, skip vs circular dependency
     install_test.go                17 tests — installer lifecycle: already installed, fresh install, run fails, verify fails, verify defaults to test, no version, silent, stderr on failure (with content assertion), scalar stderr streamed, step list stderr streamed, first list with conditionals, with inputs, first block stderr surfaced, scalar phase uses automation env, version capture uses automation env, automation-level if
