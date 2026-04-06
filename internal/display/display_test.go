@@ -113,7 +113,7 @@ func TestBold_WithColor(t *testing.T) {
 func TestInstallStatus_AlreadyInstalled_NoColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.InstallStatus("✓", "my-tool", "already installed", "1.2.3")
+	p.InstallStatus(StatusSuccessCached, "my-tool", "already installed", "1.2.3")
 	got := buf.String()
 	if !strings.Contains(got, "✓") || !strings.Contains(got, "already installed") || !strings.Contains(got, "1.2.3") {
 		t.Errorf("unexpected output: %q", got)
@@ -123,7 +123,7 @@ func TestInstallStatus_AlreadyInstalled_NoColor(t *testing.T) {
 func TestInstallStatus_AlreadyInstalled_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, true)
-	p.InstallStatus("✓", "my-tool", "already installed", "1.2.3")
+	p.InstallStatus(StatusSuccessCached, "my-tool", "already installed", "1.2.3")
 	got := buf.String()
 	if !strings.Contains(got, dim) {
 		t.Errorf("already-installed should use dim style, got %q", got)
@@ -136,7 +136,7 @@ func TestInstallStatus_AlreadyInstalled_WithColor(t *testing.T) {
 func TestInstallStatus_Installed_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, true)
-	p.InstallStatus("✓", "my-tool", "installed", "2.0.0")
+	p.InstallStatus(StatusSuccess, "my-tool", "installed", "2.0.0")
 	got := buf.String()
 	if !strings.Contains(got, boldGreen) {
 		t.Errorf("newly installed should use bold green, got %q", got)
@@ -146,7 +146,7 @@ func TestInstallStatus_Installed_WithColor(t *testing.T) {
 func TestInstallStatus_Installing_NoStyle(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, true)
-	p.InstallStatus("→", "my-tool", "installing...", "")
+	p.InstallStatus(StatusInProgress, "my-tool", "installing...", "")
 	got := buf.String()
 	if strings.Contains(got, dim) || strings.Contains(got, boldGreen) || strings.Contains(got, boldRed) {
 		t.Errorf("installing should use plain style, got %q", got)
@@ -159,7 +159,7 @@ func TestInstallStatus_Installing_NoStyle(t *testing.T) {
 func TestInstallStatus_Failed_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, true)
-	p.InstallStatus("✗", "my-tool", "failed", "")
+	p.InstallStatus(StatusFailed, "my-tool", "failed", "")
 	got := buf.String()
 	if !strings.Contains(got, boldRed) {
 		t.Errorf("failed should use bold red, got %q", got)
@@ -169,7 +169,7 @@ func TestInstallStatus_Failed_WithColor(t *testing.T) {
 func TestInstallStatus_NoVersion(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.InstallStatus("✓", "my-tool", "installed", "")
+	p.InstallStatus(StatusSuccess, "my-tool", "installed", "")
 	got := buf.String()
 	if strings.Contains(got, "()") {
 		t.Errorf("empty version should not produce parens, got %q", got)
@@ -384,7 +384,7 @@ func TestTruncateTrace(t *testing.T) {
 func TestPackageFetch_Cached(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.PackageFetch("✓", "yotam180/pi-common@v1.2", "cached", "")
+	p.PackageFetch(StatusSuccessCached, "yotam180/pi-common@v1.2", "cached", "")
 	got := buf.String()
 	if !strings.Contains(got, "✓") {
 		t.Errorf("expected ✓ icon, got %q", got)
@@ -400,7 +400,7 @@ func TestPackageFetch_Cached(t *testing.T) {
 func TestPackageFetch_WithDetail(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.PackageFetch("✓", "file:~/my-automations", "found", "alias: mytools")
+	p.PackageFetch(StatusSuccessCached, "file:~/my-automations", "found", "alias: mytools")
 	got := buf.String()
 	if !strings.Contains(got, "alias: mytools") {
 		t.Errorf("expected detail in output, got %q", got)
@@ -410,7 +410,7 @@ func TestPackageFetch_WithDetail(t *testing.T) {
 func TestPackageFetch_Fetching(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.PackageFetch("↓", "testorg/pkg@v1.0", "fetching...", "")
+	p.PackageFetch(StatusInProgress, "testorg/pkg@v1.0", "fetching...", "")
 	got := buf.String()
 	if !strings.Contains(got, "↓") {
 		t.Errorf("expected ↓ icon, got %q", got)
@@ -423,7 +423,7 @@ func TestPackageFetch_Fetching(t *testing.T) {
 func TestPackageFetch_Failed(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.PackageFetch("✗", "badorg/badpkg@v0.1", "failed", "")
+	p.PackageFetch(StatusFailed, "badorg/badpkg@v0.1", "failed", "")
 	got := buf.String()
 	if !strings.Contains(got, "✗") {
 		t.Errorf("expected ✗ icon, got %q", got)
@@ -436,7 +436,7 @@ func TestPackageFetch_Failed(t *testing.T) {
 func TestPackageFetch_Warning_NoColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, false)
-	p.PackageFetch("⚠", "file:~/missing-path", "not found", "")
+	p.PackageFetch(StatusWarning, "file:~/missing-path", "not found", "")
 	got := buf.String()
 	if !strings.Contains(got, "⚠") {
 		t.Errorf("expected ⚠ icon, got %q", got)
@@ -449,14 +449,103 @@ func TestPackageFetch_Warning_NoColor(t *testing.T) {
 func TestPackageFetch_Warning_WithColor(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewWithColor(&buf, true)
-	p.PackageFetch("⚠", "file:~/missing-path", "not found", "")
+	p.PackageFetch(StatusWarning, "file:~/missing-path", "not found", "")
 	got := buf.String()
-	// ⚠ is not one of the special icons (✗, ✓, ↓), so it falls through to plain style
+	if !strings.Contains(got, yellow) {
+		t.Errorf("warning icon should use yellow style, got %q", got)
+	}
 	if strings.Contains(got, boldRed) || strings.Contains(got, dim) {
-		t.Errorf("warning icon should use plain style, got %q", got)
+		t.Errorf("warning icon should not use red or dim style, got %q", got)
 	}
 	if !strings.Contains(got, "not found") {
 		t.Errorf("expected 'not found' status, got %q", got)
+	}
+}
+
+func TestStatusIcon_AllKinds(t *testing.T) {
+	tests := []struct {
+		kind StatusKind
+		icon string
+	}{
+		{StatusSuccess, "✓"},
+		{StatusSuccessCached, "✓"},
+		{StatusInProgress, "→"},
+		{StatusFailed, "✗"},
+		{StatusWarning, "⚠"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.kind), func(t *testing.T) {
+			got := statusIcon(tt.kind)
+			if got != tt.icon {
+				t.Errorf("statusIcon(%q) = %q, want %q", tt.kind, got, tt.icon)
+			}
+		})
+	}
+}
+
+func TestStatusIcon_Unknown(t *testing.T) {
+	got := statusIcon("unknown_kind")
+	if got != "?" {
+		t.Errorf("statusIcon(unknown) = %q, want %q", got, "?")
+	}
+}
+
+func TestInstallStatus_Warning_WithColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, true)
+	p.InstallStatus(StatusWarning, "my-tool", "partially installed", "")
+	got := buf.String()
+	if !strings.Contains(got, yellow) {
+		t.Errorf("warning should use yellow style, got %q", got)
+	}
+	if !strings.Contains(got, "⚠") {
+		t.Errorf("expected ⚠ icon, got %q", got)
+	}
+}
+
+func TestPackageFetch_InProgress_UsesDownArrow(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch(StatusInProgress, "org/repo@v1.0", "fetching...", "")
+	got := buf.String()
+	if !strings.Contains(got, "↓") {
+		t.Errorf("PackageFetch with StatusInProgress should use ↓ icon, got %q", got)
+	}
+}
+
+func TestPrintStatusLine_AllKinds(t *testing.T) {
+	tests := []struct {
+		kind  StatusKind
+		color string
+	}{
+		{StatusFailed, boldRed},
+		{StatusSuccessCached, dim},
+		{StatusSuccess, boldGreen},
+		{StatusWarning, yellow},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.kind), func(t *testing.T) {
+			var buf bytes.Buffer
+			p := NewWithColor(&buf, true)
+			p.printStatusLine(tt.kind, "test line\n")
+			got := buf.String()
+			if !strings.Contains(got, tt.color) {
+				t.Errorf("printStatusLine(%q) should contain %q ANSI code, got %q", tt.kind, tt.color, got)
+			}
+		})
+	}
+}
+
+func TestPrintStatusLine_InProgress_Plain(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, true)
+	p.printStatusLine(StatusInProgress, "test line\n")
+	got := buf.String()
+	if strings.Contains(got, "\033[") {
+		t.Errorf("StatusInProgress should use plain style (no ANSI codes), got %q", got)
+	}
+	if got != "test line\n" {
+		t.Errorf("expected plain text, got %q", got)
 	}
 }
 

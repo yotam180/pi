@@ -113,11 +113,11 @@ func fetchGitHubPackage(ref refparser.AutomationRef, stderr io.Writer, printer *
 	}
 
 	source := ref.Org + "/" + ref.Repo + "@" + ref.Version
-	printer.PackageFetch("↓", source, "fetching...", "")
+	printer.PackageFetch(display.StatusInProgress, source, "fetching...", "")
 
 	path, wasCached, err := fetcher.Fetch(ref.Org, ref.Repo, ref.Version)
 	if err != nil {
-		printer.PackageFetch("✗", source, "failed", "")
+		printer.PackageFetch(display.StatusFailed, source, "failed", "")
 		return fmt.Errorf("fetching %s: %w", source, err)
 	}
 
@@ -127,7 +127,7 @@ func fetchGitHubPackage(ref refparser.AutomationRef, stderr io.Writer, printer *
 	if !wasCached {
 		status = "fetched"
 	}
-	printer.PackageFetch("✓", source, status, "")
+	printer.PackageFetch(display.StatusSuccessCached, source, status, "")
 	return nil
 }
 

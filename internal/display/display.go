@@ -19,6 +19,36 @@ const (
 	boldGreen = "\033[1;32m"
 )
 
+// StatusKind represents the semantic status of a display line (success,
+// failure, in-progress, etc.). Methods like InstallStatus and PackageFetch
+// accept StatusKind instead of raw icon strings, giving compile-time safety
+// and centralised icon→style mapping.
+type StatusKind string
+
+const (
+	StatusSuccess       StatusKind = "success"        // ✓ — bold green (newly installed, newly fetched)
+	StatusSuccessCached StatusKind = "success_cached"  // ✓ — dim (already installed, already cached)
+	StatusInProgress    StatusKind = "in_progress"     // → or ↓ — plain
+	StatusFailed        StatusKind = "failed"          // ✗ — bold red
+	StatusWarning       StatusKind = "warning"         // ⚠ — yellow
+)
+
+// statusIcon returns the Unicode icon for a StatusKind.
+func statusIcon(kind StatusKind) string {
+	switch kind {
+	case StatusSuccess, StatusSuccessCached:
+		return "✓"
+	case StatusInProgress:
+		return "→"
+	case StatusFailed:
+		return "✗"
+	case StatusWarning:
+		return "⚠"
+	default:
+		return "?"
+	}
+}
+
 // Printer writes styled output to a writer. When color is disabled
 // (non-TTY, NO_COLOR set, or explicitly disabled), all style methods
 // produce plain text.
@@ -80,13 +110,15 @@ func (p *Printer) Warn(format string, a ...any) {
 	p.styled(yellow, format, a...)
 }
 
-// InstallStatus prints a formatted installer status line with the
-// appropriate color for the icon/status combination:
-//   - "✓" + "already installed" → dim
-//   - "✓" + other (e.g. "installed") → bold green
-//   - "→" → plain
-//   - "✗" → bold red
-func (p *Printer) InstallStatus(icon, name, status, version string) {
+// InstallStatus prints a formatted installer status line styled according
+// to the StatusKind:
+//   - StatusSuccessCached → dim (already installed)
+//   - StatusSuccess → bold green (newly installed)
+//   - StatusInProgress → plain (installing...)
+//   - StatusFailed → bold red
+//   - StatusWarning → yellow
+func (p *Printer) InstallStatus(kind StatusKind, name, status, version string) {
+	icon := statusIcon(kind)
 	var line string
 	if version != "" {
 		line = fmt.Sprintf("  %s  %-25s %s (%s)\n", icon, name, status, version)
@@ -94,20 +126,21 @@ func (p *Printer) InstallStatus(icon, name, status, version string) {
 		line = fmt.Sprintf("  %s  %-25s %s\n", icon, name, status)
 	}
 
-	switch {
-	case icon == "✗":
-		p.Red("%s", line)
-	case icon == "✓" && strings.Contains(status, "already"):
-		p.Dim("%s", line)
-	case icon == "✓":
-		p.Green("%s", line)
-	default:
-		p.Plain("%s", line)
-	}
+	p.printStatusLine(kind, line)
 }
 
-// PackageFetch prints a package fetch status line with appropriate styling.
-func (p *Printer) PackageFetch(icon, source, status, detail string) {
+// PackageFetch prints a package fetch status line styled according to
+// the StatusKind:
+//   - StatusSuccessCached → dim (already cached / found)
+//   - StatusSuccess → bold green (newly fetched)
+//   - StatusInProgress → plain (fetching...)
+//   - StatusFailed → bold red
+//   - StatusWarning → yellow (source not found)
+func (p *Printer) PackageFetch(kind StatusKind, source, status, detail string) {
+	icon := statusIcon(kind)
+	if kind == StatusInProgress {
+		icon = "↓"
+	}
 	var line string
 	if detail != "" {
 		line = fmt.Sprintf("  %s  %-35s %s (%s)\n", icon, source, status, detail)
@@ -115,13 +148,21 @@ func (p *Printer) PackageFetch(icon, source, status, detail string) {
 		line = fmt.Sprintf("  %s  %-35s %s\n", icon, source, status)
 	}
 
-	switch icon {
-	case "✗":
+	p.printStatusLine(kind, line)
+}
+
+// printStatusLine routes a pre-formatted line to the appropriate style method
+// based on StatusKind. Shared by InstallStatus and PackageFetch.
+func (p *Printer) printStatusLine(kind StatusKind, line string) {
+	switch kind {
+	case StatusFailed:
 		p.Red("%s", line)
-	case "✓":
+	case StatusSuccessCached:
 		p.Dim("%s", line)
-	case "↓":
-		p.Plain("%s", line)
+	case StatusSuccess:
+		p.Green("%s", line)
+	case StatusWarning:
+		p.Warn("%s", line)
 	default:
 		p.Plain("%s", line)
 	}

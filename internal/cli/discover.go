@@ -114,7 +114,7 @@ func printOnDemandAdvisory(w io.Writer, source string) {
 		return
 	}
 	printer := display.NewForWriter(w)
-	printer.PackageFetch("↓", source, "fetched (on demand)", "")
+	printer.PackageFetch(display.StatusInProgress, source, "fetched (on demand)", "")
 	fmt.Fprintf(w, "\n  tip: add to pi.yaml to avoid fetching on every fresh clone:\n\n")
 	fmt.Fprintf(w, "    packages:\n")
 	fmt.Fprintf(w, "      - %s\n\n", source)
@@ -169,7 +169,7 @@ func resolveFilePackage(pkg config.PackageEntry, root string, stderr io.Writer, 
 			if pkg.As != "" {
 				detail = "alias: " + pkg.As
 			}
-			printer.PackageFetch("⚠", pkg.Source, "not found", detail)
+			printer.PackageFetch(display.StatusWarning, pkg.Source, "not found", detail)
 		}
 		if stderr != nil {
 			fmt.Fprintf(stderr, "warning: package %s path does not exist: %s\n", pkg.Source, fsPath)
@@ -182,7 +182,7 @@ func resolveFilePackage(pkg config.PackageEntry, root string, stderr io.Writer, 
 		if pkg.As != "" {
 			detail = "alias: " + pkg.As
 		}
-		printer.PackageFetch("✓", pkg.Source, "found", detail)
+		printer.PackageFetch(display.StatusSuccessCached, pkg.Source, "found", detail)
 	}
 	return fsPath, nil
 }
@@ -197,13 +197,13 @@ func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *di
 	}
 
 	if printer != nil {
-		printer.PackageFetch("↓", pkg.Source, "fetching...", "")
+		printer.PackageFetch(display.StatusInProgress, pkg.Source, "fetching...", "")
 	}
 
 	path, wasCached, err := fetcher.Fetch(ref.Org, ref.Repo, ref.Version)
 	if err != nil {
 		if printer != nil {
-			printer.PackageFetch("✗", pkg.Source, "failed", "")
+			printer.PackageFetch(display.StatusFailed, pkg.Source, "failed", "")
 		}
 		return "", fmt.Errorf("fetching %s: %w", pkg.Source, err)
 	}
@@ -213,7 +213,7 @@ func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *di
 		if !wasCached {
 			status = "fetched"
 		}
-		printer.PackageFetch("✓", pkg.Source, status, "")
+		printer.PackageFetch(display.StatusSuccessCached, pkg.Source, status, "")
 	}
 	return path, nil
 }

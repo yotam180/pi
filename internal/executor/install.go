@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/display"
 )
 
 // execInstall runs the structured install lifecycle: test → [run → verify] → version.
@@ -17,17 +18,17 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	testErr := e.execInstallPhase(a, &inst.Test, inputEnv)
 	if testErr == nil {
 		version := e.captureVersion(a, inst.Version, inputEnv)
-		e.printInstallStatus("✓", a.Name, "already installed", version)
+		e.printInstallStatus(display.StatusSuccessCached, a.Name, "already installed", version)
 		return nil
 	}
 
 	// Phase 2: run — perform the installation
 	// Stderr is streamed live to the terminal so the user sees errors as they happen.
-	e.printInstallStatus("→", a.Name, "installing...", "")
+	e.printInstallStatus(display.StatusInProgress, a.Name, "installing...", "")
 
 	runErr := e.execInstallPhaseLive(a, &inst.Run, inputEnv)
 	if runErr != nil {
-		e.printInstallStatus("✗", a.Name, "failed", "")
+		e.printInstallStatus(display.StatusFailed, a.Name, "failed", "")
 		return runErr
 	}
 
@@ -38,12 +39,12 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	}
 	verifyErr := e.execInstallPhase(a, verifyPhase, inputEnv)
 	if verifyErr != nil {
-		e.printInstallStatus("✗", a.Name, "failed", "")
+		e.printInstallStatus(display.StatusFailed, a.Name, "failed", "")
 		return verifyErr
 	}
 
 	version := e.captureVersion(a, inst.Version, inputEnv)
-	e.printInstallStatus("✓", a.Name, "installed", version)
+	e.printInstallStatus(display.StatusSuccess, a.Name, "installed", version)
 	return nil
 }
 
@@ -134,11 +135,11 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 }
 
 // printInstallStatus prints a formatted installer status line unless Silent is set.
-func (e *Executor) printInstallStatus(icon, name, status, version string) {
+func (e *Executor) printInstallStatus(kind display.StatusKind, name, status, version string) {
 	if e.Silent {
 		return
 	}
-	e.printer().InstallStatus(icon, name, status, version)
+	e.printer().InstallStatus(kind, name, status, version)
 }
 
 // execInstallFirstBlock handles a first: block inside an install phase.
