@@ -368,3 +368,157 @@ func TestWalkSteps_PreservesStepFields(t *testing.T) {
 		}
 	})
 }
+
+func TestWalkStepsUntil_StopsInInstallRunPhase(t *testing.T) {
+	a := &Automation{
+		Install: &InstallSpec{
+			Test: InstallPhase{IsScalar: true, Scalar: "test-cmd"},
+			Run: InstallPhase{
+				Steps: []Step{
+					{Type: StepTypeBash, Value: "run-step-1"},
+					{Type: StepTypeBash, Value: "run-step-2"},
+				},
+			},
+		},
+	}
+
+	var values []string
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		values = append(values, step.Value)
+		return step.Value == "run-step-1"
+	})
+
+	if len(values) != 2 {
+		t.Fatalf("expected 2 visits (test + run-step-1), got %d: %v", len(values), values)
+	}
+	if values[0] != "test-cmd" || values[1] != "run-step-1" {
+		t.Errorf("unexpected values: %v", values)
+	}
+}
+
+func TestWalkStepsUntil_StopsInInstallVerifyPhase(t *testing.T) {
+	a := &Automation{
+		Install: &InstallSpec{
+			Test: InstallPhase{IsScalar: true, Scalar: "test-cmd"},
+			Run:  InstallPhase{IsScalar: true, Scalar: "run-cmd"},
+			Verify: &InstallPhase{
+				Steps: []Step{
+					{Type: StepTypeBash, Value: "verify-step"},
+				},
+			},
+		},
+	}
+
+	var values []string
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		values = append(values, step.Value)
+		return step.Value == "verify-step"
+	})
+
+	if len(values) != 3 {
+		t.Fatalf("expected 3 visits (test + run + verify), got %d: %v", len(values), values)
+	}
+	if values[2] != "verify-step" {
+		t.Errorf("expected last value to be verify-step, got %q", values[2])
+	}
+}
+
+func TestWalkStepsUntil_NoInstall(t *testing.T) {
+	a := &Automation{
+		Steps: []Step{
+			{Type: StepTypeBash, Value: "one"},
+			{Type: StepTypeBash, Value: "two"},
+		},
+	}
+
+	var count int
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		count++
+		return false
+	})
+
+	if count != 2 {
+		t.Fatalf("expected 2 visits, got %d", count)
+	}
+}
+
+func TestWalkStepsUntil_StopsInTestPhaseBeforeRun(t *testing.T) {
+	a := &Automation{
+		Install: &InstallSpec{
+			Test: InstallPhase{
+				Steps: []Step{
+					{Type: StepTypeBash, Value: "test-step"},
+				},
+			},
+			Run: InstallPhase{IsScalar: true, Scalar: "should-not-reach"},
+		},
+	}
+
+	var values []string
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		values = append(values, step.Value)
+		return true
+	})
+
+	if len(values) != 1 {
+		t.Fatalf("expected 1 visit (stopped in test), got %d: %v", len(values), values)
+	}
+	if values[0] != "test-step" {
+		t.Errorf("expected test-step, got %q", values[0])
+	}
+}
+
+func TestWalkStepsUntil_StepListPhaseWithFirstBlock(t *testing.T) {
+	a := &Automation{
+		Install: &InstallSpec{
+			Test: InstallPhase{IsScalar: true, Scalar: "test-cmd"},
+			Run: InstallPhase{
+				Steps: []Step{
+					{
+						First: []Step{
+							{Type: StepTypeBash, Value: "first-a", If: "command.mise"},
+							{Type: StepTypeBash, Value: "first-b"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var values []string
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		values = append(values, step.Value)
+		return step.Value == "first-a"
+	})
+
+	if len(values) != 2 {
+		t.Fatalf("expected 2 visits (test + first-a), got %d: %v", len(values), values)
+	}
+}
+
+func TestWalkStepsUntil_CompletesAllInstallPhases(t *testing.T) {
+	a := &Automation{
+		Install: &InstallSpec{
+			Test: InstallPhase{IsScalar: true, Scalar: "test-cmd"},
+			Run:  InstallPhase{IsScalar: true, Scalar: "run-cmd"},
+			Verify: &InstallPhase{
+				Steps: []Step{
+					{Type: StepTypeBash, Value: "verify-step"},
+				},
+			},
+		},
+	}
+
+	var phases []string
+	WalkStepsUntil(a, func(step Step, loc StepLocation) bool {
+		phases = append(phases, loc.Phase)
+		return false
+	})
+
+	if len(phases) != 3 {
+		t.Fatalf("expected 3 visits, got %d: %v", len(phases), phases)
+	}
+	if phases[0] != "test" || phases[1] != "run" || phases[2] != "verify" {
+		t.Errorf("unexpected phases: %v", phases)
+	}
+}

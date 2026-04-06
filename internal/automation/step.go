@@ -302,6 +302,24 @@ func (sr *stepRaw) resolvePipe(index int, warnWriter io.Writer) (bool, error) {
 	return false, nil
 }
 
+// validateSingleStep validates one non-first step's invariants: non-empty value,
+// valid step type, and parseable if: expression. The prefix is used for error
+// messages (e.g. "my-auto: step[2]" or "my-auto: install.run step[0].first[1]").
+func validateSingleStep(prefix string, step Step) error {
+	if step.Value == "" {
+		return fmt.Errorf("%s has empty value", prefix)
+	}
+	if !validStepTypes[step.Type] {
+		return fmt.Errorf("%s type %q is not a valid step type", prefix, step.Type)
+	}
+	if step.If != "" {
+		if _, err := conditions.Predicates(step.If); err != nil {
+			return fmt.Errorf("%s invalid if expression: %w", prefix, err)
+		}
+	}
+	return nil
+}
+
 // validateSteps checks that all steps in a slice have valid types and if: expressions.
 func validateSteps(path string, steps []Step) error {
 	for i, step := range steps {
@@ -311,16 +329,8 @@ func validateSteps(path string, steps []Step) error {
 			}
 			continue
 		}
-		if step.Value == "" {
-			return fmt.Errorf("%s: step[%d] has empty value", path, i)
-		}
-		if !validStepTypes[step.Type] {
-			return fmt.Errorf("%s: step[%d] type %q is not a valid step type", path, i, step.Type)
-		}
-		if step.If != "" {
-			if _, err := conditions.Predicates(step.If); err != nil {
-				return fmt.Errorf("%s: step[%d] invalid if expression: %w", path, i, err)
-			}
+		if err := validateSingleStep(fmt.Sprintf("%s: step[%d]", path, i), step); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -336,16 +346,8 @@ func validateFirstBlock(path string, index int, step Step) error {
 		if sub.IsFirst() {
 			return fmt.Errorf("%s: step[%d].first[%d]: nested first: blocks are not allowed", path, index, j)
 		}
-		if sub.Value == "" {
-			return fmt.Errorf("%s: step[%d].first[%d] has empty value", path, index, j)
-		}
-		if !validStepTypes[sub.Type] {
-			return fmt.Errorf("%s: step[%d].first[%d] type %q is not a valid step type", path, index, j, sub.Type)
-		}
-		if sub.If != "" {
-			if _, err := conditions.Predicates(sub.If); err != nil {
-				return fmt.Errorf("%s: step[%d].first[%d] invalid if expression: %w", path, index, j, err)
-			}
+		if err := validateSingleStep(fmt.Sprintf("%s: step[%d].first[%d]", path, index, j), sub); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -393,16 +395,8 @@ func validateInstallPhase(path, phaseName string, phase *InstallPhase) error {
 			}
 			continue
 		}
-		if step.Value == "" {
-			return fmt.Errorf("%s step[%d] has empty value", prefix, i)
-		}
-		if !validStepTypes[step.Type] {
-			return fmt.Errorf("%s step[%d] type %q is not a valid step type", prefix, i, step.Type)
-		}
-		if step.If != "" {
-			if _, err := conditions.Predicates(step.If); err != nil {
-				return fmt.Errorf("%s step[%d] invalid if expression: %w", prefix, i, err)
-			}
+		if err := validateSingleStep(fmt.Sprintf("%s step[%d]", prefix, i), step); err != nil {
+			return err
 		}
 	}
 	return nil

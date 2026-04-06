@@ -1694,3 +1694,274 @@ steps:
 	}
 }
 
+func TestLoad_FirstBlock_TimeoutOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-timeout.yaml", `
+description: Timeout on block
+steps:
+  - first:
+      - bash: echo hello
+    timeout: 30s
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for timeout on first: block")
+	}
+	if !strings.Contains(err.Error(), "timeout") || !strings.Contains(err.Error(), "first") {
+		t.Errorf("error = %q, want mention of timeout on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_SilentOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-silent.yaml", `
+description: Silent on block
+steps:
+  - first:
+      - bash: echo hello
+    silent: true
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for silent on first: block")
+	}
+	if !strings.Contains(err.Error(), "silent") || !strings.Contains(err.Error(), "first") {
+		t.Errorf("error = %q, want mention of silent on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_ParentShellOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-parent-shell.yaml", `
+description: Parent shell on block
+steps:
+  - first:
+      - bash: echo hello
+    parent_shell: true
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for parent_shell on first: block")
+	}
+	if !strings.Contains(err.Error(), "parent_shell") || !strings.Contains(err.Error(), "first") {
+		t.Errorf("error = %q, want mention of parent_shell on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_WithOnBlockError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-with.yaml", `
+description: With on block
+steps:
+  - first:
+      - bash: echo hello
+    with:
+      key: value
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for with on first: block")
+	}
+	if !strings.Contains(err.Error(), "with") || !strings.Contains(err.Error(), "first") {
+		t.Errorf("error = %q, want mention of with on first", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_SubStepInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-bad-if.yaml", `
+description: Bad if in sub-step
+steps:
+  - first:
+      - bash: echo hello
+        if: "and and"
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid if in first: sub-step")
+	}
+	if !strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "if") {
+		t.Errorf("error = %q, want mention of invalid if", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_SubStepEmptyValue(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-empty-sub.yaml", `
+description: Empty sub-step value
+steps:
+  - first:
+      - bash: ""
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for empty sub-step value")
+	}
+	if !strings.Contains(err.Error(), "empty value") {
+		t.Errorf("error = %q, want mention of empty value", err.Error())
+	}
+}
+
+func TestLoad_FirstBlock_OuterInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "first-bad-outer-if.yaml", `
+description: Bad outer if
+steps:
+  - first:
+      - bash: echo hello
+    if: "and and"
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid outer if on first: block")
+	}
+	if !strings.Contains(err.Error(), "invalid if expression") {
+		t.Errorf("error = %q, want mention of invalid if expression", err.Error())
+	}
+}
+
+func TestLoad_InstallEmptyStepListTest(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+description: Empty step list test
+install:
+  test: []
+  run: install foo
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for empty step list test phase")
+	}
+	if !strings.Contains(err.Error(), "install.test must have content") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallEmptyStepListRun(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+description: Empty step list run
+install:
+  test: command -v foo
+  run: []
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for empty step list run phase")
+	}
+	if !strings.Contains(err.Error(), "install.run must have content") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallVerifyPhaseInvalidIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+description: Bad verify if
+install:
+  test: command -v foo
+  run: install foo
+  verify:
+    - bash: foo --version
+      if: "and and"
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid if in verify phase")
+	}
+	if !strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "if") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallRunPhaseEmptyStepValue(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+description: Empty step in run phase
+install:
+  test: command -v foo
+  run:
+    - bash: ""
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for empty step value in install run phase")
+	}
+	if !strings.Contains(err.Error(), "empty value") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestLoad_InstallRunPhaseFirstBlockInvalidSubStepIf(t *testing.T) {
+	dir := t.TempDir()
+	path := writeFile(t, dir, "bad.yaml", `
+description: Bad if in install first block
+install:
+  test: command -v foo
+  run:
+    - first:
+        - bash: install foo
+          if: "and and"
+`)
+
+	_, err := Load(path, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid if in install first block sub-step")
+	}
+	if !strings.Contains(err.Error(), "invalid") || !strings.Contains(err.Error(), "if") {
+		t.Errorf("error = %v", err)
+	}
+}
+
+func TestValidateSingleStep_InvalidType(t *testing.T) {
+	step := Step{Type: StepType("ruby"), Value: "puts 'hi'"}
+	err := validateSingleStep("test: step[0]", step)
+	if err == nil {
+		t.Fatal("expected error for invalid step type")
+	}
+	if !strings.Contains(err.Error(), "not a valid step type") {
+		t.Errorf("error = %q, want mention of invalid step type", err.Error())
+	}
+}
+
+func TestValidateSingleStep_EmptyValue(t *testing.T) {
+	step := Step{Type: StepTypeBash, Value: ""}
+	err := validateSingleStep("test: step[0]", step)
+	if err == nil {
+		t.Fatal("expected error for empty value")
+	}
+	if !strings.Contains(err.Error(), "empty value") {
+		t.Errorf("error = %q, want mention of empty value", err.Error())
+	}
+}
+
+func TestValidateSingleStep_InvalidIf(t *testing.T) {
+	step := Step{Type: StepTypeBash, Value: "echo hi", If: "and and"}
+	err := validateSingleStep("test: step[0]", step)
+	if err == nil {
+		t.Fatal("expected error for invalid if expression")
+	}
+	if !strings.Contains(err.Error(), "invalid if expression") {
+		t.Errorf("error = %q, want mention of invalid if expression", err.Error())
+	}
+}
+
+func TestValidateSingleStep_Valid(t *testing.T) {
+	step := Step{Type: StepTypeBash, Value: "echo hello", If: "os.macos"}
+	err := validateSingleStep("test: step[0]", step)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
