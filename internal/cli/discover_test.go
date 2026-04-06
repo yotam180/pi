@@ -216,7 +216,7 @@ func TestResolvePackageSource_FileRouting(t *testing.T) {
 	os.MkdirAll(pkgDir, 0755)
 
 	pkg := config.PackageEntry{Source: "file:" + pkgDir}
-	got, err := resolvePackageSource(pkg, root, nil, nil)
+	got, err := resolvePackageSource(pkg, root, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

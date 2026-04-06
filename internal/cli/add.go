@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/vyper-tooling/pi/internal/cache"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/refparser"
@@ -43,6 +42,13 @@ Examples:
 
 // runAdd implements the pi add logic. Extracted for testability.
 func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
+	return runAddWithFetcher(startDir, source, alias, stdout, stderr, nil)
+}
+
+// runAddWithFetcher is the internal implementation of runAdd that accepts an
+// optional PackageFetcher for testability. When fetcher is nil, a
+// CachePackageFetcher is created for GitHub sources.
+func runAddWithFetcher(startDir, source, alias string, stdout, stderr io.Writer, fetcher PackageFetcher) error {
 	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
@@ -63,7 +69,14 @@ func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
 
 	switch ref.Type {
 	case refparser.RefGitHub:
-		if err := fetchGitHubPackage(ref, stderr, printer); err != nil {
+		f := fetcher
+		if f == nil {
+			f, err = NewCachePackageFetcher(stderr)
+			if err != nil {
+				return err
+			}
+		}
+		if err := fetchGitHubPackage(ref, stderr, printer, f); err != nil {
 			return err
 		}
 
@@ -94,38 +107,27 @@ func runAdd(startDir, source, alias string, stdout, stderr io.Writer) error {
 }
 
 // fetchGitHubPackage validates and fetches a GitHub package into the cache.
-func fetchGitHubPackage(ref refparser.AutomationRef, stderr io.Writer, printer *display.Printer) error {
+func fetchGitHubPackage(ref refparser.AutomationRef, stderr io.Writer, printer *display.Printer, fetcher PackageFetcher) error {
 	if ref.Version == "" {
 		return fmt.Errorf("version required — use %s/%s@<tag>", ref.Org, ref.Repo)
 	}
 
 	source := ref.Org + "/" + ref.Repo + "@" + ref.Version
-
-	cacheRoot, err := cache.DefaultCacheRoot()
-	if err != nil {
-		return err
-	}
-
-	c := &cache.Cache{
-		Root:       cacheRoot,
-		WarnWriter: stderr,
-		PIVersion:  version,
-	}
-
-	cachePath := c.PackagePath(ref.Org, ref.Repo, ref.Version)
-	if info, statErr := os.Stat(cachePath); statErr == nil && info.IsDir() {
-		printer.PackageFetch("✓", source, "cached", "")
-		return nil
-	}
-
 	printer.PackageFetch("↓", source, "fetching...", "")
 
-	if _, err := c.Fetch(ref.Org, ref.Repo, ref.Version); err != nil {
+	path, wasCached, err := fetcher.Fetch(ref.Org, ref.Repo, ref.Version)
+	if err != nil {
 		printer.PackageFetch("✗", source, "failed", "")
 		return fmt.Errorf("fetching %s: %w", source, err)
 	}
 
-	printer.PackageFetch("✓", source, "cached", "")
+	_ = path // path is used by callers that merge; add.go only needs the side effect
+
+	status := "cached"
+	if !wasCached {
+		status = "fetched"
+	}
+	printer.PackageFetch("✓", source, status, "")
 	return nil
 }
 

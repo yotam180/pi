@@ -8,7 +8,6 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/builtins"
-	"github.com/vyper-tooling/pi/internal/cache"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/display"
@@ -33,7 +32,11 @@ func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Wri
 	}
 
 	if cfg != nil && len(cfg.Packages) > 0 {
-		if err := mergePackages(result, cfg, root, stderr); err != nil {
+		fetcher, err := NewCachePackageFetcher(stderr)
+		if err != nil {
+			return nil, err
+		}
+		if err := mergePackages(result, cfg, root, stderr, fetcher); err != nil {
 			return nil, err
 		}
 	}
@@ -45,7 +48,7 @@ func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Wri
 
 	result.MergeBuiltins(builtinResult)
 
-	result.OnDemandFetch = newOnDemandFetcher(stderr)
+	result.OnDemandFetch = newOnDemandFetcher(stderr, nil)
 
 	return result, nil
 }
@@ -53,31 +56,24 @@ func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Wri
 // newOnDemandFetcher returns an OnDemandFetchFunc that fetches GitHub packages
 // on first encounter and prints an advisory to stderr. The advisory is shown
 // once per package per invocation (deduped via a closure-scoped map).
-func newOnDemandFetcher(stderr io.Writer) discovery.OnDemandFetchFunc {
+// If fetcher is nil, a CachePackageFetcher is created lazily on first use.
+func newOnDemandFetcher(stderr io.Writer, fetcher PackageFetcher) discovery.OnDemandFetchFunc {
 	fetched := make(map[string]bool) // tracks sources already fetched this invocation
 
 	return func(r *discovery.Result, ref refparser.AutomationRef) (*automation.Automation, error) {
 		source := ref.Org + "/" + ref.Repo + "@" + ref.Version
 
 		if !fetched[source] {
-			cacheRoot, err := cache.DefaultCacheRoot()
-			if err != nil {
-				return nil, err
+			f := fetcher
+			if f == nil {
+				var err error
+				f, err = NewCachePackageFetcher(stderr)
+				if err != nil {
+					return nil, err
+				}
 			}
 
-			c := &cache.Cache{
-				Root:       cacheRoot,
-				WarnWriter: stderr,
-				PIVersion:  version,
-			}
-
-			cachePath := c.PackagePath(ref.Org, ref.Repo, ref.Version)
-			wasCached := false
-			if info, statErr := os.Stat(cachePath); statErr == nil && info.IsDir() {
-				wasCached = true
-			}
-
-			pkgDir, err := c.Fetch(ref.Org, ref.Repo, ref.Version)
+			pkgDir, wasCached, err := f.Fetch(ref.Org, ref.Repo, ref.Version)
 			if err != nil {
 				return nil, fmt.Errorf("on-demand fetch of %s failed: %w", source, err)
 			}
@@ -88,13 +84,11 @@ func newOnDemandFetcher(stderr io.Writer) discovery.OnDemandFetchFunc {
 
 			fetched[source] = true
 
-			// Print advisory only when a live network fetch happened (not from cache)
 			if !wasCached {
 				printOnDemandAdvisory(stderr, source)
 			}
 		}
 
-		// Package is now merged — look up the automation
 		path := ref.Path
 		if path == "" {
 			return nil, fmt.Errorf("no automation path specified in reference %q", ref.Raw)
@@ -129,14 +123,14 @@ func printOnDemandAdvisory(w io.Writer, source string) {
 // mergePackages fetches/verifies each declared package and merges its
 // automations into the result. root is the project root for resolving
 // relative file: paths.
-func mergePackages(result *discovery.Result, cfg *config.ProjectConfig, root string, stderr io.Writer) error {
+func mergePackages(result *discovery.Result, cfg *config.ProjectConfig, root string, stderr io.Writer, fetcher PackageFetcher) error {
 	var printer *display.Printer
 	if stderr != nil {
 		printer = display.NewForWriter(stderr)
 	}
 
 	for _, pkg := range cfg.Packages {
-		pkgDir, err := resolvePackageSource(pkg, root, stderr, printer)
+		pkgDir, err := resolvePackageSource(pkg, root, stderr, printer, fetcher)
 		if err != nil {
 			return fmt.Errorf("package %s: %w", pkg.Source, err)
 		}
@@ -154,11 +148,11 @@ func mergePackages(result *discovery.Result, cfg *config.ProjectConfig, root str
 // resolvePackageSource fetches a GitHub package or verifies a file: source.
 // Returns the path to the package root, or empty string if a file: source
 // is missing (warning printed, non-fatal).
-func resolvePackageSource(pkg config.PackageEntry, root string, stderr io.Writer, printer *display.Printer) (string, error) {
+func resolvePackageSource(pkg config.PackageEntry, root string, stderr io.Writer, printer *display.Printer, fetcher PackageFetcher) (string, error) {
 	if pkg.IsFileSource() {
 		return resolveFilePackage(pkg, root, stderr, printer)
 	}
-	return resolveGitHubPackage(pkg, stderr, printer)
+	return resolveGitHubPackage(pkg, stderr, printer, fetcher)
 }
 
 func resolveFilePackage(pkg config.PackageEntry, root string, stderr io.Writer, printer *display.Printer) (string, error) {
@@ -193,7 +187,7 @@ func resolveFilePackage(pkg config.PackageEntry, root string, stderr io.Writer, 
 	return fsPath, nil
 }
 
-func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *display.Printer) (string, error) {
+func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *display.Printer, fetcher PackageFetcher) (string, error) {
 	ref, err := refparser.Parse(pkg.Source, nil)
 	if err != nil {
 		return "", fmt.Errorf("invalid package source %q: %w", pkg.Source, err)
@@ -202,30 +196,11 @@ func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *di
 		return "", fmt.Errorf("invalid package source %q: expected org/repo@version format", pkg.Source)
 	}
 
-	cacheRoot, err := cache.DefaultCacheRoot()
-	if err != nil {
-		return "", err
-	}
-
-	c := &cache.Cache{
-		Root:       cacheRoot,
-		WarnWriter: stderr,
-		PIVersion:  version,
-	}
-
-	cachePath := c.PackagePath(ref.Org, ref.Repo, ref.Version)
-	if info, statErr := os.Stat(cachePath); statErr == nil && info.IsDir() {
-		if printer != nil {
-			printer.PackageFetch("✓", pkg.Source, "cached", "")
-		}
-		return cachePath, nil
-	}
-
 	if printer != nil {
 		printer.PackageFetch("↓", pkg.Source, "fetching...", "")
 	}
 
-	path, err := c.Fetch(ref.Org, ref.Repo, ref.Version)
+	path, wasCached, err := fetcher.Fetch(ref.Org, ref.Repo, ref.Version)
 	if err != nil {
 		if printer != nil {
 			printer.PackageFetch("✗", pkg.Source, "failed", "")
@@ -234,7 +209,11 @@ func resolveGitHubPackage(pkg config.PackageEntry, stderr io.Writer, printer *di
 	}
 
 	if printer != nil {
-		printer.PackageFetch("✓", pkg.Source, "cached", "")
+		status := "cached"
+		if !wasCached {
+			status = "fetched"
+		}
+		printer.PackageFetch("✓", pkg.Source, status, "")
 	}
 	return path, nil
 }
