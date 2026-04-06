@@ -225,6 +225,121 @@ func TestResolvePackageSource_FileRouting(t *testing.T) {
 	}
 }
 
+func TestDiscoverAllWithConfig_WarningsRouteToStderr(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("name: wrong-name\ndescription: hello\nbash: echo hi\n"), 0644)
+
+	var stderr bytes.Buffer
+	result, err := discoverAllWithConfig(root, nil, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result.Automations["hello"]; !ok {
+		t.Error("expected hello automation to be discovered")
+	}
+	if !strings.Contains(stderr.String(), "warning:") {
+		t.Errorf("name mismatch warning should route through provided stderr, got: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "wrong-name") {
+		t.Errorf("warning should mention the mismatched name, got: %q", stderr.String())
+	}
+}
+
+func TestDiscoverAllWithConfig_NilStderrSuppressesWarnings(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("name: wrong-name\ndescription: hello\nbash: echo hi\n"), 0644)
+
+	result, err := discoverAllWithConfig(root, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result.Automations["hello"]; !ok {
+		t.Error("expected hello automation to be discovered even with nil stderr")
+	}
+}
+
+func TestDiscoverAll_NilStderr(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: hello\nbash: echo hi\n"), 0644)
+
+	result, err := discoverAll(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result.Automations["hello"]; !ok {
+		t.Error("expected hello automation from discoverAll")
+	}
+}
+
+func TestMergePackages_ShadowWarningsRouteToStderr(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "shared-auto.yaml"), []byte("description: local\nbash: echo local\n"), 0644)
+
+	pkgDir := filepath.Join(root, "my-pkg")
+	pkgPiDir := filepath.Join(pkgDir, ".pi")
+	os.MkdirAll(pkgPiDir, 0755)
+	os.WriteFile(filepath.Join(pkgPiDir, "shared-auto.yaml"), []byte("description: package\nbash: echo package\n"), 0644)
+
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Packages: []config.PackageEntry{
+			{Source: "file:" + pkgDir},
+		},
+	}
+
+	var stderr bytes.Buffer
+	result, err := discoverAllWithConfig(root, cfg, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result.Automations["shared-auto"]; !ok {
+		t.Error("expected shared-auto automation to be discovered")
+	}
+	if !strings.Contains(stderr.String(), "shadowed") {
+		t.Errorf("shadow warning should route through provided stderr, got: %q", stderr.String())
+	}
+}
+
+func TestMergePackages_NilStderrSuppressesShadowWarnings(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "overlap.yaml"), []byte("description: local\nbash: echo local\n"), 0644)
+
+	pkgDir := filepath.Join(root, "ext-pkg")
+	pkgPiDir := filepath.Join(pkgDir, ".pi")
+	os.MkdirAll(pkgPiDir, 0755)
+	os.WriteFile(filepath.Join(pkgPiDir, "overlap.yaml"), []byte("description: pkg version\nbash: echo pkg\n"), 0644)
+
+	cfg := &config.ProjectConfig{
+		Project: "test",
+		Packages: []config.PackageEntry{
+			{Source: "file:" + pkgDir},
+		},
+	}
+
+	result, err := discoverAllWithConfig(root, cfg, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := result.Automations["overlap"]; !ok {
+		t.Error("expected overlap automation even with nil stderr")
+	}
+}
+
 func TestMergePackages_EmptyList(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0644)

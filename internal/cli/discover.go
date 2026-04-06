@@ -27,7 +27,7 @@ func discoverAll(root string) (*discovery.Result, error) {
 // stderr is used for package fetch status output; nil suppresses status.
 func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Writer) (*discovery.Result, error) {
 	piDir := filepath.Join(root, discovery.PiDir)
-	result, err := discovery.Discover(piDir, os.Stderr)
+	result, err := discovery.Discover(piDir, stderr)
 	if err != nil {
 		return nil, fmt.Errorf("discovering automations: %w", err)
 	}
@@ -45,7 +45,7 @@ func discoverAllWithConfig(root string, cfg *config.ProjectConfig, stderr io.Wri
 
 	result.MergeBuiltins(builtinResult)
 
-	result.OnDemandFetch = newOnDemandFetcher(os.Stderr)
+	result.OnDemandFetch = newOnDemandFetcher(stderr)
 
 	return result, nil
 }
@@ -144,7 +144,7 @@ func mergePackages(result *discovery.Result, cfg *config.ProjectConfig, root str
 			continue // file: source not found — warning printed, non-fatal
 		}
 
-		if err := result.MergePackage(pkg.Source, pkg.As, pkgDir, os.Stderr); err != nil {
+		if err := result.MergePackage(pkg.Source, pkg.As, pkgDir, stderr); err != nil {
 			return err
 		}
 	}
