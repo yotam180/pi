@@ -368,6 +368,38 @@ setup:
 	}
 }
 
+func TestValidate_PiYamlUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "pi.yaml"), `project: test
+shortcutz:
+  hi: hello
+pakages: []
+`)
+	piDir := filepath.Join(dir, ".pi")
+	mkdirAll(t, piDir)
+	writeFile(t, filepath.Join(piDir, "hello.yaml"), "description: test\nbash: echo hi\n")
+
+	_, stderr, code := runPiSplit(t, dir, "validate")
+	if code != 1 {
+		t.Fatalf("expected exit 1 for unknown pi.yaml fields, got %d", code)
+	}
+	if !strings.Contains(stderr, "shortcutz") {
+		t.Errorf("expected error to mention 'shortcutz', got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "shortcuts") {
+		t.Errorf("expected 'shortcuts' suggestion, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "pakages") {
+		t.Errorf("expected error to mention 'pakages', got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "packages") {
+		t.Errorf("expected 'packages' suggestion, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "2 error") {
+		t.Errorf("expected 2 errors, got: %s", stderr)
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {

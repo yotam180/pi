@@ -67,7 +67,7 @@ internal/
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               20 tests (advisory output format, nil writer, fetch status text, down arrow icon, discoverAllWithConfig [warnings route to stderr, nil stderr suppresses], discoverAll nil stderr, mergePackages [shadow warnings route to stderr, nil stderr suppresses], resolveFilePackage [existing dir, alias, missing, missing alias, not-a-dir, relative path, nil printer, nil stderr], resolvePackageSource file routing, mergePackages [empty list, missing file source skipped])
     run_test.go                    pi run tests (24 tests — includes --with, inputs, --silent, excess positional args, PI_ARGS, natural arg forwarding, Cobra flag isolation tests)
-    validate_test.go               pi validate tests (70 tests — integration tests via runValidate(); unit tests now delegate to validate.CheckWithInputs, validate.DetectCycles, validate.NormalizeCycleKey; covers valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, installer file refs, shortcut/setup/run-step with: validation, circular deps, condition validation, unknown field detection with suggestions)
+    validate_test.go               pi validate tests (75 tests — integration tests via runValidate(); unit tests now delegate to validate.CheckWithInputs, validate.DetectCycles, validate.NormalizeCycleKey; covers valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, installer file refs, shortcut/setup/run-step with: validation, circular deps, condition validation, unknown field detection with suggestions, pi.yaml unknown field detection with suggestions)
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (35 tests — includes if: condition display, installer type, installer lifecycle detail [scalar, step-list, explicit verify, no version, truncation], first: block detail [basic, block annotations, descriptions, sub-step annotations, integration], dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests, positional order display, usage line)
@@ -158,10 +158,12 @@ internal/
     shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
     shadow_test.go                 13 tests (no shadows, shell builtins, common commands, multiple, empty, case-insensitive, exhaustive coverage, suggestions, formatting, sorted output)
   validate/                        Project-wide static validation (registry-based)
-    validate.go                    Check interface, CheckFunc adapter, Context (Root/Config/Discovery), Result, Runner (register+run), DefaultRunner() — pre-loads 10 built-in checks; individual check implementations: checkShortcutRefs, checkSetupRefs, checkRunStepRefs, checkFileReferences, checkShortcutInputs, checkSetupInputs, checkRunStepInputs, checkCircularDeps, checkConditions, checkUnknownFields; exported helpers: CheckWithInputs(), BuildRunGraph(), DetectCycles(), NormalizeCycleKey()
+    validate.go                    Check interface, CheckFunc adapter, Context (Root/Config/Discovery), Result, Runner (register+run), DefaultRunner() — pre-loads 11 built-in checks; individual check implementations: checkShortcutRefs, checkSetupRefs, checkRunStepRefs, checkFileReferences, checkShortcutInputs, checkSetupInputs, checkRunStepInputs, checkCircularDeps, checkConditions, checkUnknownFields, checkPiYamlUnknownFields; exported helpers: CheckWithInputs(), BuildRunGraph(), DetectCycles(), NormalizeCycleKey()
     unknown_fields.go              Unknown YAML field detection for automation files; checks top-level, step-level, install-block, and first: sub-step keys against known field sets; Levenshtein-based "did you mean?" suggestions for typos; skips builtins and package automations; knownAutomationKeys, knownStepKeys, knownInstallKeys field sets; suggestField(), levenshtein()
-    validate_test.go               56 tests (runner lifecycle [empty, register, aggregation, counts, ordering], DefaultRunner check count, CheckFunc adapter, CheckWithInputs [no-with, all-valid, unknown, no-inputs, multiple-sorted], DetectCycles [no-cycles, direct, self-loop, three-node, diamond, multiple, disconnected], NormalizeCycleKey [rotation, self-loop, single, empty], individual checks [shortcut-refs valid/broken, setup-refs valid/broken, run-step-refs valid/broken, circular-deps cycle/no-cycle, conditions valid/unknown/automation-level, shortcut-inputs valid/unknown, setup-inputs valid/unknown/no-with/broken-ref, run-step-inputs valid/unknown/no-with/broken-ref/bash-skipped, file-refs inline/run-step/missing/existing], BuildRunGraph [basic, dedup])
+    unknown_pi_yaml.go             Unknown YAML field detection for pi.yaml; checks top-level keys (project, shortcuts, setup, packages, runtimes) and runtimes: sub-keys (provision, manager) against known field sets; Levenshtein-based "did you mean?" suggestions for typos; reuses suggestField() from unknown_fields.go
+    validate_test.go               57 tests (runner lifecycle [empty, register, aggregation, counts, ordering], DefaultRunner check count, CheckFunc adapter, CheckWithInputs [no-with, all-valid, unknown, no-inputs, multiple-sorted], DetectCycles [no-cycles, direct, self-loop, three-node, diamond, multiple, disconnected], NormalizeCycleKey [rotation, self-loop, single, empty], individual checks [shortcut-refs valid/broken, setup-refs valid/broken, run-step-refs valid/broken, circular-deps cycle/no-cycle, conditions valid/unknown/automation-level, shortcut-inputs valid/unknown, setup-inputs valid/unknown/no-with/broken-ref, run-step-inputs valid/unknown/no-with/broken-ref/bash-skipped, file-refs inline/run-step/missing/existing], BuildRunGraph [basic, dedup])
     unknown_fields_test.go         29 tests (valid file, valid multi-step, unknown top-level, top-level suggestion, unknown step-level, multiple unknowns, skips builtins, installer fields, unknown install field, first block sub-steps, missing file, empty file path, shorthand with all modifiers, step common typo, automation name in error, valid inputs, valid requires, installer with verify, parent shell and pipe, pipe_to, completely unknown no suggestion, invalid YAML, step and top-level mixed, suggestField unit [exact/close/no match/multiple/short], levenshtein unit [identical/empty/one diff/substitution])
+    unknown_pi_yaml_test.go        20 tests (valid file, valid with runtimes, unknown top-level, suggestion shortcutz→shortcuts, suggestion pakages→packages, suggestion setup, multiple unknown, no suggestion for unrelated, runtimes unknown field, runtimes completely unknown, missing pi.yaml, invalid YAML, empty file, suggestion runtimes, suggestion project, mixed valid and invalid, integration with runner, known keys complete, known runtimes keys complete, top-level and runtimes combined)
 ```
 
 ## Data Flow
@@ -301,7 +303,7 @@ pi validate
   │    discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
   │
   └─ Validation (internal/validate via DefaultRunner)
-       10 registered checks run in order:
+       11 registered checks run in order:
        1. shortcut-refs → automation names
        2. setup-refs → automation names
        3. run-step-refs → automation names (incl. install phases)
@@ -311,7 +313,8 @@ pi validate
        7. run-step-inputs → target declared inputs
        8. circular-deps → DFS graph analysis
        9. conditions → known predicate names
-       10. unknown-fields → detects unknown YAML keys with "did you mean?" suggestions
+       10. unknown-fields → detects unknown YAML keys in automation files with "did you mean?" suggestions
+       11. unknown-pi-yaml-fields → detects unknown YAML keys in pi.yaml (top-level and runtimes:) with "did you mean?" suggestions
        Collects all errors, CLI prints to stderr, exit 0 or 1
 ```
 

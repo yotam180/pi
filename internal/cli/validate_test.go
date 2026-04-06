@@ -1670,3 +1670,105 @@ silent: true
 		t.Fatalf("unexpected error for valid file: %v\nstderr: %s", err, stderr.String())
 	}
 }
+
+func TestValidate_PiYamlUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcutz:
+  hi: hello
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown pi.yaml field 'shortcutz'")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "pi.yaml") {
+		t.Errorf("expected error to mention pi.yaml, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "shortcutz") {
+		t.Errorf("expected error to mention 'shortcutz', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "unknown field") {
+		t.Errorf("expected 'unknown field' in error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "shortcuts") {
+		t.Errorf("expected 'shortcuts' suggestion, got: %s", errOut)
+	}
+}
+
+func TestValidate_PiYamlUnknownFieldPakages(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+pakages:
+  - foo/bar@v1.0
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown pi.yaml field 'pakages'")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "pakages") {
+		t.Errorf("expected error to mention 'pakages', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "packages") {
+		t.Errorf("expected 'packages' suggestion, got: %s", errOut)
+	}
+}
+
+func TestValidate_PiYamlRuntimesUnknownField(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+runtimes:
+  provision: auto
+  maneger: mise
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown runtimes field 'maneger'")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "maneger") {
+		t.Errorf("expected error to mention 'maneger', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "manager") {
+		t.Errorf("expected 'manager' suggestion, got: %s", errOut)
+	}
+}
+
+func TestValidate_PiYamlValidAllFields(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  hi: hello
+setup:
+  - hello
+packages: []
+runtimes:
+  provision: never
+  manager: mise
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error for valid pi.yaml with all fields: %v\nstderr: %s", err, stderr.String())
+	}
+}

@@ -30,6 +30,8 @@ Checks performed:
   - with: keys on run: steps match target automation's declared inputs
   - Circular run: step dependencies (A → B → A)
   - if: conditions are syntactically valid with known predicates
+  - Unknown fields in automation YAML files (with "did you mean?" suggestions)
+  - Unknown fields in pi.yaml (with "did you mean?" suggestions)
 
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
