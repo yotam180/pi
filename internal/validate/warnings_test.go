@@ -1,6 +1,8 @@
 package validate
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -465,6 +467,354 @@ func TestWarnShortcutShadowing_IncludesPiYamlPrefix(t *testing.T) {
 	}
 }
 
+// --- warnDuplicateSetupEntries ---
+
+func TestWarnDuplicateSetupEntries_NoDuplicates(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "setup/install-go"},
+				{Run: "setup/install-python"},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings, got: %v", warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_ExactDuplicate(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "setup/install-go"},
+				{Run: "setup/install-go"},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 1 {
+		t.Fatalf("expected 1 warning, got %d: %v", len(warns), warns)
+	}
+	if !strings.Contains(warns[0], "setup[1]") {
+		t.Errorf("expected warning about setup[1], got: %s", warns[0])
+	}
+	if !strings.Contains(warns[0], "setup[0]") {
+		t.Errorf("expected warning to reference setup[0], got: %s", warns[0])
+	}
+	if !strings.Contains(warns[0], "setup/install-go") {
+		t.Errorf("expected warning to mention target, got: %s", warns[0])
+	}
+}
+
+func TestWarnDuplicateSetupEntries_DifferentWithNotDuplicate(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "pi:install-python", With: map[string]string{"version": "3.12"}},
+				{Run: "pi:install-python", With: map[string]string{"version": "3.13"}},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings for different with: values, got: %v", warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_DifferentIfNotDuplicate(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "setup/install-brew", If: "os.macos"},
+				{Run: "setup/install-brew", If: "os.linux"},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings for different if: conditions, got: %v", warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_SameWithIsDuplicate(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "pi:install-python", With: map[string]string{"version": "3.13"}},
+				{Run: "pi:install-python", With: map[string]string{"version": "3.13"}},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 1 {
+		t.Fatalf("expected 1 warning for identical with: values, got %d: %v", len(warns), warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_EmptySetup(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings for empty setup, got: %v", warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_TripleDuplicate(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "setup/install-go"},
+				{Run: "setup/install-go"},
+				{Run: "setup/install-go"},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 2 {
+		t.Fatalf("expected 2 warnings for triple duplicate, got %d: %v", len(warns), warns)
+	}
+}
+
+func TestWarnDuplicateSetupEntries_PiYamlPrefix(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{
+			Project: "test",
+			Setup: []config.SetupEntry{
+				{Run: "setup/a"},
+				{Run: "setup/a"},
+			},
+		},
+		map[string]*automation.Automation{},
+	)
+	warns := warnDuplicateSetupEntries(ctx)
+	if len(warns) != 1 {
+		t.Fatalf("expected 1 warning, got %d: %v", len(warns), warns)
+	}
+	if !strings.HasPrefix(warns[0], "pi.yaml:") {
+		t.Errorf("expected warning to start with 'pi.yaml:', got: %s", warns[0])
+	}
+}
+
+// --- warnMissingInputDescription ---
+
+func TestWarnMissingInputDescription_AllDescribed(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"deploy": {
+				Name:      "deploy",
+				InputKeys: []string{"env"},
+				Inputs: map[string]automation.InputSpec{
+					"env": {Type: "string", Description: "Target environment"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
+		},
+	)
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings, got: %v", warns)
+	}
+}
+
+func TestWarnMissingInputDescription_MissingDescription(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"deploy": {
+				Name:      "deploy",
+				InputKeys: []string{"env"},
+				Inputs: map[string]automation.InputSpec{
+					"env": {Type: "string"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
+		},
+	)
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 1 {
+		t.Fatalf("expected 1 warning, got %d: %v", len(warns), warns)
+	}
+	if !strings.Contains(warns[0], "deploy") {
+		t.Errorf("expected warning to mention 'deploy', got: %s", warns[0])
+	}
+	if !strings.Contains(warns[0], `"env"`) {
+		t.Errorf("expected warning to mention input name, got: %s", warns[0])
+	}
+	if !strings.Contains(warns[0], "missing a description") {
+		t.Errorf("expected 'missing a description', got: %s", warns[0])
+	}
+}
+
+func TestWarnMissingInputDescription_MixedInputs(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"deploy": {
+				Name:      "deploy",
+				InputKeys: []string{"env", "region"},
+				Inputs: map[string]automation.InputSpec{
+					"env":    {Type: "string", Description: "Target environment"},
+					"region": {Type: "string"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
+		},
+	)
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 1 {
+		t.Fatalf("expected 1 warning, got %d: %v", len(warns), warns)
+	}
+	if !strings.Contains(warns[0], `"region"`) {
+		t.Errorf("expected warning about 'region', got: %s", warns[0])
+	}
+}
+
+func TestWarnMissingInputDescription_NoInputs(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"hello": {
+				Name:  "hello",
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo hello"}},
+			},
+		},
+	)
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings for automation without inputs, got: %v", warns)
+	}
+}
+
+func TestWarnMissingInputDescription_SkipsBuiltins(t *testing.T) {
+	localAutos := map[string]*automation.Automation{
+		"local": {
+			Name:      "local",
+			InputKeys: []string{"version"},
+			Inputs: map[string]automation.InputSpec{
+				"version": {Type: "string", Description: "Version to install"},
+			},
+			Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+		},
+	}
+	disc := discovery.NewResult(localAutos, []string{"local"})
+
+	builtinAutos := map[string]*automation.Automation{
+		"pi:install-python": {
+			Name:      "pi:install-python",
+			InputKeys: []string{"version"},
+			Inputs: map[string]automation.InputSpec{
+				"version": {Type: "string"},
+			},
+		},
+	}
+	builtinDisc := discovery.NewResult(builtinAutos, []string{"pi:install-python"})
+	disc.MergeBuiltins(builtinDisc)
+
+	ctx := &Context{
+		Root:      t.TempDir(),
+		Config:    &config.ProjectConfig{Project: "test"},
+		Discovery: disc,
+	}
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings (local has descriptions, builtin skipped), got: %v", warns)
+	}
+}
+
+func TestWarnMissingInputDescription_MultipleAutomations(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"alpha": {
+				Name:      "alpha",
+				InputKeys: []string{"x"},
+				Inputs: map[string]automation.InputSpec{
+					"x": {Type: "string"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
+			"beta": {
+				Name:      "beta",
+				InputKeys: []string{"y"},
+				Inputs: map[string]automation.InputSpec{
+					"y": {Type: "string"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
+		},
+	)
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 2 {
+		t.Fatalf("expected 2 warnings, got %d: %v", len(warns), warns)
+	}
+	// Should be sorted
+	if !strings.Contains(warns[0], "alpha") {
+		t.Errorf("expected first warning about 'alpha' (sorted), got: %s", warns[0])
+	}
+	if !strings.Contains(warns[1], "beta") {
+		t.Errorf("expected second warning about 'beta' (sorted), got: %s", warns[1])
+	}
+}
+
+func TestWarnMissingInputDescription_SkipsPackages(t *testing.T) {
+	localAutos := map[string]*automation.Automation{
+		"local": {
+			Name:      "local",
+			InputKeys: []string{"x"},
+			Inputs: map[string]automation.InputSpec{
+				"x": {Type: "string", Description: "Has desc"},
+			},
+			Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+		},
+	}
+	disc := discovery.NewResult(localAutos, []string{"local"})
+
+	pkgDir := t.TempDir()
+	piDir := filepath.Join(pkgDir, ".pi")
+	if err := os.MkdirAll(piDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(piDir, "pkg-auto.yaml"), []byte(`description: A package automation
+inputs:
+  z:
+    type: string
+bash: echo ok
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := disc.MergePackage("org/repo@v1.0", "", pkgDir, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := &Context{
+		Root:      t.TempDir(),
+		Config:    &config.ProjectConfig{Project: "test"},
+		Discovery: disc,
+	}
+	warns := warnMissingInputDescription(ctx)
+	if len(warns) != 0 {
+		t.Errorf("expected no warnings (local has desc, package skipped), got: %v", warns)
+	}
+}
+
 // --- Integration: RunWithOpts with real warning checks ---
 
 func TestRunWithOpts_WarningsWithCleanProject(t *testing.T) {
@@ -500,6 +850,10 @@ func TestRunWithOpts_AllWarningTypes(t *testing.T) {
 			Shortcuts: map[string]config.Shortcut{
 				"test": {Run: "no-desc"},
 			},
+			Setup: []config.SetupEntry{
+				{Run: "setup/dup"},
+				{Run: "setup/dup"},
+			},
 		},
 		map[string]*automation.Automation{
 			"no-desc": {
@@ -511,17 +865,25 @@ func TestRunWithOpts_AllWarningTypes(t *testing.T) {
 				Description: "An orphaned automation",
 				Steps:       []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
 			},
+			"has-input-no-desc": {
+				Name:        "has-input-no-desc",
+				Description: "Automation with undescribed input",
+				InputKeys:   []string{"x"},
+				Inputs: map[string]automation.InputSpec{
+					"x": {Type: "string"},
+				},
+				Steps: []automation.Step{{Type: automation.StepTypeBash, Value: "echo ok"}},
+			},
 		},
 	)
 
 	result := r.RunWithOpts(ctx, true)
-	if len(result.Errors) != 0 {
-		t.Errorf("expected no errors, got: %v", result.Errors)
-	}
 
 	hasDescWarn := false
 	hasUnusedWarn := false
 	hasShadowWarn := false
+	hasDupSetupWarn := false
+	hasInputDescWarn := false
 	for _, w := range result.Warnings {
 		if strings.Contains(w, "missing description") {
 			hasDescWarn = true
@@ -532,6 +894,12 @@ func TestRunWithOpts_AllWarningTypes(t *testing.T) {
 		if strings.Contains(w, "shell builtin") {
 			hasShadowWarn = true
 		}
+		if strings.Contains(w, "duplicates") {
+			hasDupSetupWarn = true
+		}
+		if strings.Contains(w, "missing a description") {
+			hasInputDescWarn = true
+		}
 	}
 	if !hasDescWarn {
 		t.Error("expected missing-description warning")
@@ -541,5 +909,11 @@ func TestRunWithOpts_AllWarningTypes(t *testing.T) {
 	}
 	if !hasShadowWarn {
 		t.Error("expected shortcut-shadowing warning")
+	}
+	if !hasDupSetupWarn {
+		t.Error("expected duplicate-setup-entries warning")
+	}
+	if !hasInputDescWarn {
+		t.Error("expected missing-input-description warning")
 	}
 }

@@ -134,6 +134,8 @@ func DefaultRunner() *Runner {
 	r.RegisterWarn(WarnCheckFunc{CheckName: "missing-description", Fn: warnMissingDescription})
 	r.RegisterWarn(WarnCheckFunc{CheckName: "unused-automations", Fn: warnUnusedAutomations})
 	r.RegisterWarn(WarnCheckFunc{CheckName: "shortcut-shadowing", Fn: warnShortcutShadowing})
+	r.RegisterWarn(WarnCheckFunc{CheckName: "duplicate-setup-entries", Fn: warnDuplicateSetupEntries})
+	r.RegisterWarn(WarnCheckFunc{CheckName: "missing-input-description", Fn: warnMissingInputDescription})
 	return r
 }
 

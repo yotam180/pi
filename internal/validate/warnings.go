@@ -3,6 +3,7 @@ package validate
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/shell"
@@ -60,6 +61,70 @@ func warnUnusedAutomations(ctx *Context) []string {
 		}
 		if !referenced[name] {
 			warns = append(warns, fmt.Sprintf("%s: not referenced by any shortcut, setup entry, or run: step", name))
+		}
+	}
+	sort.Strings(warns)
+	return warns
+}
+
+// warnDuplicateSetupEntries flags setup entries that share the same run:
+// target. Entries with different if: conditions or with: values are not
+// flagged — those are intentional variants (e.g. install Python for two
+// different versions). Only exact run-target duplicates are warned about.
+func warnDuplicateSetupEntries(ctx *Context) []string {
+	type entryKey struct {
+		run  string
+		if_  string
+		with string
+	}
+
+	seen := make(map[entryKey]int) // key → first index
+	var warns []string
+
+	for i, entry := range ctx.Config.Setup {
+		withKeys := make([]string, 0, len(entry.With))
+		for k := range entry.With {
+			withKeys = append(withKeys, k)
+		}
+		sort.Strings(withKeys)
+		var withParts []string
+		for _, k := range withKeys {
+			withParts = append(withParts, k+"="+entry.With[k])
+		}
+		key := entryKey{
+			run:  entry.Run,
+			if_:  entry.If,
+			with: strings.Join(withParts, ","),
+		}
+		if prev, exists := seen[key]; exists {
+			warns = append(warns,
+				fmt.Sprintf("pi.yaml: setup[%d] duplicates setup[%d] (both run %q)", i, prev, entry.Run))
+		} else {
+			seen[key] = i
+		}
+	}
+	return warns
+}
+
+// warnMissingInputDescription flags local automations that declare inputs
+// without description fields. Input descriptions power pi info output and
+// help AI assistants understand how to use automations.
+func warnMissingInputDescription(ctx *Context) []string {
+	var warns []string
+	for _, name := range ctx.Discovery.Names() {
+		if ctx.Discovery.IsBuiltin(name) || ctx.Discovery.IsPackage(name) {
+			continue
+		}
+		a := ctx.Discovery.Automations[name]
+		if len(a.Inputs) == 0 {
+			continue
+		}
+		for _, key := range a.InputKeys {
+			spec := a.Inputs[key]
+			if spec.Description == "" {
+				warns = append(warns,
+					fmt.Sprintf("%s: input %q is missing a description", name, key))
+			}
 		}
 	}
 	sort.Strings(warns)

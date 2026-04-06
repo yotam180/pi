@@ -128,10 +128,10 @@ func TestDefaultRunner_Has12Checks(t *testing.T) {
 	}
 }
 
-func TestDefaultRunner_Has3WarnChecks(t *testing.T) {
+func TestDefaultRunner_Has5WarnChecks(t *testing.T) {
 	r := DefaultRunner()
-	if r.WarnChecks() != 3 {
-		t.Errorf("DefaultRunner should have 3 warn checks, got %d", r.WarnChecks())
+	if r.WarnChecks() != 5 {
+		t.Errorf("DefaultRunner should have 5 warn checks, got %d", r.WarnChecks())
 	}
 }
 
