@@ -760,7 +760,7 @@ These are defined in the PI repository's own `.pi/` folder and compiled into the
 
 ### Inter-step output capture
 
-Steps can pass their stdout to subsequent steps via `outputs.last` in `with:` values:
+Steps can pass their stdout to subsequent steps via `outputs.last` in `with:` and `env:` values:
 
 ```yaml
 steps:
@@ -771,12 +771,22 @@ steps:
       required: inputs.version   # current automation's input value
 ```
 
-Supported interpolation references in `with:` values:
+```yaml
+steps:
+  - bash: cat version.txt
+  - bash: echo "Checking version $MY_VERSION"
+    env:
+      MY_VERSION: outputs.last   # also works in env: values
+```
+
+Supported interpolation references in `with:` and `env:` values:
 - `outputs.last` — trimmed stdout of the immediately preceding step
 - `outputs.<N>` — stdout of step N (0-indexed)
 - `inputs.<name>` — current automation's input value
 
-Literal strings in `with:` values pass through unchanged.
+Literal strings pass through unchanged.
+
+Automation-level `env:` also supports these references, resolved once when the automation starts. Since no steps have run at that point, `outputs.*` references resolve to empty — use `inputs.*` for automation-level env interpolation.
 
 ---
 

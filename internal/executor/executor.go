@@ -89,9 +89,10 @@ type Executor struct {
 // across all steps within a single RunWithInputs call. Methods receive this
 // instead of repeating the same parameter list.
 type stepExecCtx struct {
-	automation *automation.Automation
-	args       []string
-	inputEnv   []string
+	automation    *automation.Automation
+	args          []string
+	inputEnv      []string
+	automationEnv map[string]string
 }
 
 // ExitError wraps a non-zero exit code from a step.
@@ -175,9 +176,10 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 	}
 
 	ctx := &stepExecCtx{
-		automation: a,
-		args:       args,
-		inputEnv:   inputEnv,
+		automation:    a,
+		args:          args,
+		inputEnv:      inputEnv,
+		automationEnv: e.interpolateEnv(a.Env, inputEnv),
 	}
 
 	savedOutputs := e.stepOutputs
@@ -228,7 +230,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		suppress := step.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, ctx.inputEnv, a.Env, step.Env))
+			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, ctx.inputEnv, ctx.automationEnv, step.Env))
 		}
 
 		isPipeSrc := step.Pipe && i < len(a.Steps)-1
@@ -274,7 +276,7 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 
 		suppress := sub.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, ctx.inputEnv, a.Env, sub.Env))
+			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, ctx.inputEnv, ctx.automationEnv, sub.Env))
 		}
 
 		if suppress {
@@ -337,7 +339,10 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
-	err := runner.Run(e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir))
+	rc := e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir)
+	rc.ResolvedAutomationEnv = ctx.automationEnv
+	rc.ResolvedStepEnv = e.interpolateEnv(step.Env, ctx.inputEnv)
+	err := runner.Run(rc)
 	if !capturePipe {
 		e.recordOutput(outputCapture.String())
 	}
@@ -439,7 +444,7 @@ func (e *Executor) execParentShell(ctx *stepExecCtx, step automation.Step) error
 		e.printer().Warn("  ⚠  parent_shell step skipped: not running inside a PI shell wrapper. Run 'pi shell' to install shell integration.\n")
 		return nil
 	}
-	e.printer().StepTrace("parent", expandTraceVars(step.Value, ctx.inputEnv, ctx.automation.Env, step.Env))
+	e.printer().StepTrace("parent", expandTraceVars(step.Value, ctx.inputEnv, ctx.automationEnv, step.Env))
 	return AppendToParentEval(e.ParentEvalFile, step.Value)
 }
 
@@ -487,6 +492,27 @@ func (e *Executor) interpolateWithCtx(with map[string]string, currentInputEnv []
 // interpolateWith resolves output references without input context.
 func (e *Executor) interpolateWith(with map[string]string) map[string]string {
 	return e.interpolateWithCtx(with, nil)
+}
+
+// interpolateEnv applies interpolateValue to each value in an env map.
+// Returns the original map unchanged if no values contain interpolation references.
+func (e *Executor) interpolateEnv(env map[string]string, inputEnv []string) map[string]string {
+	if len(env) == 0 {
+		return env
+	}
+	result := make(map[string]string, len(env))
+	changed := false
+	for k, v := range env {
+		resolved := e.interpolateValue(v, inputEnv)
+		result[k] = resolved
+		if resolved != v {
+			changed = true
+		}
+	}
+	if !changed {
+		return env
+	}
+	return result
 }
 
 // interpolateValue replaces "outputs.last", "outputs.<N>", and "inputs.<name>"

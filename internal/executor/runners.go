@@ -208,7 +208,15 @@ func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	cmd.Stdout = ctx.Stdout
 	cmd.Stderr = ctx.Stderr
 	cmd.Stdin = ctx.Stdin
-	cmd.Env = BuildStepEnv(ctx.RuntimePaths, ctx.InputEnv, ctx.Automation.Env, ctx.Step.Env)
+	autoEnv := ctx.Automation.Env
+	if ctx.ResolvedAutomationEnv != nil {
+		autoEnv = ctx.ResolvedAutomationEnv
+	}
+	stepEnv := ctx.Step.Env
+	if ctx.ResolvedStepEnv != nil {
+		stepEnv = ctx.ResolvedStepEnv
+	}
+	cmd.Env = BuildStepEnv(ctx.RuntimePaths, ctx.InputEnv, autoEnv, stepEnv)
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Step.Timeout > 0 && cmd.ProcessState != nil && !cmd.ProcessState.Exited() {

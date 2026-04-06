@@ -45,6 +45,15 @@ type RunContext struct {
 	// The second argument is the current automation's input env vars for
 	// inputs.<name> resolution.
 	InterpolateWith func(with map[string]string, inputEnv []string) map[string]string
+
+	// ResolvedAutomationEnv holds the automation-level env with interpolation
+	// references (outputs.*/inputs.*) already resolved. Used by BuildStepEnv
+	// instead of Automation.Env when set.
+	ResolvedAutomationEnv map[string]string
+
+	// ResolvedStepEnv holds the step-level env with interpolation references
+	// already resolved. Used by BuildStepEnv instead of Step.Env when set.
+	ResolvedStepEnv map[string]string
 }
 
 // Registry maps step types to their runner implementations.

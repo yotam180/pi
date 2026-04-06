@@ -480,3 +480,268 @@ func TestInterpolateValue_Inputs(t *testing.T) {
 		t.Errorf("interpolateValue(%q) = %q, want %q", "inputs.unknown", got, "inputs.unknown")
 	}
 }
+
+func TestInterpolateEnv_NilMap(t *testing.T) {
+	e := &Executor{}
+	got := e.interpolateEnv(nil, nil)
+	if got != nil {
+		t.Errorf("expected nil for nil input, got %v", got)
+	}
+}
+
+func TestInterpolateEnv_EmptyMap(t *testing.T) {
+	e := &Executor{}
+	got := e.interpolateEnv(map[string]string{}, nil)
+	if len(got) != 0 {
+		t.Errorf("expected empty map, got %v", got)
+	}
+}
+
+func TestInterpolateEnv_NoInterpolation(t *testing.T) {
+	e := &Executor{}
+	env := map[string]string{"FOO": "bar", "BAZ": "qux"}
+	got := e.interpolateEnv(env, nil)
+	if got["FOO"] != "bar" || got["BAZ"] != "qux" {
+		t.Errorf("expected unchanged values, got %v", got)
+	}
+}
+
+func TestInterpolateEnv_OutputsLast(t *testing.T) {
+	e := &Executor{stepOutputs: []string{"first", "second"}}
+	env := map[string]string{"MY_VAR": "outputs.last"}
+	got := e.interpolateEnv(env, nil)
+	if got["MY_VAR"] != "second" {
+		t.Errorf("MY_VAR = %q, want %q", got["MY_VAR"], "second")
+	}
+}
+
+func TestInterpolateEnv_OutputsIndexed(t *testing.T) {
+	e := &Executor{stepOutputs: []string{"zero", "one"}}
+	env := map[string]string{"FIRST": "outputs.0", "SECOND": "outputs.1"}
+	got := e.interpolateEnv(env, nil)
+	if got["FIRST"] != "zero" {
+		t.Errorf("FIRST = %q, want %q", got["FIRST"], "zero")
+	}
+	if got["SECOND"] != "one" {
+		t.Errorf("SECOND = %q, want %q", got["SECOND"], "one")
+	}
+}
+
+func TestInterpolateEnv_Inputs(t *testing.T) {
+	e := &Executor{}
+	inputEnv := []string{"PI_IN_VERSION=3.13"}
+	env := map[string]string{"MY_VERSION": "inputs.version"}
+	got := e.interpolateEnv(env, inputEnv)
+	if got["MY_VERSION"] != "3.13" {
+		t.Errorf("MY_VERSION = %q, want %q", got["MY_VERSION"], "3.13")
+	}
+}
+
+func TestInterpolateEnv_MixedValues(t *testing.T) {
+	e := &Executor{stepOutputs: []string{"captured"}}
+	inputEnv := []string{"PI_IN_NAME=alice"}
+	env := map[string]string{
+		"LITERAL":    "hello",
+		"FROM_OUT":   "outputs.last",
+		"FROM_INPUT": "inputs.name",
+	}
+	got := e.interpolateEnv(env, inputEnv)
+	if got["LITERAL"] != "hello" {
+		t.Errorf("LITERAL = %q, want %q", got["LITERAL"], "hello")
+	}
+	if got["FROM_OUT"] != "captured" {
+		t.Errorf("FROM_OUT = %q, want %q", got["FROM_OUT"], "captured")
+	}
+	if got["FROM_INPUT"] != "alice" {
+		t.Errorf("FROM_INPUT = %q, want %q", got["FROM_INPUT"], "alice")
+	}
+}
+
+func TestOutputsLast_InStepEnv(t *testing.T) {
+	dir := t.TempDir()
+
+	a := newAutomation("test",
+		bashStep(`echo "42"`),
+		automation.Step{
+			Type:  automation.StepTypeBash,
+			Value: `echo "version is $MY_VERSION"`,
+			Env:   map[string]string{"MY_VERSION": "outputs.last"},
+		},
+	)
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "version is 42") {
+		t.Errorf("output = %q, want to contain %q", output, "version is 42")
+	}
+}
+
+func TestOutputsIndexed_InStepEnv(t *testing.T) {
+	dir := t.TempDir()
+
+	a := newAutomation("test",
+		bashStep(`echo "first"`),
+		bashStep(`echo "second"`),
+		automation.Step{
+			Type:  automation.StepTypeBash,
+			Value: `echo "got $STEP_ZERO"`,
+			Env:   map[string]string{"STEP_ZERO": "outputs.0"},
+		},
+	)
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "got first") {
+		t.Errorf("output = %q, want to contain %q", output, "got first")
+	}
+}
+
+func TestInputs_InStepEnv(t *testing.T) {
+	dir := t.TempDir()
+
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"version": {Type: "string"},
+		},
+		[]string{"version"},
+		automation.Step{
+			Type:  automation.StepTypeBash,
+			Value: `echo "v=$MY_VER"`,
+			Env:   map[string]string{"MY_VER": "inputs.version"},
+		},
+	)
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.RunWithInputs(a, nil, map[string]string{"version": "3.13"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "v=3.13") {
+		t.Errorf("output = %q, want to contain %q", output, "v=3.13")
+	}
+}
+
+func TestInputs_InAutomationEnv(t *testing.T) {
+	dir := t.TempDir()
+
+	a := &automation.Automation{
+		Name:      "test",
+		Env:       map[string]string{"MY_VER": "inputs.version"},
+		Inputs:    map[string]automation.InputSpec{"version": {Type: "string"}},
+		InputKeys: []string{"version"},
+		Steps: []automation.Step{
+			bashStep(`echo "v=$MY_VER"`),
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.RunWithInputs(a, nil, map[string]string{"version": "22"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "v=22") {
+		t.Errorf("output = %q, want to contain %q", output, "v=22")
+	}
+}
+
+func TestOutputsLast_InAutomationEnv(t *testing.T) {
+	dir := t.TempDir()
+
+	a := &automation.Automation{
+		Name: "test",
+		Env:  map[string]string{"CAPTURED": "outputs.last"},
+		Steps: []automation.Step{
+			bashStep(`echo "data"`),
+			bashStep(`echo "captured=$CAPTURED"`),
+		},
+		FilePath: "/fake/path/automation.yaml",
+	}
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	// automation-level env is interpolated once at the start, before any steps run,
+	// so outputs.last is empty (no prior step output yet)
+	if !strings.Contains(output, "captured=") {
+		t.Errorf("output = %q, want to contain %q", output, "captured=")
+	}
+}
+
+func TestStepEnv_LiteralsPassThrough(t *testing.T) {
+	dir := t.TempDir()
+
+	a := newAutomation("test",
+		automation.Step{
+			Type:  automation.StepTypeBash,
+			Value: `echo "val=$LITERAL"`,
+			Env:   map[string]string{"LITERAL": "hello world"},
+		},
+	)
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "val=hello world") {
+		t.Errorf("output = %q, want to contain %q", output, "val=hello world")
+	}
+}
+
+func TestStepEnv_OutputsAndLiteralsMixed(t *testing.T) {
+	dir := t.TempDir()
+
+	a := newAutomation("test",
+		bashStep(`echo "42"`),
+		automation.Step{
+			Type:  automation.StepTypeBash,
+			Value: `echo "ver=$VER lit=$LIT"`,
+			Env: map[string]string{
+				"VER": "outputs.last",
+				"LIT": "constant",
+			},
+		},
+	)
+
+	disc := newDiscovery(map[string]*automation.Automation{"test": a})
+	e, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	output := stdout.String()
+	if !strings.Contains(output, "ver=42") {
+		t.Errorf("output = %q, want to contain %q", output, "ver=42")
+	}
+	if !strings.Contains(output, "lit=constant") {
+		t.Errorf("output = %q, want to contain %q", output, "lit=constant")
+	}
+}
