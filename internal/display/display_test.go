@@ -432,3 +432,56 @@ func TestPackageFetch_Failed(t *testing.T) {
 		t.Errorf("expected 'failed' status, got %q", got)
 	}
 }
+
+func TestPackageFetch_Warning_NoColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.PackageFetch("⚠", "file:~/missing-path", "not found", "")
+	got := buf.String()
+	if !strings.Contains(got, "⚠") {
+		t.Errorf("expected ⚠ icon, got %q", got)
+	}
+	if !strings.Contains(got, "not found") {
+		t.Errorf("expected 'not found' status, got %q", got)
+	}
+}
+
+func TestPackageFetch_Warning_WithColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, true)
+	p.PackageFetch("⚠", "file:~/missing-path", "not found", "")
+	got := buf.String()
+	// ⚠ is not one of the special icons (✗, ✓, ↓), so it falls through to plain style
+	if strings.Contains(got, boldRed) || strings.Contains(got, dim) {
+		t.Errorf("warning icon should use plain style, got %q", got)
+	}
+	if !strings.Contains(got, "not found") {
+		t.Errorf("expected 'not found' status, got %q", got)
+	}
+}
+
+func TestWarn_NoColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, false)
+	p.Warn("something went wrong: %s\n", "details")
+	got := buf.String()
+	if got != "something went wrong: details\n" {
+		t.Errorf("expected plain text, got %q", got)
+	}
+}
+
+func TestWarn_WithColor(t *testing.T) {
+	var buf bytes.Buffer
+	p := NewWithColor(&buf, true)
+	p.Warn("something went wrong\n")
+	got := buf.String()
+	if !strings.Contains(got, yellow) {
+		t.Errorf("expected yellow ANSI code, got %q", got)
+	}
+	if !strings.Contains(got, "something went wrong") {
+		t.Errorf("expected warning text, got %q", got)
+	}
+	if !strings.HasSuffix(got, reset) {
+		t.Errorf("expected reset suffix, got %q", got)
+	}
+}

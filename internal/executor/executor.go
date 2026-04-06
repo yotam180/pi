@@ -69,8 +69,13 @@ type Executor struct {
 	// If empty, parent_shell steps produce an error.
 	ParentEvalFile string
 
-	// Runners is the step runner registry. If nil, NewDefaultRegistry() is used.
+	// Runners is the step runner registry. If nil, NewDefaultRegistry() is used
+	// and cached for subsequent calls.
 	Runners *Registry
+
+	// cachedRegistry holds the lazily-created default registry so that
+	// registry() doesn't allocate a new one on every step execution.
+	cachedRegistry *Registry
 
 	// stepOutputs stores trimmed stdout from each executed step (0-indexed).
 	// Used to implement outputs.last interpolation in with: values.
@@ -169,7 +174,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 					if pipedInput != nil {
 						buf := &bytes.Buffer{}
 						if _, err := io.Copy(buf, pipedInput); err != nil {
-							return fmt.Errorf("passing piped input through skipped step[%d]: %w", i, err)
+							return fmt.Errorf("automation %q: passing piped input through skipped step[%d]: %w", a.Name, i, err)
 						}
 						pipedInput = buf
 					}
@@ -281,7 +286,7 @@ func (e *Executor) execStepSuppressed(a *automation.Automation, step automation.
 func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
 	if step.Dir != "" {
 		if _, err := resolveStepDir(e.RepoRoot, step.Dir); err != nil {
-			return fmt.Errorf("step[%d]: %w", index, err)
+			return fmt.Errorf("automation %q step[%d]: %w", a.Name, index, err)
 		}
 	}
 
@@ -305,7 +310,7 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 
 	runner := e.registry().Get(step.Type)
 	if runner == nil {
-		return fmt.Errorf("step[%d]: step type %q is not implemented", index, step.Type)
+		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
 	err := runner.Run(e.newRunContext(a, step, args, stdout, stdin, inputEnv))
@@ -315,12 +320,15 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 	return err
 }
 
-// registry returns the executor's runner registry, lazily creating the default.
+// registry returns the executor's runner registry, lazily creating and caching the default.
 func (e *Executor) registry() *Registry {
 	if e.Runners != nil {
 		return e.Runners
 	}
-	return NewDefaultRegistry()
+	if e.cachedRegistry == nil {
+		e.cachedRegistry = NewDefaultRegistry()
+	}
+	return e.cachedRegistry
 }
 
 // newRunContext builds a RunContext from the executor's current state.
