@@ -3,6 +3,7 @@ package runtimes
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -455,7 +456,6 @@ func TestStderr_Default(t *testing.T) {
 }
 
 func TestProvision_AutoMode_MiseInstalled(t *testing.T) {
-	// Only run when mise is actually installed
 	misePath, err := exec.LookPath("mise")
 	if err != nil {
 		t.Skip("mise not installed, skipping mise integration test")
@@ -477,7 +477,6 @@ func TestProvision_AutoMode_MiseInstalled(t *testing.T) {
 		},
 	}
 
-	// Try provisioning python with mise
 	result, err := p.Provision("python", "3.13")
 	if err != nil {
 		t.Skipf("mise provisioning failed (may need network): %v", err)
@@ -490,14 +489,507 @@ func TestProvision_AutoMode_MiseInstalled(t *testing.T) {
 		t.Error("binDir should not be empty after provisioning")
 	}
 
-	// Verify the binary exists
 	python3 := filepath.Join(result.BinDir, "python3")
 	if _, err := os.Stat(python3); err != nil {
 		t.Errorf("python3 binary should exist at %s: %v", python3, err)
 	}
 
-	// Check that the status line was printed
 	if !strings.Contains(stderr.String(), "[provisioned]") {
 		t.Errorf("stderr should contain [provisioned], got: %s", stderr.String())
+	}
+}
+
+// --- CmdRunner interface tests ---
+
+type mockCmdRunner struct {
+	runCalls    []mockRunCall
+	outputCalls []mockOutputCall
+	runErr      func(bin string, args []string) error
+	outputFunc  func(bin string, args []string) (string, error)
+}
+
+type mockRunCall struct {
+	Bin  string
+	Args []string
+}
+
+type mockOutputCall struct {
+	Bin  string
+	Args []string
+}
+
+func (m *mockCmdRunner) Run(bin string, args []string, stdout, stderr io.Writer) error {
+	m.runCalls = append(m.runCalls, mockRunCall{Bin: bin, Args: args})
+	if m.runErr != nil {
+		return m.runErr(bin, args)
+	}
+	return nil
+}
+
+func (m *mockCmdRunner) Output(bin string, args []string, stderr io.Writer) (string, error) {
+	m.outputCalls = append(m.outputCalls, mockOutputCall{Bin: bin, Args: args})
+	if m.outputFunc != nil {
+		return m.outputFunc(bin, args)
+	}
+	return "", nil
+}
+
+func TestRunner_DefaultsToExec(t *testing.T) {
+	p := &Provisioner{}
+	r := p.runner()
+	if _, ok := r.(*execCmdRunner); !ok {
+		t.Errorf("runner() should return *execCmdRunner when Runner is nil, got %T", r)
+	}
+}
+
+func TestRunner_UsesCustomRunner(t *testing.T) {
+	mock := &mockCmdRunner{}
+	p := &Provisioner{Runner: mock}
+	r := p.runner()
+	if r != mock {
+		t.Error("runner() should return the custom Runner when set")
+	}
+}
+
+func TestExecCmdRunner_Run(t *testing.T) {
+	r := &execCmdRunner{}
+	var out bytes.Buffer
+	err := r.Run("echo", []string{"hello"}, &out, io.Discard)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "hello") {
+		t.Errorf("stdout should contain 'hello', got: %q", out.String())
+	}
+}
+
+func TestExecCmdRunner_Output(t *testing.T) {
+	r := &execCmdRunner{}
+	out, err := r.Output("echo", []string{"hello"}, io.Discard)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "hello" {
+		t.Errorf("output = %q, want %q", out, "hello")
+	}
+}
+
+func TestExecCmdRunner_RunError(t *testing.T) {
+	r := &execCmdRunner{}
+	err := r.Run("false", nil, io.Discard, io.Discard)
+	if err == nil {
+		t.Error("expected error from 'false' command")
+	}
+}
+
+func TestExecCmdRunner_OutputError(t *testing.T) {
+	r := &execCmdRunner{}
+	_, err := r.Output("false", nil, io.Discard)
+	if err == nil {
+		t.Error("expected error from 'false' command")
+	}
+}
+
+// --- provisionWithMise mock tests ---
+
+func TestProvisionWithMise_Success(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	// Create a fake mise bin directory with binaries
+	fakeMiseBinDir := filepath.Join(t.TempDir(), "mise-installs", "python", "3.13", "bin")
+	os.MkdirAll(fakeMiseBinDir, 0755)
+	os.WriteFile(filepath.Join(fakeMiseBinDir, "python3"), []byte("#!/bin/sh\necho ok"), 0755)
+	os.WriteFile(filepath.Join(fakeMiseBinDir, "pip3"), []byte("#!/bin/sh\necho ok"), 0755)
+
+	mock := &mockCmdRunner{
+		outputFunc: func(bin string, args []string) (string, error) {
+			if len(args) >= 2 && args[0] == "where" {
+				return filepath.Dir(fakeMiseBinDir), nil
+			}
+			return "", nil
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	result, err := p.Provision("python", "3.13")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Provisioned {
+		t.Error("should have provisioned")
+	}
+	if result.Version != "3.13" {
+		t.Errorf("version = %q, want %q", result.Version, "3.13")
+	}
+
+	// Verify mise install was called
+	if len(mock.runCalls) != 1 {
+		t.Fatalf("expected 1 run call, got %d", len(mock.runCalls))
+	}
+	call := mock.runCalls[0]
+	if call.Bin != "/usr/local/bin/mise" {
+		t.Errorf("install bin = %q, want /usr/local/bin/mise", call.Bin)
+	}
+	if len(call.Args) != 2 || call.Args[0] != "install" || call.Args[1] != "python@3.13" {
+		t.Errorf("install args = %v, want [install python@3.13]", call.Args)
+	}
+
+	// Verify mise where was called
+	if len(mock.outputCalls) != 1 {
+		t.Fatalf("expected 1 output call, got %d", len(mock.outputCalls))
+	}
+	outCall := mock.outputCalls[0]
+	if outCall.Args[0] != "where" || outCall.Args[1] != "python@3.13" {
+		t.Errorf("where args = %v, want [where python@3.13]", outCall.Args)
+	}
+
+	// Verify symlinks were created
+	binDir := filepath.Join(base, "python", "3.13", "bin")
+	for _, name := range []string{"python3", "pip3"} {
+		link := filepath.Join(binDir, name)
+		target, err := os.Readlink(link)
+		if err != nil {
+			t.Errorf("symlink %s should exist: %v", name, err)
+			continue
+		}
+		expected := filepath.Join(fakeMiseBinDir, name)
+		if target != expected {
+			t.Errorf("symlink %s → %q, want %q", name, target, expected)
+		}
+	}
+
+	if !strings.Contains(stderr.String(), "[provisioned]") {
+		t.Errorf("stderr should contain [provisioned], got: %s", stderr.String())
+	}
+}
+
+func TestProvisionWithMise_InstallFailure(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			if len(args) >= 1 && args[0] == "install" {
+				return fmt.Errorf("exit status 1")
+			}
+			return nil
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("node", "20")
+	if err == nil {
+		t.Fatal("expected error when mise install fails")
+	}
+	if !strings.Contains(err.Error(), "mise install node@20") {
+		t.Errorf("error should mention mise install, got: %v", err)
+	}
+}
+
+func TestProvisionWithMise_WhereFailure(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		outputFunc: func(bin string, args []string) (string, error) {
+			return "", fmt.Errorf("mise where failed")
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("python", "3.13")
+	if err == nil {
+		t.Fatal("expected error when mise where fails")
+	}
+	if !strings.Contains(err.Error(), "mise where python@3.13") {
+		t.Errorf("error should mention mise where, got: %v", err)
+	}
+}
+
+func TestProvisionWithMise_SymlinkOverwrite(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	fakeMiseBinDir := filepath.Join(t.TempDir(), "mise-installs", "go", "1.23", "bin")
+	os.MkdirAll(fakeMiseBinDir, 0755)
+	os.WriteFile(filepath.Join(fakeMiseBinDir, "go"), []byte("#!/bin/sh\necho new"), 0755)
+
+	// Pre-create a stale symlink
+	binDir := filepath.Join(base, "go", "1.23", "bin")
+	os.MkdirAll(binDir, 0755)
+	os.Symlink("/nonexistent/old-go", filepath.Join(binDir, "go"))
+
+	mock := &mockCmdRunner{
+		outputFunc: func(bin string, args []string) (string, error) {
+			return filepath.Dir(fakeMiseBinDir), nil
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	result, err := p.Provision("go", "1.23")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Provisioned {
+		t.Error("should have provisioned")
+	}
+
+	// Verify old symlink was replaced
+	target, err := os.Readlink(filepath.Join(binDir, "go"))
+	if err != nil {
+		t.Fatalf("symlink should exist: %v", err)
+	}
+	expected := filepath.Join(fakeMiseBinDir, "go")
+	if target != expected {
+		t.Errorf("symlink go → %q, want %q", target, expected)
+	}
+}
+
+func TestProvisionWithMise_EmptyBinDir(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	fakeMiseDir := filepath.Join(t.TempDir(), "mise-installs", "node", "20")
+	fakeBinDir := filepath.Join(fakeMiseDir, "bin")
+	os.MkdirAll(fakeBinDir, 0755)
+
+	mock := &mockCmdRunner{
+		outputFunc: func(bin string, args []string) (string, error) {
+			return fakeMiseDir, nil
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	// Empty mise bin dir — no binaries to symlink. Should still succeed.
+	result, err := p.Provision("node", "20")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Provisioned {
+		t.Error("should report provisioned even with empty bin dir")
+	}
+}
+
+func TestProvisionWithMise_NonexistentBinDir(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		outputFunc: func(bin string, args []string) (string, error) {
+			return "/nonexistent/mise/path", nil
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerMise,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			if name == "mise" {
+				return "/usr/local/bin/mise", nil
+			}
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("python", "3.13")
+	if err == nil {
+		t.Fatal("expected error when mise bin directory doesn't exist")
+	}
+	if !strings.Contains(err.Error(), "reading mise bin directory") {
+		t.Errorf("error should mention reading bin dir, got: %v", err)
+	}
+}
+
+// --- Direct provisioning with mock runner ---
+
+func TestProvisionNodeDirect_RunnerCalled(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			return fmt.Errorf("download failed")
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("node", "20")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "downloading node") {
+		t.Errorf("error should mention downloading, got: %v", err)
+	}
+
+	// Verify the runner was called with bash
+	if len(mock.runCalls) < 1 {
+		t.Fatal("expected at least 1 run call")
+	}
+	if mock.runCalls[0].Bin != "bash" {
+		t.Errorf("bin = %q, want bash", mock.runCalls[0].Bin)
+	}
+}
+
+func TestProvisionPythonDirect_RunnerCalled(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			return fmt.Errorf("download failed")
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("python", "3.13")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "downloading python") {
+		t.Errorf("error should mention downloading, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "mise") {
+		t.Errorf("error should suggest mise, got: %v", err)
+	}
+
+	if len(mock.runCalls) < 1 {
+		t.Fatal("expected at least 1 run call")
+	}
+	if mock.runCalls[0].Bin != "bash" {
+		t.Errorf("bin = %q, want bash", mock.runCalls[0].Bin)
+	}
+}
+
+func TestProvision_AutoMode_DefaultVersion(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			return fmt.Errorf("fail")
+		},
+	}
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	// When version is empty, should use default version
+	_, err := p.Provision("node", "")
+	if err == nil {
+		t.Fatal("expected error (mock fails)")
+	}
+	// The error will mention "node 20" because that's the default
+	if !strings.Contains(err.Error(), "node 20") {
+		t.Errorf("error should reference default version (20), got: %v", err)
+	}
+}
+
+func TestKnownRuntimeList(t *testing.T) {
+	list := knownRuntimeList()
+	for _, rt := range []string{"go", "node", "python", "rust"} {
+		if !strings.Contains(list, rt) {
+			t.Errorf("knownRuntimeList should contain %q, got: %s", rt, list)
+		}
+	}
+	// Should be comma-separated and sorted
+	if !strings.Contains(list, ", ") {
+		t.Errorf("should be comma-separated, got: %s", list)
 	}
 }

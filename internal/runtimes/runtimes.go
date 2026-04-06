@@ -41,6 +41,39 @@ func knownRuntimeList() string {
 	return strings.Join(names, ", ")
 }
 
+// CmdRunner abstracts command execution so provisioning logic can be tested
+// without real binaries or network access. The default implementation
+// delegates to os/exec.
+type CmdRunner interface {
+	// Run executes a command with the given stdout and stderr writers.
+	// Returns the exit error (if any).
+	Run(bin string, args []string, stdout, stderr io.Writer) error
+
+	// Output executes a command and returns its stdout as a string.
+	Output(bin string, args []string, stderr io.Writer) (string, error)
+}
+
+// execCmdRunner is the default CmdRunner that delegates to os/exec.
+type execCmdRunner struct{}
+
+func (r *execCmdRunner) Run(bin string, args []string, stdout, stderr io.Writer) error {
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	return cmd.Run()
+}
+
+func (r *execCmdRunner) Output(bin string, args []string, stderr io.Writer) (string, error) {
+	cmd := exec.Command(bin, args...)
+	var out strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = stderr
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
 // Provisioner manages runtime provisioning using a pluggable backend.
 type Provisioner struct {
 	Mode    config.ProvisionMode
@@ -55,6 +88,9 @@ type Provisioner struct {
 
 	// LookPath can be overridden for testing. Defaults to exec.LookPath.
 	LookPath func(string) (string, error)
+
+	// Runner executes external commands. If nil, os/exec is used.
+	Runner CmdRunner
 }
 
 // NewProvisioner creates a Provisioner from project config.
@@ -200,6 +236,13 @@ func (p *Provisioner) stderr() io.Writer {
 	return os.Stderr
 }
 
+func (p *Provisioner) runner() CmdRunner {
+	if p.Runner != nil {
+		return p.Runner
+	}
+	return &execCmdRunner{}
+}
+
 // provisionWithMise uses mise to install a runtime version into the PI runtimes directory.
 func (p *Provisioner) provisionWithMise(runtimeName, version string) error {
 	lookPath := p.LookPath
@@ -217,28 +260,20 @@ func (p *Provisioner) provisionWithMise(runtimeName, version string) error {
 		return fmt.Errorf("creating runtime directory: %w", err)
 	}
 
+	runner := p.runner()
 	spec := fmt.Sprintf("%s@%s", runtimeName, version)
-	cmd := exec.Command(misePath, "install", spec)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = p.stderr()
 
-	if err := cmd.Run(); err != nil {
+	if err := runner.Run(misePath, []string{"install", spec}, io.Discard, p.stderr()); err != nil {
 		return fmt.Errorf("mise install %s: %w", spec, err)
 	}
 
-	// Get the install path from mise
-	cmd = exec.Command(misePath, "where", spec)
-	var out strings.Builder
-	cmd.Stdout = &out
-	cmd.Stderr = io.Discard
-
-	if err := cmd.Run(); err != nil {
+	miseWherePath, err := runner.Output(misePath, []string{"where", spec}, io.Discard)
+	if err != nil {
 		return fmt.Errorf("mise where %s: %w", spec, err)
 	}
 
-	miseBinDir := filepath.Join(strings.TrimSpace(out.String()), "bin")
+	miseBinDir := filepath.Join(miseWherePath, "bin")
 
-	// Symlink mise-installed binaries into our managed directory
 	binDir := filepath.Join(installDir, "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return fmt.Errorf("creating bin directory: %w", err)
@@ -252,7 +287,7 @@ func (p *Provisioner) provisionWithMise(runtimeName, version string) error {
 	for _, entry := range entries {
 		src := filepath.Join(miseBinDir, entry.Name())
 		dst := filepath.Join(binDir, entry.Name())
-		os.Remove(dst) // remove existing symlink if any
+		os.Remove(dst)
 		if err := os.Symlink(src, dst); err != nil {
 			return fmt.Errorf("symlinking %s → %s: %w", src, dst, err)
 		}
@@ -303,7 +338,6 @@ func (p *Provisioner) provisionNodeDirect(version string) error {
 		return fmt.Errorf("direct node provisioning not supported on %s", goarch)
 	}
 
-	// Node.js version needs "v" prefix for the URL
 	versionTag := version
 	if !strings.HasPrefix(version, "v") {
 		versionTag = "v" + version
@@ -325,20 +359,17 @@ fi
 		filepath.Join(extractDir, "bin"), binDir,
 	)
 
-	cmd := exec.Command("bash", "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = p.stderr()
-	if err := cmd.Run(); err != nil {
+	runner := p.runner()
+	if err := runner.Run("bash", []string{"-c", script}, io.Discard, p.stderr()); err != nil {
 		os.RemoveAll(extractDir)
 		return fmt.Errorf("downloading node %s from %s: %w", version, url, err)
 	}
 
-	// Also copy lib dir for node modules
 	libSrc := filepath.Join(extractDir, "lib")
 	libDst := filepath.Join(installDir, "lib")
 	if info, err := os.Stat(libSrc); err == nil && info.IsDir() {
 		os.RemoveAll(libDst)
-		exec.Command("cp", "-a", libSrc, libDst).Run()
+		runner.Run("cp", []string{"-a", libSrc, libDst}, io.Discard, io.Discard)
 	}
 
 	os.RemoveAll(extractDir)
@@ -352,8 +383,6 @@ func (p *Provisioner) provisionPythonDirect(version string) error {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
-	// For Python, use python-build-standalone releases from Gregory Szorc's project
-	// which provides self-contained Python builds.
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 
@@ -375,15 +404,11 @@ func (p *Provisioner) provisionPythonDirect(version string) error {
 		return fmt.Errorf("direct python provisioning not supported on %s", goarch)
 	}
 
-	// python-build-standalone uses a specific naming scheme
-	tag := fmt.Sprintf("cpython-%s+*-%s-%s-install_only_stripped.tar.gz", version, arch, platform)
 	extractDir := filepath.Join(installDir, "extract")
 
-	// Use the indygreg/python-build-standalone releases API to find the exact URL
 	script := fmt.Sprintf(`set -e
 mkdir -p %q
 
-# Try to find exact release from GitHub API
 RELEASE_TAG=$(curl -fsSL "https://api.github.com/repos/astral-sh/python-build-standalone/releases" | \
   python3 -c "
 import sys, json
@@ -403,11 +428,9 @@ sys.exit(1)
 
 curl -fsSL "$RELEASE_TAG" | tar xz -C %q --strip-components=0
 
-# The archive extracts to python/
 if [ -d %q/python/bin ]; then
   rm -rf %q
   mv %q/python/bin %q
-  # Keep lib for shared objects
   if [ -d %q/python/lib ]; then
     rm -rf %q
     mv %q/python/lib %q
@@ -421,12 +444,8 @@ rm -rf %q
 		extractDir,
 	)
 
-	cmd := exec.Command("bash", "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = p.stderr()
-	if err := cmd.Run(); err != nil {
+	if err := p.runner().Run("bash", []string{"-c", script}, io.Discard, p.stderr()); err != nil {
 		os.RemoveAll(extractDir)
-		_ = tag // used in error context
 		return fmt.Errorf("downloading python %s: %w — try installing mise first: curl https://mise.run | sh", version, err)
 	}
 
