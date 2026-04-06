@@ -267,15 +267,22 @@ func TestProvision_MiseFallbackToDirect(t *testing.T) {
 	}
 }
 
-func TestProvisionDirect_GoUnsupported(t *testing.T) {
+func TestProvisionGoDirect_RunnerCalled(t *testing.T) {
 	base := t.TempDir()
 	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			return fmt.Errorf("download failed")
+		},
+	}
 
 	p := &Provisioner{
 		Mode:    config.ProvisionAuto,
 		Manager: config.RuntimeManagerDirect,
 		BaseDir: base,
 		Stderr:  &stderr,
+		Runner:  mock,
 		LookPath: func(name string) (string, error) {
 			return "", fmt.Errorf("not found")
 		},
@@ -283,25 +290,70 @@ func TestProvisionDirect_GoUnsupported(t *testing.T) {
 
 	_, err := p.Provision("go", "1.23")
 	if err == nil {
-		t.Fatal("expected error for unsupported direct provisioning of go")
+		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "direct provisioning for \"go\" is not supported") {
-		t.Errorf("error should mention unsupported direct provisioning, got: %v", err)
+	if !strings.Contains(err.Error(), "downloading go") {
+		t.Errorf("error should mention downloading, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "mise") {
-		t.Errorf("error should suggest mise, got: %v", err)
+
+	if len(mock.runCalls) < 1 {
+		t.Fatal("expected at least 1 run call")
+	}
+	if mock.runCalls[0].Bin != "bash" {
+		t.Errorf("bin = %q, want bash", mock.runCalls[0].Bin)
+	}
+	// Verify the script contains the correct download URL
+	script := mock.runCalls[0].Args[1]
+	if !strings.Contains(script, "dl.google.com/go/go1.23") {
+		t.Errorf("script should reference go download URL, got: %s", script)
 	}
 }
 
-func TestProvisionDirect_RustUnsupported(t *testing.T) {
+func TestProvisionGoDirect_ScriptContainsCorrectURL(t *testing.T) {
 	base := t.TempDir()
 	var stderr bytes.Buffer
+	var capturedScript string
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			if bin == "bash" && len(args) >= 2 {
+				capturedScript = args[1]
+			}
+			return fmt.Errorf("fail")
+		},
+	}
+
+	p := &Provisioner{
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+	}
+
+	p.provisionGoDirect("1.22.5")
+	if !strings.Contains(capturedScript, "go1.22.5") {
+		t.Errorf("script should contain version, got: %s", capturedScript)
+	}
+	if !strings.Contains(capturedScript, "dl.google.com/go") {
+		t.Errorf("script should use Google CDN, got: %s", capturedScript)
+	}
+}
+
+func TestProvisionRustDirect_RunnerCalled(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			return fmt.Errorf("download failed")
+		},
+	}
 
 	p := &Provisioner{
 		Mode:    config.ProvisionAuto,
 		Manager: config.RuntimeManagerDirect,
 		BaseDir: base,
 		Stderr:  &stderr,
+		Runner:  mock,
 		LookPath: func(name string) (string, error) {
 			return "", fmt.Errorf("not found")
 		},
@@ -309,10 +361,69 @@ func TestProvisionDirect_RustUnsupported(t *testing.T) {
 
 	_, err := p.Provision("rust", "stable")
 	if err == nil {
-		t.Fatal("expected error for unsupported direct provisioning of rust")
+		t.Fatal("expected error")
 	}
-	if !strings.Contains(err.Error(), "direct provisioning for \"rust\" is not supported") {
-		t.Errorf("error should mention unsupported direct provisioning, got: %v", err)
+	if !strings.Contains(err.Error(), "installing rust") {
+		t.Errorf("error should mention installing, got: %v", err)
+	}
+
+	if len(mock.runCalls) < 1 {
+		t.Fatal("expected at least 1 run call")
+	}
+	if mock.runCalls[0].Bin != "bash" {
+		t.Errorf("bin = %q, want bash", mock.runCalls[0].Bin)
+	}
+	script := mock.runCalls[0].Args[1]
+	if !strings.Contains(script, "rustup.rs") {
+		t.Errorf("script should reference rustup.rs, got: %s", script)
+	}
+}
+
+func TestProvisionRustDirect_ScriptContainsVersion(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+	var capturedScript string
+
+	mock := &mockCmdRunner{
+		runErr: func(bin string, args []string) error {
+			if bin == "bash" && len(args) >= 2 {
+				capturedScript = args[1]
+			}
+			return fmt.Errorf("fail")
+		},
+	}
+
+	p := &Provisioner{
+		BaseDir: base,
+		Stderr:  &stderr,
+		Runner:  mock,
+	}
+
+	p.provisionRustDirect("1.78.0")
+	if !strings.Contains(capturedScript, "1.78.0") {
+		t.Errorf("script should contain version, got: %s", capturedScript)
+	}
+	if !strings.Contains(capturedScript, "RUSTUP_HOME") {
+		t.Errorf("script should set RUSTUP_HOME, got: %s", capturedScript)
+	}
+	if !strings.Contains(capturedScript, "CARGO_HOME") {
+		t.Errorf("script should set CARGO_HOME, got: %s", capturedScript)
+	}
+	if !strings.Contains(capturedScript, "--no-modify-path") {
+		t.Errorf("script should use --no-modify-path, got: %s", capturedScript)
+	}
+}
+
+func TestProvisionDirect_AllKnownRuntimesSupported(t *testing.T) {
+	for _, name := range []string{"python", "node", "go", "rust"} {
+		desc := runtimeinfo.Find(name)
+		if desc == nil {
+			t.Errorf("runtime %q should be known", name)
+			continue
+		}
+		if !desc.DirectDownload {
+			t.Errorf("runtime %q should support direct download", name)
+		}
 	}
 }
 

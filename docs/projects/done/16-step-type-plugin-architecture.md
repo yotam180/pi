@@ -1,7 +1,7 @@
 # Step Type Plugin Architecture
 
 ## Status
-todo
+done
 
 ## Priority
 high

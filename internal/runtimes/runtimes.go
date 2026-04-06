@@ -263,14 +263,23 @@ func (p *Provisioner) provisionWithMise(runtimeName, version string) error {
 }
 
 // provisionDirect downloads a runtime binary directly from official CDNs.
+// It uses the RuntimeDescriptor.DirectDownload flag to determine whether a
+// runtime supports direct provisioning, avoiding per-runtime switch statements.
 func (p *Provisioner) provisionDirect(runtimeName, version string) error {
+	desc := runtimeinfo.Find(runtimeName)
+	if desc == nil || !desc.DirectDownload {
+		return fmt.Errorf("direct provisioning not supported for %q — install mise first: curl https://mise.run | sh", runtimeName)
+	}
+
 	switch runtimeName {
 	case "node":
 		return p.provisionNodeDirect(version)
 	case "python":
 		return p.provisionPythonDirect(version)
-	case "go", "rust":
-		return fmt.Errorf("direct provisioning for %q is not supported — install mise first: curl https://mise.run | sh", runtimeName)
+	case "go":
+		return p.provisionGoDirect(version)
+	case "rust":
+		return p.provisionRustDirect(version)
 	default:
 		return fmt.Errorf("direct provisioning not supported for %q — install mise first: curl https://mise.run | sh", runtimeName)
 	}
@@ -339,6 +348,87 @@ fi
 	}
 
 	os.RemoveAll(extractDir)
+	return nil
+}
+
+func (p *Provisioner) provisionGoDirect(version string) error {
+	installDir := filepath.Join(p.BaseDir, "go", version)
+	binDir := filepath.Join(installDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	switch goos {
+	case "darwin", "linux":
+	default:
+		return fmt.Errorf("direct go provisioning not supported on %s", goos)
+	}
+	switch goarch {
+	case "amd64", "arm64":
+	default:
+		return fmt.Errorf("direct go provisioning not supported on %s", goarch)
+	}
+
+	url := fmt.Sprintf("https://dl.google.com/go/go%s.%s-%s.tar.gz", version, goos, goarch)
+	extractDir := filepath.Join(installDir, "extract")
+
+	script := fmt.Sprintf(`set -e
+mkdir -p %q
+curl -fsSL %q | tar xz -C %q
+if [ -d %q/go/bin ]; then
+  rm -rf %q
+  mv %q/go/bin %q
+fi
+rm -rf %q
+`, extractDir, url, extractDir,
+		extractDir, binDir, extractDir, binDir,
+		extractDir,
+	)
+
+	runner := p.runner()
+	if err := runner.Run("bash", []string{"-c", script}, io.Discard, p.stderr()); err != nil {
+		os.RemoveAll(extractDir)
+		return fmt.Errorf("downloading go %s from %s: %w", version, url, err)
+	}
+
+	os.RemoveAll(extractDir)
+	return nil
+}
+
+func (p *Provisioner) provisionRustDirect(version string) error {
+	installDir := filepath.Join(p.BaseDir, "rust", version)
+	binDir := filepath.Join(installDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	goos := runtime.GOOS
+	switch goos {
+	case "darwin", "linux":
+	default:
+		return fmt.Errorf("direct rust provisioning not supported on %s", goos)
+	}
+
+	rustupHome := filepath.Join(installDir, "rustup")
+	cargoHome := filepath.Join(installDir, "cargo")
+
+	script := fmt.Sprintf(`set -e
+export RUSTUP_HOME=%q
+export CARGO_HOME=%q
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain %q
+if [ -d %q/bin ]; then
+  cp -a %q/bin/* %q/ 2>/dev/null || true
+fi
+`, rustupHome, cargoHome, version, cargoHome, cargoHome, binDir)
+
+	runner := p.runner()
+	if err := runner.Run("bash", []string{"-c", script}, io.Discard, p.stderr()); err != nil {
+		return fmt.Errorf("installing rust %s via rustup: %w", version, err)
+	}
+
 	return nil
 }
 

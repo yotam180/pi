@@ -38,14 +38,14 @@ var Runtimes = []Descriptor{
 		Name:           "go",
 		Binary:         "go",
 		DefaultVersion: "1.23",
-		DirectDownload: false,
+		DirectDownload: true,
 		InstallHint:    "brew install go  or  https://go.dev/dl/",
 	},
 	{
 		Name:           "rust",
 		Binary:         "rustc",
 		DefaultVersion: "stable",
-		DirectDownload: false,
+		DirectDownload: true,
 		InstallHint:    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
 	},
 }
