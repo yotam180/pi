@@ -1085,7 +1085,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1756+ (189 automation [177 base + 12 walker] + 142 builtins + 32 cache + 261 CLI [includes 6 completion, 12 init, 21 setup add, 20 info, 67 validate] + 30 conditions + 67 config + 42 display + 55 discovery [46 base + 9 suggest] + 305 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 57 semver + 40 shell + 52 validate + 290 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate, 13 outputs, 5 dry-run])
+Total tests: 1783+ (189 automation [177 base + 12 walker] + 142 builtins + 32 cache + 261 CLI [includes 6 completion, 12 init, 21 setup add, 20 info, 67 validate] + 30 conditions + 67 config + 42 display + 55 discovery [46 base + 9 suggest] + 305 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 57 semver + 40 shell + 52 validate + 317 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 13 list, 14 new, 11 validate, 13 outputs, 5 dry-run])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -1129,6 +1129,8 @@ tests/integration/
   conditionals_test.go            20 tests — conditional execution: list, platform-info, skip-all, pipe passthrough, automation-level if, env/command/file predicates, complex booleans, combined automation+step if, info conditions
   builtins_test.go                27 tests — built-in automations: pi: prefix, local shadow, run step calls, docker builtins (list, info, run), installer builtins (list, info, inputs, conditions, idempotent), dev tool builtins (list, info, inputs), builtins hidden by default, not-found did-you-mean
   installer_schema_test.go        12 tests — installer schema: list, already-installed, fresh install, install-then-already, no-version, info type, info steps, conditional run, --silent, regular unaffected, failed install shows stderr, built-in installer
+  list_test.go                    13 tests — pi list: basic output (headers + names), SOURCE column [workspace], INPUTS column, builtins hidden by default, --builtins flag, -b short flag, empty project, package source column, --all flag (grouped sections), from subdirectory, no pi.yaml, description column, no-inputs dash
+  new_test.go                     14 tests — pi new: basic scaffold, output confirmation, --bash flag, --python flag, -d description flag, nested path, already exists, no project (suggests pi init), strip .yaml extension, no args, created file is runnable, combined flags, deeply nested path, strip .yml extension
   requires_test.go                7 tests — requires validation: list, satisfied command, satisfied runtime, missing command, impossible version, no-requires, install hint
   doctor_test.go                  7 tests — pi doctor: all satisfied, missing, version mismatch, skips no-requires, detected version, install hint, healthy workspace
   runtime_provisioning_test.go    7 tests — runtime provisioning: list, no-requirements, already-installed, never-mode, config parsing, auto/ask modes
