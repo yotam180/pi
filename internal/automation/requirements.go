@@ -2,9 +2,9 @@ package automation
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
+	"github.com/vyper-tooling/pi/internal/runtimeinfo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,24 +16,9 @@ const (
 	RequirementCommand RequirementKind = "command"
 )
 
-// knownRuntimes lists the runtime names that can appear as bare identifiers
-// in a requires: entry (e.g. "python >= 3.11" or "node").
-var knownRuntimes = map[string]bool{
-	"python": true,
-	"node":   true,
-	"go":     true,
-	"rust":   true,
-}
-
-// knownRuntimeNames returns a sorted, comma-separated list of known runtime names.
-func knownRuntimeNames() string {
-	names := make([]string, 0, len(knownRuntimes))
-	for name := range knownRuntimes {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
-}
+// knownRuntimes derives the set of valid runtime names from the central
+// runtimeinfo registry.
+var knownRuntimes = runtimeinfo.KnownNames()
 
 // Requirement declares a tool or runtime that an automation needs.
 type Requirement struct {
@@ -75,7 +60,7 @@ func (r *requirementRaw) parseScalar(s string) error {
 	}
 
 	if !knownRuntimes[name] {
-		return fmt.Errorf("requires entry %q: unknown runtime %q (known: %s); use \"command: %s\" for arbitrary commands", s, name, knownRuntimeNames(), name)
+		return fmt.Errorf("requires entry %q: unknown runtime %q (known: %s); use \"command: %s\" for arbitrary commands", s, name, runtimeinfo.SortedNames(), name)
 	}
 
 	r.Kind = RequirementRuntime

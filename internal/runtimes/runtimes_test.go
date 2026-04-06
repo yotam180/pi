@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/runtimeinfo"
 )
 
 func TestNewProvisioner_Defaults(t *testing.T) {
@@ -982,13 +983,12 @@ func TestProvision_AutoMode_DefaultVersion(t *testing.T) {
 }
 
 func TestKnownRuntimeList(t *testing.T) {
-	list := knownRuntimeList()
+	list := runtimeinfo.SortedNames()
 	for _, rt := range []string{"go", "node", "python", "rust"} {
 		if !strings.Contains(list, rt) {
-			t.Errorf("knownRuntimeList should contain %q, got: %s", rt, list)
+			t.Errorf("SortedNames should contain %q, got: %s", rt, list)
 		}
 	}
-	// Should be comma-separated and sorted
 	if !strings.Contains(list, ", ") {
 		t.Errorf("should be comma-separated, got: %s", list)
 	}

@@ -7,10 +7,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/runtimeinfo"
 )
 
 // BaseDir is the default root for provisioned runtimes.
@@ -23,23 +23,9 @@ func homeDir() string {
 	return os.TempDir()
 }
 
-// KnownRuntimes are the runtimes PI can provision.
-var KnownRuntimes = map[string]bool{
-	"python": true,
-	"node":   true,
-	"go":     true,
-	"rust":   true,
-}
-
-// knownRuntimeList returns a sorted, comma-separated list of known runtimes.
-func knownRuntimeList() string {
-	names := make([]string, 0, len(KnownRuntimes))
-	for name := range KnownRuntimes {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return strings.Join(names, ", ")
-}
+// KnownRuntimes derives the set of provisionable runtime names from the
+// central runtimeinfo registry.
+var KnownRuntimes = runtimeinfo.KnownNames()
 
 // CmdRunner abstracts command execution so provisioning logic can be tested
 // without real binaries or network access. The default implementation
@@ -116,7 +102,7 @@ type ProvisionResult struct {
 // appropriate zero values.
 func (p *Provisioner) Provision(runtimeName, minVersion string) (*ProvisionResult, error) {
 	if !KnownRuntimes[runtimeName] {
-		return nil, fmt.Errorf("unknown runtime %q: PI can only provision %s", runtimeName, knownRuntimeList())
+		return nil, fmt.Errorf("unknown runtime %q: PI can only provision %s", runtimeName, runtimeinfo.SortedNames())
 	}
 
 	if p.Mode == config.ProvisionNever {
@@ -202,31 +188,11 @@ func (p *Provisioner) isProvisioned(runtimeName, binDir string) bool {
 }
 
 func defaultVersion(runtimeName string) string {
-	switch runtimeName {
-	case "python":
-		return "3.13"
-	case "node":
-		return "20"
-	case "go":
-		return "1.23"
-	case "rust":
-		return "stable"
-	default:
-		return "latest"
-	}
+	return runtimeinfo.DefaultVersion(runtimeName)
 }
 
 func runtimeBinary(name string) string {
-	switch name {
-	case "python":
-		return "python3"
-	case "node":
-		return "node"
-	case "rust":
-		return "rustc"
-	default:
-		return name
-	}
+	return runtimeinfo.Binary(name)
 }
 
 func (p *Provisioner) stderr() io.Writer {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
+	"github.com/vyper-tooling/pi/internal/runtimeinfo"
 )
 
 // CheckResult holds the result of checking a single requirement.
@@ -116,16 +117,9 @@ func checkImpl(req automation.Requirement, env *conditions.RuntimeEnv, alwaysDet
 	}
 }
 
-// RuntimeCommand maps runtime names to their CLI command.
+// RuntimeCommand maps runtime names to their CLI binary name.
 func RuntimeCommand(name string) string {
-	switch name {
-	case "python":
-		return "python3"
-	case "rust":
-		return "rustc"
-	default:
-		return name
-	}
+	return runtimeinfo.Binary(name)
 }
 
 // DetectVersion runs `<cmd> --version` and extracts a semver-like version string.
