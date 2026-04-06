@@ -91,6 +91,7 @@ func DefaultRunner() *Runner {
 	r.Register(CheckFunc{CheckName: "run-step-inputs", Fn: checkRunStepInputs})
 	r.Register(CheckFunc{CheckName: "circular-deps", Fn: checkCircularDeps})
 	r.Register(CheckFunc{CheckName: "conditions", Fn: checkConditions})
+	r.Register(CheckFunc{CheckName: "unknown-fields", Fn: checkUnknownFields})
 	return r
 }
 

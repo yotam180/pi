@@ -67,7 +67,7 @@ internal/
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
     discover_test.go               20 tests (advisory output format, nil writer, fetch status text, down arrow icon, discoverAllWithConfig [warnings route to stderr, nil stderr suppresses], discoverAll nil stderr, mergePackages [shadow warnings route to stderr, nil stderr suppresses], resolveFilePackage [existing dir, alias, missing, missing alias, not-a-dir, relative path, nil printer, nil stderr], resolvePackageSource file routing, mergePackages [empty list, missing file source skipped])
     run_test.go                    pi run tests (24 tests — includes --with, inputs, --silent, excess positional args, PI_ARGS, natural arg forwarding, Cobra flag isolation tests)
-    validate_test.go               pi validate tests (67 tests — integration tests via runValidate(); unit tests now delegate to validate.CheckWithInputs, validate.DetectCycles, validate.NormalizeCycleKey; covers valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, installer file refs, shortcut/setup/run-step with: validation, circular deps, condition validation)
+    validate_test.go               pi validate tests (70 tests — integration tests via runValidate(); unit tests now delegate to validate.CheckWithInputs, validate.DetectCycles, validate.NormalizeCycleKey; covers valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, installer file refs, shortcut/setup/run-step with: validation, circular deps, condition validation, unknown field detection with suggestions)
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
     list_test.go                   pi list tests (11 tests — SOURCE column, --all flag, --builtins flag, package source, workspace source, INPUTS column)
     info_test.go                   pi info tests (35 tests — includes if: condition display, installer type, installer lifecycle detail [scalar, step-list, explicit verify, no version, truncation], first: block detail [basic, block annotations, descriptions, sub-step annotations, integration], dir: annotation, timeout: annotation, step description display, automation-level env display, stepAnnotations unit tests, positional order display, usage line)
@@ -155,8 +155,10 @@ internal/
     shell_test.go                  20 tests (includes completion script generation and lifecycle tests)
     shadow_test.go                 13 tests (no shadows, shell builtins, common commands, multiple, empty, case-insensitive, exhaustive coverage, suggestions, formatting, sorted output)
   validate/                        Project-wide static validation (registry-based)
-    validate.go                    Check interface, CheckFunc adapter, Context (Root/Config/Discovery), Result, Runner (register+run), DefaultRunner() — pre-loads 9 built-in checks; individual check implementations: checkShortcutRefs, checkSetupRefs, checkRunStepRefs, checkFileReferences, checkShortcutInputs, checkSetupInputs, checkRunStepInputs, checkCircularDeps, checkConditions; exported helpers: CheckWithInputs(), BuildRunGraph(), DetectCycles(), NormalizeCycleKey()
-    validate_test.go               55 tests (runner lifecycle [empty, register, aggregation, counts, ordering], DefaultRunner check count, CheckFunc adapter, CheckWithInputs [no-with, all-valid, unknown, no-inputs, multiple-sorted], DetectCycles [no-cycles, direct, self-loop, three-node, diamond, multiple, disconnected], NormalizeCycleKey [rotation, self-loop, single, empty], individual checks [shortcut-refs valid/broken, setup-refs valid/broken, run-step-refs valid/broken, circular-deps cycle/no-cycle, conditions valid/unknown/automation-level, shortcut-inputs valid/unknown, setup-inputs valid/unknown/no-with/broken-ref, run-step-inputs valid/unknown/no-with/broken-ref/bash-skipped, file-refs inline/run-step/missing/existing], BuildRunGraph [basic, dedup])
+    validate.go                    Check interface, CheckFunc adapter, Context (Root/Config/Discovery), Result, Runner (register+run), DefaultRunner() — pre-loads 10 built-in checks; individual check implementations: checkShortcutRefs, checkSetupRefs, checkRunStepRefs, checkFileReferences, checkShortcutInputs, checkSetupInputs, checkRunStepInputs, checkCircularDeps, checkConditions, checkUnknownFields; exported helpers: CheckWithInputs(), BuildRunGraph(), DetectCycles(), NormalizeCycleKey()
+    unknown_fields.go              Unknown YAML field detection for automation files; checks top-level, step-level, install-block, and first: sub-step keys against known field sets; Levenshtein-based "did you mean?" suggestions for typos; skips builtins and package automations; knownAutomationKeys, knownStepKeys, knownInstallKeys field sets; suggestField(), levenshtein()
+    validate_test.go               56 tests (runner lifecycle [empty, register, aggregation, counts, ordering], DefaultRunner check count, CheckFunc adapter, CheckWithInputs [no-with, all-valid, unknown, no-inputs, multiple-sorted], DetectCycles [no-cycles, direct, self-loop, three-node, diamond, multiple, disconnected], NormalizeCycleKey [rotation, self-loop, single, empty], individual checks [shortcut-refs valid/broken, setup-refs valid/broken, run-step-refs valid/broken, circular-deps cycle/no-cycle, conditions valid/unknown/automation-level, shortcut-inputs valid/unknown, setup-inputs valid/unknown/no-with/broken-ref, run-step-inputs valid/unknown/no-with/broken-ref/bash-skipped, file-refs inline/run-step/missing/existing], BuildRunGraph [basic, dedup])
+    unknown_fields_test.go         29 tests (valid file, valid multi-step, unknown top-level, top-level suggestion, unknown step-level, multiple unknowns, skips builtins, installer fields, unknown install field, first block sub-steps, missing file, empty file path, shorthand with all modifiers, step common typo, automation name in error, valid inputs, valid requires, installer with verify, parent shell and pipe, pipe_to, completely unknown no suggestion, invalid YAML, step and top-level mixed, suggestField unit [exact/close/no match/multiple/short], levenshtein unit [identical/empty/one diff/substitution])
 ```
 
 ## Data Flow
@@ -296,7 +298,7 @@ pi validate
   │    discoverAll(): walks .pi/ + embeds → merged map[name]*Automation
   │
   └─ Validation (internal/validate via DefaultRunner)
-       9 registered checks run in order:
+       10 registered checks run in order:
        1. shortcut-refs → automation names
        2. setup-refs → automation names
        3. run-step-refs → automation names (incl. install phases)
@@ -306,6 +308,7 @@ pi validate
        7. run-step-inputs → target declared inputs
        8. circular-deps → DFS graph analysis
        9. conditions → known predicate names
+       10. unknown-fields → detects unknown YAML keys with "did you mean?" suggestions
        Collects all errors, CLI prints to stderr, exit 0 or 1
 ```
 
@@ -773,11 +776,12 @@ Makefile                               build, vet, test, test-matrix targets
 - Statically validates all config and automation files without executing anything
 - CLI layer (`cli/validate.go`) is a thin wrapper: resolves project → builds `validate.Context` → runs `validate.DefaultRunner()` → prints results
 - Validation logic lives in `internal/validate/` with a registry-based `Check` interface for extensibility
-- `DefaultRunner()` pre-registers 9 checks: shortcut-refs, setup-refs, run-step-refs, file-refs, shortcut-inputs, setup-inputs, run-step-inputs, circular-deps, conditions
+- `DefaultRunner()` pre-registers 10 checks: shortcut-refs, setup-refs, run-step-refs, file-refs, shortcut-inputs, setup-inputs, run-step-inputs, circular-deps, conditions, unknown-fields
 - Adding a new check = implement `validate.Check` interface + register with `Runner.Register()`
 - Validation layers: (1) pi.yaml schema via `config.Load()`, (2) automation discovery via `discoverAll()`, (3) pluggable validation checks via `validate.Runner`
 - File reference checks: when a step value looks like a file path (detected by `executor.IsFilePath()` — ends in `.sh`/`.py`/`.ts`, no newlines, no spaces), the path is resolved relative to the automation YAML file's directory and checked for existence on disk. Built-in automations are skipped (they use inline scripts only). Covers steps, `first:` block sub-steps, and install phase steps (including scalar install phases).
 - All step-walking checks use `automation.WalkSteps()` for traversal, with `StepLocation.FormatPath()` for error location formatting
+- Unknown field detection: re-reads automation YAML files as `yaml.Node` trees and checks all keys against known field sets (top-level, step-level, install-block). Unknown keys produce errors with Levenshtein-based "did you mean?" suggestions. Skips builtins and package automations (only local files are checked). Each level has its own known-key set: `knownAutomationKeys` (20 keys), `knownStepKeys` (15 keys), `knownInstallKeys` (4 keys)
 - Reports all errors (not just the first) with `✗` prefixed lines to stderr
 - Prints summary on success: `✓ Validated N automation(s), M shortcut(s), K setup entry(ies)`
 - Exit code 0 on success, 1 on validation errors (uses `*executor.ExitError{Code: 1}` for CLI exit handling)

@@ -1592,3 +1592,81 @@ steps:
 		t.Errorf("expected condition error, got: %s", errOut)
 	}
 }
+
+func TestValidate_UnknownFieldDetected(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`descrption: Build the project
+bash: go build ./...
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown field 'descrption'")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "descrption") {
+		t.Errorf("expected error to mention 'descrption', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "unknown field") {
+		t.Errorf("expected 'unknown field' in error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "description") {
+		t.Errorf("expected 'description' suggestion, got: %s", errOut)
+	}
+}
+
+func TestValidate_UnknownFieldInStep(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+steps:
+  - bash: go build ./...
+    timout: 30s
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown step field 'timout'")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "timout") {
+		t.Errorf("expected error to mention 'timout', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "step[0]") {
+		t.Errorf("expected error to mention step index, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "timeout") {
+		t.Errorf("expected 'timeout' suggestion, got: %s", errOut)
+	}
+}
+
+func TestValidate_ValidFilePassesUnknownFieldCheck(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+bash: go build ./...
+env:
+  GOOS: linux
+dir: .
+timeout: 30s
+silent: true
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error for valid file: %v\nstderr: %s", err, stderr.String())
+	}
+}

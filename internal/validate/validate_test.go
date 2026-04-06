@@ -121,10 +121,10 @@ func TestRunner_ChecksRunInOrder(t *testing.T) {
 	}
 }
 
-func TestDefaultRunner_Has9Checks(t *testing.T) {
+func TestDefaultRunner_Has10Checks(t *testing.T) {
 	r := DefaultRunner()
-	if r.Checks() != 9 {
-		t.Errorf("DefaultRunner should have 9 checks, got %d", r.Checks())
+	if r.Checks() != 10 {
+		t.Errorf("DefaultRunner should have 10 checks, got %d", r.Checks())
 	}
 }
 
