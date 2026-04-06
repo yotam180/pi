@@ -109,17 +109,17 @@ func TestShowAutomationInfo_WithInputs(t *testing.T) {
 	if !strings.Contains(out, "Inputs:") {
 		t.Errorf("expected Inputs header, got:\n%s", out)
 	}
-	if !strings.Contains(out, "service (string, required) → $PI_IN_SERVICE") {
-		t.Errorf("expected required input with env var, got:\n%s", out)
+	if !strings.Contains(out, "service (position 1, string, required) → $PI_IN_SERVICE") {
+		t.Errorf("expected required input with position and env var, got:\n%s", out)
 	}
 	if !strings.Contains(out, "The service to target") {
 		t.Errorf("expected input description, got:\n%s", out)
 	}
-	if !strings.Contains(out, `tail (string, optional, default: "200") → $PI_IN_TAIL`) {
-		t.Errorf("expected optional input with default and env var, got:\n%s", out)
+	if !strings.Contains(out, `tail (position 2, string, optional, default: "200") → $PI_IN_TAIL`) {
+		t.Errorf("expected optional input with position, default and env var, got:\n%s", out)
 	}
-	if !strings.Contains(out, "verbose (string, optional) → $PI_IN_VERBOSE") {
-		t.Errorf("expected optional input without default with env var, got:\n%s", out)
+	if !strings.Contains(out, "verbose (position 3, string, optional) → $PI_IN_VERBOSE") {
+		t.Errorf("expected optional input with position and env var, got:\n%s", out)
 	}
 }
 
@@ -782,5 +782,62 @@ steps:
 	}
 	if !strings.Contains(out, "a. bash: mise install go") {
 		t.Errorf("expected sub-step a, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_UsageLine(t *testing.T) {
+	root := setupInfoWorkspace(t)
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "with-inputs", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Usage:  pi run with-inputs <service> [tail] [verbose]") {
+		t.Errorf("expected usage line with positional args, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_UsageLineAllRequired(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "deploy.yaml"), []byte(`description: Deploy
+inputs:
+  env:
+    type: string
+    required: true
+  region:
+    type: string
+    required: true
+steps:
+  - bash: echo "$PI_IN_ENV $PI_IN_REGION"
+`), 0o644)
+
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "deploy", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "Usage:  pi run deploy <env> <region>") {
+		t.Errorf("expected usage line with required args, got:\n%s", out)
+	}
+}
+
+func TestShowAutomationInfo_NoUsageLineWithoutInputs(t *testing.T) {
+	root := setupInfoWorkspace(t)
+	var buf bytes.Buffer
+	err := showAutomationInfo(root, "simple", &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	if strings.Contains(out, "Usage:") {
+		t.Errorf("expected no usage line for automation without inputs, got:\n%s", out)
 	}
 }

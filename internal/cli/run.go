@@ -22,8 +22,17 @@ func newRunCmd() *cobra.Command {
 in the current project. PI walks up from the current directory to find pi.yaml,
 so this works from any subdirectory of the project.
 
-Arguments after the automation name (or after --) are forwarded:
-  - If the automation declares inputs:, args map to inputs by position.
+PI flags (--silent, --loud, --repo, --with) must come before the automation name.
+Everything after the automation name is forwarded as automation arguments — no --
+separator needed:
+
+  pi run --silent build release --verbose
+         ^^^^^^^^ PI flag
+                  ^^^^^ automation name
+                        ^^^^^^^^^^^^^^^^ automation arguments
+
+Forwarded arguments work as follows:
+  - If the automation declares inputs:, args map to inputs by declaration order.
   - Otherwise, args are available in bash steps as $1, $2, $@ and as $PI_ARGS.
 
 Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).
@@ -50,6 +59,7 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 		},
 	}
 
+	cmd.Flags().SetInterspersed(false)
 	cmd.Flags().StringVar(&repoFlag, "repo", "", "project root path (used by anywhere shortcuts)")
 	cmd.Flags().StringArrayVar(&withFlags, "with", nil, "pass named input as key=value (repeatable)")
 	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")

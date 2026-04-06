@@ -205,6 +205,200 @@ steps:
 	}
 }
 
+func TestRunAutomation_PositionalInputsMapByOrder(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "deploy.yaml"), []byte(`description: Deploy to environment
+inputs:
+  env:
+    type: string
+    required: true
+  region:
+    type: string
+    default: us-east-1
+steps:
+  - bash: echo "$PI_IN_ENV $PI_IN_REGION"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "deploy", []string{"prod", "eu-west-1"}, nil, false, false, &buf, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(buf.String())
+	if got != "prod eu-west-1" {
+		t.Errorf("output = %q, want %q", got, "prod eu-west-1")
+	}
+}
+
+func TestRunAutomation_PositionalWithDefaults(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "deploy.yaml"), []byte(`description: Deploy to environment
+inputs:
+  env:
+    type: string
+    required: true
+  region:
+    type: string
+    default: us-east-1
+steps:
+  - bash: echo "$PI_IN_ENV $PI_IN_REGION"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "deploy", []string{"staging"}, nil, false, false, &buf, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(buf.String())
+	if got != "staging us-east-1" {
+		t.Errorf("output = %q, want %q", got, "staging us-east-1")
+	}
+}
+
+func TestRunAutomation_FlagLikeArgsForwardedAsPI_ARGS(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build with extra args
+bash: echo "args=$PI_ARGS"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "build", []string{"--release", "--target=linux"}, nil, false, false, &buf, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(buf.String())
+	if got != "args=--release --target=linux" {
+		t.Errorf("output = %q, want %q", got, "args=--release --target=linux")
+	}
+}
+
+func TestRunAutomation_FlagLikeArgsAsPositionalInputs(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+inputs:
+  profile:
+    type: string
+    default: dev
+steps:
+  - bash: echo "profile=$PI_IN_PROFILE"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "build", []string{"release"}, nil, false, false, &buf, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(buf.String())
+	if got != "profile=release" {
+		t.Errorf("output = %q, want %q", got, "profile=release")
+	}
+}
+
+func TestRunCmd_FlagLikeArgsAfterAutomation_NotParsedAsPiFlags(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+bash: echo "args=$PI_ARGS"
+`), 0o644)
+
+	var stdout strings.Builder
+	err := runAutomation(root, "build", []string{"--silent", "--loud"}, nil, false, false, &stdout, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "args=--silent --loud" {
+		t.Errorf("expected flag-like args forwarded via PI_ARGS, got: %q", got)
+	}
+}
+
+func TestRunCmd_CobraDoesNotParsePostNameFlags(t *testing.T) {
+	cmd := newRunCmd()
+	cmd.SetArgs([]string{"--repo", "/nonexistent", "build", "--silent", "--loud"})
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error (nonexistent repo), but no error means flags were parsed correctly")
+	}
+	if strings.Contains(err.Error(), "unknown flag") {
+		t.Fatalf("--silent/--loud after automation name should not be parsed as pi flags: %v", err)
+	}
+}
+
+func TestRunCmd_PiFlagsBeforeAutomation(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+bash: echo "running"
+`), 0o644)
+
+	err := runAutomation(root, "build", nil, nil, true, false, os.Stdout, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunCmd_DoubleDashStillWorks(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build
+bash: echo "args=$PI_ARGS"
+`), 0o644)
+
+	var stdout strings.Builder
+	err := runAutomation(root, "build", []string{"--release"}, nil, false, false, &stdout, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "args=--release" {
+		t.Errorf("expected args forwarded via PI_ARGS, got: %q", got)
+	}
+}
+
+func TestRunCmd_WithFlagBeforeAutomation(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "greet.yaml"), []byte(`description: Greet
+inputs:
+  name:
+    type: string
+    required: true
+steps:
+  - bash: echo "hello $PI_IN_NAME"
+`), 0o644)
+
+	var stdout strings.Builder
+	err := runAutomation(root, "greet", nil, map[string]string{"name": "world"}, false, false, &stdout, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "hello world" {
+		t.Errorf("expected --with to pass input, got: %q", got)
+	}
+}
+
 func TestParseWithFlags(t *testing.T) {
 	tests := []struct {
 		name    string

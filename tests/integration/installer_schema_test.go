@@ -37,7 +37,7 @@ func TestInstallerSchema_AlreadyInstalled(t *testing.T) {
 func TestInstallerSchema_FreshInstall(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "installer-schema")
 	marker := filepath.Join(t.TempDir(), "test-marker")
-	out, code := runPi(t, dir, "run", "install-marker", "--with", "path="+marker)
+	out, code := runPi(t, dir, "run", "--with", "path="+marker, "install-marker")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -59,7 +59,7 @@ func TestInstallerSchema_FreshInstallThenAlreadyInstalled(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "installer-schema")
 	marker := filepath.Join(t.TempDir(), "test-marker")
 
-	out1, code1 := runPi(t, dir, "run", "install-marker", "--with", "path="+marker)
+	out1, code1 := runPi(t, dir, "run", "--with", "path="+marker, "install-marker")
 	if code1 != 0 {
 		t.Fatalf("first run: expected exit 0, got %d: %s", code1, out1)
 	}
@@ -67,7 +67,7 @@ func TestInstallerSchema_FreshInstallThenAlreadyInstalled(t *testing.T) {
 		t.Errorf("first run: expected 'installing...', got:\n%s", out1)
 	}
 
-	out2, code2 := runPi(t, dir, "run", "install-marker", "--with", "path="+marker)
+	out2, code2 := runPi(t, dir, "run", "--with", "path="+marker, "install-marker")
 	if code2 != 0 {
 		t.Fatalf("second run: expected exit 0, got %d: %s", code2, out2)
 	}

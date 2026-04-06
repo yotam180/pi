@@ -89,10 +89,12 @@ func printAutomationInfo(a *automation.Automation, out io.Writer) {
 	}
 
 	fmt.Fprintf(out, "\nInputs:\n")
-	for _, key := range a.InputKeys {
+	for i, key := range a.InputKeys {
 		spec := a.Inputs[key]
-		printInputSpec(key, spec, out)
+		printInputSpec(key, spec, i+1, out)
 	}
+
+	printUsageLine(a, out)
 }
 
 func printInstallDetail(inst *automation.InstallSpec, out io.Writer) {
@@ -221,8 +223,10 @@ func truncateValue(s string, maxLen int) string {
 	return s
 }
 
-func printInputSpec(name string, spec automation.InputSpec, out io.Writer) {
+func printInputSpec(name string, spec automation.InputSpec, position int, out io.Writer) {
 	var parts []string
+
+	parts = append(parts, fmt.Sprintf("position %d", position))
 
 	if spec.Type != "" {
 		parts = append(parts, spec.Type)
@@ -245,4 +249,19 @@ func printInputSpec(name string, spec automation.InputSpec, out io.Writer) {
 	if spec.Description != "" {
 		fmt.Fprintf(out, "      %s\n", spec.Description)
 	}
+}
+
+// printUsageLine prints a usage example showing how to invoke the automation
+// with positional arguments.
+func printUsageLine(a *automation.Automation, out io.Writer) {
+	var argParts []string
+	for _, key := range a.InputKeys {
+		spec := a.Inputs[key]
+		if spec.IsRequired() {
+			argParts = append(argParts, fmt.Sprintf("<%s>", key))
+		} else {
+			argParts = append(argParts, fmt.Sprintf("[%s]", key))
+		}
+	}
+	fmt.Fprintf(out, "\nUsage:  pi run %s %s\n", a.Name, strings.Join(argParts, " "))
 }

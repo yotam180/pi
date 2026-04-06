@@ -33,7 +33,7 @@ func TestInputs_PositionalBothArgs(t *testing.T) {
 
 func TestInputs_WithFlags(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPiStdout(t, dir, "run", "greet", "--with", "name=charlie", "--with", "greeting=hey")
+	out, code := runPiStdout(t, dir, "run", "--with", "name=charlie", "--with", "greeting=hey", "greet")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -45,7 +45,7 @@ func TestInputs_WithFlags(t *testing.T) {
 
 func TestInputs_DefaultApplied(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPiStdout(t, dir, "run", "greet", "--with", "name=dave")
+	out, code := runPiStdout(t, dir, "run", "--with", "name=dave", "greet")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -68,7 +68,7 @@ func TestInputs_MissingRequired(t *testing.T) {
 
 func TestInputs_UnknownInput(t *testing.T) {
 	dir := filepath.Join(examplesDir(), "inputs")
-	out, code := runPi(t, dir, "run", "greet", "--with", "typo=val")
+	out, code := runPi(t, dir, "run", "--with", "typo=val", "greet")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit for unknown input, got 0: %s", out)
 	}
@@ -131,7 +131,7 @@ func setupPIArgsWorkspace(t *testing.T) string {
 
 func TestInputs_PIArgs_ForwardedToNoInputAutomation(t *testing.T) {
 	dir := setupPIArgsWorkspace(t)
-	out, code := runPiStdout(t, dir, "run", "build", "--", "--release", "--verbose")
+	out, code := runPiStdout(t, dir, "run", "build", "--release", "--verbose")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}
@@ -143,7 +143,7 @@ func TestInputs_PIArgs_ForwardedToNoInputAutomation(t *testing.T) {
 
 func TestInputs_PIArgs_SingleArg(t *testing.T) {
 	dir := setupPIArgsWorkspace(t)
-	out, code := runPiStdout(t, dir, "run", "test", "--", "--ignored")
+	out, code := runPiStdout(t, dir, "run", "test", "--ignored")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d: %s", code, out)
 	}

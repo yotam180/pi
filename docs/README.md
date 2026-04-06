@@ -209,7 +209,16 @@ Single-step shorthand can use a top-level `env:` next to `bash:`, `run:`, etc.; 
 
 ### Extra Arguments (`PI_ARGS`)
 
-When extra arguments are passed to `pi run` (after `--` or after the automation name), they are available to steps in two ways:
+Everything after the automation name on `pi run` is forwarded as automation arguments — no `--` separator needed. PI's own flags (`--silent`, `--loud`, `--repo`, `--with`) must come **before** the automation name:
+
+```
+pi run --silent build --release --verbose
+       ^^^^^^^^ PI flag (before automation name)
+                ^^^^^ automation name
+                      ^^^^^^^^^^^^^^^^^^ automation arguments
+```
+
+For automations **without** `inputs:`, forwarded args are available in two ways:
 
 1. **`$PI_ARGS`** — environment variable containing all extra args, space-joined
 2. **`$@`, `$1`, `$2`** — bash positional parameters (bash steps only)
@@ -221,11 +230,35 @@ bash: cargo test $PI_ARGS
 ```
 
 ```bash
-pi run test -- --ignored --nocapture
+pi run test --ignored --nocapture
 # Executes: cargo test --ignored --nocapture
 ```
 
-For automations with `inputs:`, positional args are mapped to declared inputs (not to `PI_ARGS`). Excess positional args beyond the declared inputs produce an error.
+For automations **with** `inputs:`, positional args are mapped to declared inputs by declaration order (not to `PI_ARGS`). Excess positional args beyond the declared inputs produce an error.
+
+```yaml
+# .pi/deploy.yaml
+description: Deploy to an environment
+inputs:
+  env:
+    type: string
+    required: true
+  region:
+    type: string
+    default: us-east-1
+bash: deploy.sh --env $PI_IN_ENV --region $PI_IN_REGION
+```
+
+```bash
+pi run deploy prod eu-west-1
+# Maps: env=prod, region=eu-west-1
+
+pi run deploy staging
+# Maps: env=staging, region=us-east-1 (default)
+
+pi run --with env=prod deploy
+# Named inputs also work; --with must come before the automation name
+```
 
 ### Working Directory (`dir:`)
 
@@ -736,8 +769,8 @@ Literal strings in `with:` values pass through unchanged.
 
 | Command                                  | Description                                              |
 |-----------------------------------------|----------------------------------------------------------|
-| `pi run <name> [args]`                  | Run an automation by name (args mapped to inputs)        |
-| `pi run <name> --with key=value`        | Run with explicit named inputs (repeatable)              |
+| `pi run <name> [args]`                  | Run an automation by name (args after name forwarded)    |
+| `pi run --with key=value <name>`        | Run with explicit named inputs (repeatable; before name) |
 | `pi run --repo <path> <name>`           | Run an automation with explicit project root             |
 | `pi run --silent <name>`                | Suppress PI status lines for installer automations       |
 | `pi run --loud <name>`                  | Force all steps to print trace lines and output          |

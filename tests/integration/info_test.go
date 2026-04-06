@@ -32,8 +32,8 @@ func TestInfo_WithInputs(t *testing.T) {
 	if !strings.Contains(out, "Inputs:") {
 		t.Errorf("expected Inputs header, got:\n%s", out)
 	}
-	if !strings.Contains(out, "name (string, required)") {
-		t.Errorf("expected required input with type, got:\n%s", out)
+	if !strings.Contains(out, "name (position 1, string, required)") {
+		t.Errorf("expected required input with position and type, got:\n%s", out)
 	}
 	if !strings.Contains(out, "Who to greet") {
 		t.Errorf("expected input description, got:\n%s", out)
