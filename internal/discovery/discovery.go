@@ -341,7 +341,7 @@ func (r *Result) findBuiltin(ref refparser.AutomationRef) (*automation.Automatio
 		}
 	}
 
-	if r.Builtins != nil && len(r.Builtins) > 0 {
+	if len(r.Builtins) > 0 {
 		builtinNames := make([]string, 0, len(r.Builtins))
 		for name := range r.Builtins {
 			builtinNames = append(builtinNames, name)
@@ -353,7 +353,7 @@ func (r *Result) findBuiltin(ref refparser.AutomationRef) (*automation.Automatio
 			for _, name := range suggestions {
 				fmt.Fprintf(&b, "  pi:%s\n", name)
 			}
-			return nil, fmt.Errorf("%s", b.String())
+			return nil, fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 		}
 	}
 
@@ -363,7 +363,7 @@ func (r *Result) findBuiltin(ref refparser.AutomationRef) (*automation.Automatio
 func (r *Result) findAlias(ref refparser.AutomationRef) (*automation.Automation, error) {
 	source, ok := r.aliasMap[ref.Alias]
 	if !ok {
-		return nil, fmt.Errorf("alias %q is not declared in packages:", ref.Alias)
+		return nil, fmt.Errorf("alias %q is not declared in packages", ref.Alias)
 	}
 	autos, ok := r.packageAuto[source]
 	if !ok {
@@ -433,7 +433,7 @@ func (r *Result) findLocal(ref refparser.AutomationRef) (*automation.Automation,
 	}
 
 	fmt.Fprintf(&b, "\nAvailable automations:\n%s", r.formatAvailable())
-	return nil, fmt.Errorf("%s", b.String())
+	return nil, fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 }
 
 // Names returns a sorted list of all automation names (local + built-in).

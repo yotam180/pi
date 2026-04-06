@@ -98,7 +98,7 @@ func runNew(startDir, name, bash, python, desc string, stdout, stderr io.Writer)
 func findPiDir(startDir string) (root string, piDir string, err error) {
 	pc, err := resolveProject(startDir)
 	if err != nil {
-		return "", "", fmt.Errorf("%w\n\nRun 'pi init' to initialize a project first.", err)
+		return "", "", fmt.Errorf("%w\n\nRun 'pi init' to initialize a project first", err)
 	}
 
 	piDir = filepath.Join(pc.Root, ".pi")

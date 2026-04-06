@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -176,12 +175,3 @@ steps:
 	}
 }
 
-func createOnDemandCacheDir(t *testing.T, org, repo, version string) string {
-	t.Helper()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("getting home dir: %v", err)
-	}
-	cachePath := filepath.Join(home, ".pi", "cache", "github", org, repo, version)
-	return cachePath
-}

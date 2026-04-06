@@ -81,13 +81,6 @@ func checkRequirement(req automation.Requirement, env *RuntimeEnv) CheckResult {
 	return reqcheck.CheckRequirement(req, env)
 }
 
-func checkRequirementImpl(req automation.Requirement, env *RuntimeEnv, alwaysDetectVersion bool) CheckResult {
-	if alwaysDetectVersion {
-		return reqcheck.CheckRequirementForDoctor(req, env)
-	}
-	return reqcheck.CheckRequirement(req, env)
-}
-
 func runtimeCommand(name string) string {
 	return reqcheck.RuntimeCommand(name)
 }

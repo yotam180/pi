@@ -78,7 +78,7 @@ func TestLoad_MinimalValid(t *testing.T) {
 	if cfg.Project != "minimal" {
 		t.Errorf("project = %q, want %q", cfg.Project, "minimal")
 	}
-	if cfg.Shortcuts != nil && len(cfg.Shortcuts) != 0 {
+	if len(cfg.Shortcuts) != 0 {
 		t.Errorf("shortcuts should be empty, got %v", cfg.Shortcuts)
 	}
 }
