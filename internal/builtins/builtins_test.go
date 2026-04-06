@@ -557,7 +557,7 @@ func TestDiscover_InstallTsxUsesNpm(t *testing.T) {
 	}
 }
 
-func TestDiscover_InstallPythonUsesMiseAndBrew(t *testing.T) {
+func TestDiscover_InstallPythonUsesPyenvMiseAndBrew(t *testing.T) {
 	result, err := Discover()
 	if err != nil {
 		t.Fatalf("Discover() returned error: %v", err)
@@ -571,8 +571,11 @@ func TestDiscover_InstallPythonUsesMiseAndBrew(t *testing.T) {
 	if run.IsScalar {
 		t.Fatal("expected step list for install-python run phase")
 	}
-	foundMise, foundBrew := false, false
+	foundPyenv, foundMise, foundBrew := false, false, false
 	for _, s := range collectAllSteps(run.Steps) {
+		if strings.Contains(s.Value, "pyenv") {
+			foundPyenv = true
+		}
 		if strings.Contains(s.Value, "mise") {
 			foundMise = true
 		}
@@ -580,11 +583,43 @@ func TestDiscover_InstallPythonUsesMiseAndBrew(t *testing.T) {
 			foundBrew = true
 		}
 	}
+	if !foundPyenv {
+		t.Error("expected install-python to try pyenv")
+	}
 	if !foundMise {
 		t.Error("expected install-python to try mise")
 	}
 	if !foundBrew {
 		t.Error("expected install-python to fall back to brew")
+	}
+}
+
+func TestDiscover_InstallPythonTestPhaseChecksPyenv(t *testing.T) {
+	result, err := Discover()
+	if err != nil {
+		t.Fatalf("Discover() returned error: %v", err)
+	}
+
+	a := result.Automations["install-python"]
+	test := a.Install.Test
+	if test.IsScalar {
+		t.Fatal("expected test phase to be a step list")
+	}
+	if len(test.Steps) < 2 {
+		t.Fatalf("expected at least 2 test steps, got %d", len(test.Steps))
+	}
+	detectionStep := test.Steps[0]
+	if detectionStep.Type != automation.StepTypeBash {
+		t.Fatal("expected first test step to be bash")
+	}
+	if !strings.Contains(detectionStep.Value, "pyenv") {
+		t.Error("expected test phase detection to check pyenv")
+	}
+	if !strings.Contains(detectionStep.Value, "python3") {
+		t.Error("expected test phase detection to fall back to python3")
+	}
+	if !strings.Contains(detectionStep.Value, "python") {
+		t.Error("expected test phase detection to fall back to python")
 	}
 }
 

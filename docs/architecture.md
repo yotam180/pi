@@ -12,11 +12,11 @@ internal/
   builtins/                        Embedded built-in automations
     builtins.go                    //go:embed, Discover() — walks embedded FS + Go-backed builtins, returns *discovery.Result; goBackedBuiltins() registers Go-native automations
     version_satisfies.go           pi:version-satisfies — Go-backed builtin for semver constraint checking; uses internal/semver
-    builtins_test.go               65 tests (3 base + 7 docker + 23 installer + 16 devtool + 10 utility + 6 version-satisfies)
+    builtins_test.go               66 tests (3 base + 7 docker + 24 installer + 16 devtool + 10 utility + 6 version-satisfies)
     embed_pi/                      Built-in automation YAML files (embedded at build time)
       hello.yaml                   Test built-in automation
       install-homebrew.yaml        pi:install-homebrew — macOS only, installs Homebrew
-      install-python.yaml          pi:install-python — installs Python via mise/brew (version input)
+      install-python.yaml          pi:install-python — installs Python via pyenv/mise/brew (version input); detects pyenv-managed versions
       install-node.yaml            pi:install-node — installs Node.js via mise/brew (version input)
       install-go.yaml              pi:install-go — installs Go via mise/brew (version input)
       install-rust.yaml            pi:install-rust — installs Rust via rustup (version input)

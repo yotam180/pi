@@ -4,7 +4,7 @@
 bug
 
 ## Status
-todo
+done
 
 ## Priority
 high
@@ -57,14 +57,39 @@ For the install step, the priority should be:
 3. Fallback to system package manager
 
 ## Acceptance Criteria
-- [ ] `pi setup add python --version 3.13` succeeds when pyenv has 3.13 active
-- [ ] Version check uses the PATH-resolved `python3`, not a hardcoded path
-- [ ] If pyenv is installed, it is used as the preferred install strategy
-- [ ] The automation still works on systems without pyenv (Homebrew fallback)
+- [x] `pi setup add python --version 3.13` succeeds when pyenv has 3.13 active
+- [x] Version check uses the PATH-resolved `python3`, not a hardcoded path
+- [x] If pyenv is installed, it is used as the preferred install strategy
+- [x] The automation still works on systems without pyenv (Homebrew fallback)
 
 ## Implementation Notes
 
+### Root cause
+The issue was that `bash -c "python3 --version"` (non-interactive shell) doesn't have pyenv shims on PATH because `eval "$(pyenv init -)"` only runs in interactive shells (`.zshrc`/`.bashrc`). The `python3` binary resolves to `/usr/bin/python3` (macOS system Python 3.9.6) instead of pyenv's managed version.
+
+### Fix (in `install-python.yaml`)
+
+**Test/verify/version phases** — Replaced the simple `python3 --version 2>&1 | awk '{print $2}'` with a multi-strategy detection script:
+1. Check `pyenv version-name` first (available in non-interactive shells since `pyenv` binary is on PATH via Homebrew). Skip if it returns "system".
+2. Fall back to `python3 --version`
+3. Fall back to `python --version` (some setups alias `python` to Python 3 via pyenv)
+
+**Run (install) phase** — Added pyenv as the highest-priority install strategy (before mise and brew):
+- `pyenv install "$VERSION"` then `pyenv global "$installed_version"`
+- Falls through to mise, then brew, with a final fallback error listing all three options
+
+### Tests
+- Updated `TestDiscover_InstallPythonUsesMiseAndBrew` → renamed to `TestDiscover_InstallPythonUsesPyenvMiseAndBrew`, now checks all three installers
+- Added `TestDiscover_InstallPythonTestPhaseChecksPyenv` — verifies the test phase detection script checks pyenv, python3, and python
+- All 66 builtins tests pass; full suite (16 packages) passes
+
+### Verified
+- `pi run pi:install-python --with version=3.13` → `✓  install-python  already installed (3.13.11)` (was failing before)
+
 ## Subtasks
-- [ ] 
+- [x] Fix test/verify/version phases to detect pyenv-managed Python
+- [x] Add pyenv as preferred install strategy in run phase
+- [x] Update and add unit tests
+- [x] End-to-end verification
 
 ## Blocked By
