@@ -107,20 +107,26 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 }
 
 // captureVersion runs the version command and returns the trimmed output.
+// The version: field is always a shell command today, so we default to the Bash
+// runner. A future schema change could allow typed version steps (e.g.
+// version: {python: get_version.py}), at which point this function would accept
+// the step type from the parsed YAML.
 func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, inputEnv []string) string {
 	if versionCmd == "" {
 		return ""
 	}
 
-	step := automation.Step{Type: automation.StepTypeBash, Value: versionCmd}
+	const versionStepType = automation.StepTypeBash
+	runner := e.registry().Get(versionStepType)
+	if runner == nil {
+		return ""
+	}
+
+	step := automation.Step{Type: versionStepType, Value: versionCmd}
 	var buf bytes.Buffer
 	ctx := e.newRunContext(a, step, nil, &buf, nil, inputEnv, e.RepoRoot)
 	ctx.Stderr = io.Discard
 
-	runner := e.registry().Get(automation.StepTypeBash)
-	if runner == nil {
-		return ""
-	}
 	if err := runner.Run(ctx); err != nil {
 		return ""
 	}
@@ -154,10 +160,15 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
 		}
 
-		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv, e.RepoRoot)
+		var outputCapture bytes.Buffer
+		ctx := e.newRunContext(a, sub, nil, &outputCapture, nil, inputEnv, e.RepoRoot)
 		ctx.Stderr = stderrWriter
 
-		return runner.Run(ctx)
+		if err := runner.Run(ctx); err != nil {
+			return err
+		}
+		e.recordOutput(outputCapture.String())
+		return nil
 	}
 	return nil
 }

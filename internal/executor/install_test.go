@@ -535,3 +535,137 @@ func TestExecInstall_WithAutomationLevelIf(t *testing.T) {
 		t.Errorf("expected '[skipped]' message, got: %q", output)
 	}
 }
+
+func TestExecInstall_FirstBlockRecordsOutput(t *testing.T) {
+	root := t.TempDir()
+	marker := filepath.Join(root, "installed")
+	var stderr bytes.Buffer
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "test -f " + marker},
+		Run: automation.InstallPhase{
+			IsScalar: false,
+			Steps: []automation.Step{
+				{
+					Type: automation.StepTypeBash,
+					First: []automation.Step{
+						{Type: automation.StepTypeBash, Value: "echo 'first-block-output'; touch " + marker},
+					},
+				},
+			},
+		},
+		Version: "echo 1.0.0",
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    &stderr,
+	}
+
+	err := e.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(e.stepOutputs) > 0 {
+		t.Errorf("stepOutputs should be restored to outer scope after install, got %d entries", len(e.stepOutputs))
+	}
+}
+
+func TestExecInstallFirstBlock_OutputCapturedInPhase(t *testing.T) {
+	root := t.TempDir()
+	marker := filepath.Join(root, "installed")
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{
+		Test: automation.InstallPhase{IsScalar: true, Scalar: "test -f " + marker},
+		Run: automation.InstallPhase{
+			IsScalar: false,
+			Steps: []automation.Step{
+				{
+					Type: automation.StepTypeBash,
+					First: []automation.Step{
+						{Type: automation.StepTypeBash, Value: "echo 'captured-value'; touch " + marker},
+					},
+				},
+			},
+		},
+		Version: "echo 1.0.0",
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    io.Discard,
+	}
+
+	phase := &a.Install.Run
+	steps := phase.Steps
+
+	e.stepOutputs = nil
+	err := e.execInstallFirstBlock(a, steps[0], 0, nil, io.Discard)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(e.stepOutputs) != 1 {
+		t.Fatalf("expected 1 recorded output, got %d", len(e.stepOutputs))
+	}
+	if e.stepOutputs[0] != "captured-value" {
+		t.Errorf("expected recorded output 'captured-value', got %q", e.stepOutputs[0])
+	}
+}
+
+func TestCaptureVersion_UsesRegistry(t *testing.T) {
+	root := t.TempDir()
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{
+		Test:    automation.InstallPhase{IsScalar: true, Scalar: "true"},
+		Run:     automation.InstallPhase{IsScalar: true, Scalar: "true"},
+		Version: "echo 5.6.7",
+	})
+
+	e := &Executor{
+		RepoRoot:  root,
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    io.Discard,
+	}
+
+	version := e.captureVersion(a, "echo 5.6.7", nil)
+	if version != "5.6.7" {
+		t.Errorf("expected '5.6.7', got %q", version)
+	}
+}
+
+func TestCaptureVersion_EmptyCommand(t *testing.T) {
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    io.Discard,
+	}
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{})
+	version := e.captureVersion(a, "", nil)
+	if version != "" {
+		t.Errorf("expected empty string for empty version command, got %q", version)
+	}
+}
+
+func TestCaptureVersion_CommandFails(t *testing.T) {
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: newDiscovery(nil),
+		Stdout:    io.Discard,
+		Stderr:    io.Discard,
+	}
+
+	a := newInstallerAutomation("test-tool", &automation.InstallSpec{})
+	version := e.captureVersion(a, "exit 1", nil)
+	if version != "" {
+		t.Errorf("expected empty string for failed version command, got %q", version)
+	}
+}
