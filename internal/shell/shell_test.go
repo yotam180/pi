@@ -678,3 +678,350 @@ func TestGenerateFunction_WithInputs_EvalInsideSubshell(t *testing.T) {
 		t.Errorf("PI_PARENT_EVAL_FILE should be inside subshell as command prefix:\n%s", fn)
 	}
 }
+
+// --- Fish shell integration tests ---
+
+func TestInstall_CreatesFishFilesWhenFishConfigExists(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Create .zshrc and fish config
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte("# existing\n"), 0o644)
+	fishDir := filepath.Join(tmpHome, ".config", "fish")
+	os.MkdirAll(fishDir, 0o755)
+	os.WriteFile(filepath.Join(fishDir, "config.fish"), []byte("# fish config\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "testproj",
+		Shortcuts: map[string]config.Shortcut{
+			"hello": {Run: "greet"},
+		},
+	}
+
+	_, err := Install(cfg, "pi", "/repo")
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	// Verify fish shortcut file
+	fishPath := filepath.Join(tmpHome, piShellDir, "testproj.fish")
+	data, err := os.ReadFile(fishPath)
+	if err != nil {
+		t.Fatalf("reading fish file: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "function hello") {
+		t.Error("fish file should contain hello function")
+	}
+	if strings.Contains(content, "function hello()") {
+		t.Error("fish file should not use () syntax")
+	}
+	if !strings.Contains(content, "$argv") {
+		t.Error("fish file should use $argv")
+	}
+	if !strings.Contains(content, "end\n") {
+		t.Error("fish file should use 'end' to close functions")
+	}
+
+	// Verify fish wrapper
+	fishWrapperPath := filepath.Join(tmpHome, piShellDir, piFishWrapperFile)
+	wrapperData, err := os.ReadFile(fishWrapperPath)
+	if err != nil {
+		t.Fatalf("reading fish wrapper: %v", err)
+	}
+	if !strings.Contains(string(wrapperData), "function pi") {
+		t.Error("fish wrapper should contain pi function")
+	}
+
+	// Verify fish completion
+	fishCompletionPath := filepath.Join(tmpHome, piShellDir, piFishCompletionFile)
+	compData, err := os.ReadFile(fishCompletionPath)
+	if err != nil {
+		t.Fatalf("reading fish completion: %v", err)
+	}
+	if !strings.Contains(string(compData), "completion fish") {
+		t.Error("fish completion should reference fish completion command")
+	}
+
+	// Verify fish source line in config.fish
+	fishCfgData, _ := os.ReadFile(filepath.Join(fishDir, "config.fish"))
+	if !strings.Contains(string(fishCfgData), "# Added by PI") {
+		t.Error("config.fish should contain source line")
+	}
+	if !strings.Contains(string(fishCfgData), "*.fish") {
+		t.Error("config.fish source line should source .fish files")
+	}
+}
+
+func TestInstall_SkipsFishWhenNoFishConfig(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte("# existing\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "testproj",
+		Shortcuts: map[string]config.Shortcut{
+			"hello": {Run: "greet"},
+		},
+	}
+
+	_, err := Install(cfg, "pi", "/repo")
+	if err != nil {
+		t.Fatalf("install failed: %v", err)
+	}
+
+	// Fish file should NOT exist
+	fishPath := filepath.Join(tmpHome, piShellDir, "testproj.fish")
+	if _, err := os.Stat(fishPath); !os.IsNotExist(err) {
+		t.Error("fish file should not be created when no fish config exists")
+	}
+}
+
+func TestUninstall_RemovesFishFiles(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+	fishDir := filepath.Join(tmpHome, ".config", "fish")
+	os.MkdirAll(fishDir, 0o755)
+	os.WriteFile(filepath.Join(fishDir, "config.fish"), []byte("# fish\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "only-proj",
+		Shortcuts: map[string]config.Shortcut{
+			"a": {Run: "auto/a"},
+		},
+	}
+
+	Install(cfg, "pi", "/repo")
+
+	// Verify fish files exist
+	fishPath := filepath.Join(tmpHome, piShellDir, "only-proj.fish")
+	if _, err := os.Stat(fishPath); err != nil {
+		t.Fatalf("fish file should exist after install: %v", err)
+	}
+
+	Uninstall("only-proj")
+
+	// Fish shortcut file should be removed
+	if _, err := os.Stat(fishPath); !os.IsNotExist(err) {
+		t.Error("fish file should be removed after uninstall")
+	}
+
+	// Fish wrapper should be removed (last project)
+	fishWrapperPath := filepath.Join(tmpHome, piShellDir, piFishWrapperFile)
+	if _, err := os.Stat(fishWrapperPath); !os.IsNotExist(err) {
+		t.Error("fish wrapper should be removed when last project is uninstalled")
+	}
+
+	// Fish completion should be removed (last project)
+	fishCompletionPath := filepath.Join(tmpHome, piShellDir, piFishCompletionFile)
+	if _, err := os.Stat(fishCompletionPath); !os.IsNotExist(err) {
+		t.Error("fish completion should be removed when last project is uninstalled")
+	}
+
+	// Fish source line should be removed
+	fishCfgData, _ := os.ReadFile(filepath.Join(fishDir, "config.fish"))
+	if strings.Contains(string(fishCfgData), "# Added by PI") {
+		t.Error("fish source line should be removed when no repos remain")
+	}
+}
+
+func TestUninstall_KeepsFishFilesIfOtherProjectsExist(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+	fishDir := filepath.Join(tmpHome, ".config", "fish")
+	os.MkdirAll(fishDir, 0o755)
+	os.WriteFile(filepath.Join(fishDir, "config.fish"), []byte("# fish\n"), 0o644)
+
+	cfg1 := &config.ProjectConfig{
+		Project: "proj1",
+		Shortcuts: map[string]config.Shortcut{
+			"a": {Run: "auto/a"},
+		},
+	}
+	cfg2 := &config.ProjectConfig{
+		Project: "proj2",
+		Shortcuts: map[string]config.Shortcut{
+			"b": {Run: "auto/b"},
+		},
+	}
+
+	Install(cfg1, "pi", "/repo1")
+	Install(cfg2, "pi", "/repo2")
+
+	Uninstall("proj1")
+
+	// proj2's fish file should still exist
+	fishPath2 := filepath.Join(tmpHome, piShellDir, "proj2.fish")
+	if _, err := os.Stat(fishPath2); err != nil {
+		t.Error("proj2 fish file should remain when other projects still installed")
+	}
+
+	// Fish wrapper should remain
+	fishWrapperPath := filepath.Join(tmpHome, piShellDir, piFishWrapperFile)
+	if _, err := os.Stat(fishWrapperPath); err != nil {
+		t.Error("fish wrapper should remain when other projects still installed")
+	}
+}
+
+func TestListInstalled_IncludesFishOnlyProjects(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	shellDir := filepath.Join(tmpHome, piShellDir)
+	os.MkdirAll(shellDir, 0o755)
+	os.WriteFile(filepath.Join(shellDir, "proj-a.sh"), []byte("# a"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "proj-a.fish"), []byte("# a fish"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "proj-b.fish"), []byte("# b fish"), 0o644)
+
+	projects, err := ListInstalled()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(projects) != 2 {
+		t.Fatalf("expected 2 projects, got %d: %v", len(projects), projects)
+	}
+	if projects[0] != "proj-a" || projects[1] != "proj-b" {
+		t.Errorf("unexpected projects: %v", projects)
+	}
+}
+
+func TestListInstalled_ExcludesFishInfraFiles(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	shellDir := filepath.Join(tmpHome, piShellDir)
+	os.MkdirAll(shellDir, 0o755)
+	os.WriteFile(filepath.Join(shellDir, piFishWrapperFile), []byte("# wrapper"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, piFishCompletionFile), []byte("# completion"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "myproj.fish"), []byte("# shortcuts"), 0o644)
+
+	projects, err := ListInstalled()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project, got %d: %v", len(projects), projects)
+	}
+	if projects[0] != "myproj" {
+		t.Errorf("expected myproj, got %s", projects[0])
+	}
+}
+
+func TestListInstalled_DeduplicatesShAndFish(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	shellDir := filepath.Join(tmpHome, piShellDir)
+	os.MkdirAll(shellDir, 0o755)
+	os.WriteFile(filepath.Join(shellDir, "myproj.sh"), []byte("# sh"), 0o644)
+	os.WriteFile(filepath.Join(shellDir, "myproj.fish"), []byte("# fish"), 0o644)
+
+	projects, err := ListInstalled()
+	if err != nil {
+		t.Fatalf("list failed: %v", err)
+	}
+	if len(projects) != 1 {
+		t.Fatalf("expected 1 project (deduplicated), got %d: %v", len(projects), projects)
+	}
+	if projects[0] != "myproj" {
+		t.Errorf("expected myproj, got %s", projects[0])
+	}
+}
+
+func TestFishFilePath(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	path, err := FishFilePath("myproject")
+	if err != nil {
+		t.Fatalf("FishFilePath failed: %v", err)
+	}
+	if !strings.HasSuffix(path, "myproject.fish") {
+		t.Errorf("expected .fish extension, got: %s", path)
+	}
+	if !strings.Contains(path, piShellDir) {
+		t.Errorf("expected path in %s, got: %s", piShellDir, path)
+	}
+}
+
+func TestGenerateFishCompletionScript(t *testing.T) {
+	content := GenerateFishCompletionScript("/usr/local/bin/pi")
+
+	if !strings.Contains(content, "/usr/local/bin/pi completion fish") {
+		t.Error("expected pi completion fish command")
+	}
+	if !strings.Contains(content, "| source") {
+		t.Error("expected pipe to source")
+	}
+	if !strings.Contains(content, "do not edit manually") {
+		t.Error("expected auto-generated warning")
+	}
+}
+
+func TestInstall_FishSourceLineIdempotent(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	os.WriteFile(filepath.Join(tmpHome, ".zshrc"), []byte(""), 0o644)
+	fishDir := filepath.Join(tmpHome, ".config", "fish")
+	os.MkdirAll(fishDir, 0o755)
+	os.WriteFile(filepath.Join(fishDir, "config.fish"), []byte("# fish\n"), 0o644)
+
+	cfg := &config.ProjectConfig{
+		Project: "testproj",
+		Shortcuts: map[string]config.Shortcut{
+			"hello": {Run: "greet"},
+		},
+	}
+
+	Install(cfg, "pi", "/repo")
+	Install(cfg, "pi", "/repo")
+
+	fishCfgData, _ := os.ReadFile(filepath.Join(fishDir, "config.fish"))
+	if strings.Count(string(fishCfgData), "# Added by PI") != 1 {
+		t.Error("fish source line should appear only once after re-install")
+	}
+}
+
+func TestHasFishConfig(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	if hasFishConfig() {
+		t.Error("hasFishConfig should return false when config.fish doesn't exist")
+	}
+
+	fishDir := filepath.Join(tmpHome, ".config", "fish")
+	os.MkdirAll(fishDir, 0o755)
+	os.WriteFile(filepath.Join(fishDir, "config.fish"), []byte(""), 0o644)
+
+	if !hasFishConfig() {
+		t.Error("hasFishConfig should return true when config.fish exists")
+	}
+}
+
+func TestIsInfraFile(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{piWrapperFile, true},
+		{piCompletionFile, true},
+		{piFishWrapperFile, true},
+		{piFishCompletionFile, true},
+		{"myproj.sh", false},
+		{"myproj.fish", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isInfraFile(tt.name); got != tt.want {
+				t.Errorf("isInfraFile(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}

@@ -82,6 +82,12 @@ func runShellInstall(stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintf(stdout, "  %s → %s (%s)\n", name, sc.Run, mode)
 	}
+
+	fishPath, _ := shell.FishFilePath(pc.Config.Project)
+	if _, err := os.Stat(fishPath); err == nil {
+		fmt.Fprintf(stdout, "\nFish shortcuts also installed to %s\n", fishPath)
+	}
+
 	fmt.Fprintln(stdout, "\nRestart your shell or run: source ~/.zshrc")
 	return nil
 }
@@ -133,7 +139,14 @@ func runShellList(out io.Writer) error {
 	shellDir, _ := shell.ShellFileDir()
 	fmt.Fprintf(out, "Installed shortcut files (%s):\n", shellDir)
 	for _, p := range projects {
-		fmt.Fprintf(out, "  %s.sh\n", p)
+		shPath, _ := shell.ShellFilePath(p)
+		fishPath, _ := shell.FishFilePath(p)
+		if _, err := os.Stat(shPath); err == nil {
+			fmt.Fprintf(out, "  %s.sh\n", p)
+		}
+		if _, err := os.Stat(fishPath); err == nil {
+			fmt.Fprintf(out, "  %s.fish\n", p)
+		}
 	}
 	return nil
 }
