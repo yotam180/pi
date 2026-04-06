@@ -5,47 +5,8 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/suggest"
 )
-
-func TestLevenshtein(t *testing.T) {
-	tests := []struct {
-		a, b string
-		want int
-	}{
-		{"", "", 0},
-		{"abc", "", 3},
-		{"", "abc", 3},
-		{"abc", "abc", 0},
-		{"abc", "abd", 1},
-		{"kitten", "sitting", 3},
-		{"docker/up", "dokcer/up", 2},
-		{"docker/up", "docker/down", 4},
-		{"build", "biuld", 2},
-		{"a", "b", 1},
-	}
-
-	for _, tt := range tests {
-		got := levenshtein(tt.a, tt.b)
-		if got != tt.want {
-			t.Errorf("levenshtein(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
-		}
-	}
-}
-
-func TestLevenshtein_Symmetry(t *testing.T) {
-	pairs := [][2]string{
-		{"docker/up", "dokcer/up"},
-		{"build", "guild"},
-		{"test", "best"},
-	}
-	for _, pair := range pairs {
-		ab := levenshtein(pair[0], pair[1])
-		ba := levenshtein(pair[1], pair[0])
-		if ab != ba {
-			t.Errorf("levenshtein(%q, %q) = %d, but levenshtein(%q, %q) = %d", pair[0], pair[1], ab, pair[1], pair[0], ba)
-		}
-	}
-}
 
 func TestSuggestNames_CloseTypo(t *testing.T) {
 	candidates := []string{"build", "deploy", "docker/up", "docker/down", "test"}
@@ -97,8 +58,8 @@ func TestSuggestNames_AlphabeticalTiebreaker(t *testing.T) {
 	candidates := []string{"bbb", "aaa", "ccc"}
 	got := suggestNames("xxx", candidates, 3)
 	for i := 1; i < len(got); i++ {
-		di := levenshtein("xxx", got[i-1])
-		dj := levenshtein("xxx", got[i])
+		di := suggest.Levenshtein("xxx", got[i-1])
+		dj := suggest.Levenshtein("xxx", got[i])
 		if di == dj && got[i-1] > got[i] {
 			t.Errorf("suggestions with equal distance should be alphabetical: %v", got)
 		}
@@ -116,7 +77,7 @@ func TestSuggestNames_EmptyQuery(t *testing.T) {
 	candidates := []string{"a", "ab", "abc"}
 	got := suggestNames("", candidates, 3)
 	for _, s := range got {
-		if levenshtein("", s) > 3 {
+		if suggest.Levenshtein("", s) > 3 {
 			t.Errorf("suggestion %q too far from empty query", s)
 		}
 	}

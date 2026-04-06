@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -140,7 +141,7 @@ func FormatSetupEntry(entry SetupEntry) string {
 
 	if len(entry.With) > 0 {
 		sb.WriteString("\n    with:")
-		keys := sortedKeys(entry.With)
+		keys := slices.Sorted(maps.Keys(entry.With))
 		for _, k := range keys {
 			v := entry.With[k]
 			sb.WriteString(fmt.Sprintf("\n      %s: %q", k, v))
@@ -148,16 +149,6 @@ func FormatSetupEntry(entry SetupEntry) string {
 	}
 
 	return sb.String()
-}
-
-// sortedKeys returns the keys of a map in sorted order.
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // replaceSetupEntry replaces the Nth setup entry (0-indexed) in the raw file

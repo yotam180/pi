@@ -52,7 +52,7 @@ func checkPiYamlUnknownFields(ctx *Context) []string {
 
 		if !knownPiYamlKeys[key] {
 			msg := fmt.Sprintf("pi.yaml: unknown field %q", key)
-			if suggestion := suggestField(key, knownPiYamlKeys); suggestion != "" {
+			if suggestion := suggestFieldName(key, knownPiYamlKeys); suggestion != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
 			}
 			errs = append(errs, msg)
@@ -76,7 +76,7 @@ func checkRuntimesNodeUnknownFields(node *yaml.Node) []string {
 
 		if !knownRuntimesKeys[key] {
 			msg := fmt.Sprintf("pi.yaml runtimes: unknown field %q", key)
-			if suggestion := suggestField(key, knownRuntimesKeys); suggestion != "" {
+			if suggestion := suggestFieldName(key, knownRuntimesKeys); suggestion != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
 			}
 			errs = append(errs, msg)

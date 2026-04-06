@@ -2,9 +2,11 @@ package validate
 
 import (
 	"fmt"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 
+	"github.com/vyper-tooling/pi/internal/suggest"
 	"gopkg.in/yaml.v3"
 )
 
@@ -107,7 +109,7 @@ func checkFileUnknownFields(filePath, automationName string) []string {
 		key := keyNode.Value
 
 		if !knownAutomationKeys[key] {
-			msg := formatUnknownFieldError(automationName, key, sortedKeys(knownAutomationKeys))
+			msg := formatUnknownFieldError(automationName, key, slices.Sorted(maps.Keys(knownAutomationKeys)))
 			errs = append(errs, msg)
 			continue
 		}
@@ -140,7 +142,7 @@ func checkStepNodeUnknownFields(automationName string, node *yaml.Node, stepInde
 		key := keyNode.Value
 
 		if !knownStepKeys[key] {
-			msg := formatUnknownStepFieldError(automationName, stepIndex, key, sortedKeys(knownStepKeys))
+			msg := formatUnknownStepFieldError(automationName, stepIndex, key, slices.Sorted(maps.Keys(knownStepKeys)))
 			errs = append(errs, msg)
 			continue
 		}
@@ -167,7 +169,7 @@ func checkFirstSubStepUnknownFields(automationName string, stepIndex int, node *
 
 		if !knownStepKeys[key] {
 			msg := fmt.Sprintf("%s step[%d].first[%d]: unknown field %q", automationName, stepIndex, subIndex, key)
-			if suggestion := suggestField(key, knownStepKeys); suggestion != "" {
+			if suggestion := suggestFieldName(key, knownStepKeys); suggestion != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
 			}
 			errs = append(errs, msg)
@@ -188,7 +190,7 @@ func checkInstallNodeUnknownFields(automationName string, node *yaml.Node) []str
 
 		if !knownInstallKeys[key] {
 			msg := fmt.Sprintf("%s install: unknown field %q", automationName, key)
-			if suggestion := suggestField(key, knownInstallKeys); suggestion != "" {
+			if suggestion := suggestFieldName(key, knownInstallKeys); suggestion != "" {
 				msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
 			}
 			errs = append(errs, msg)
@@ -199,108 +201,31 @@ func checkInstallNodeUnknownFields(automationName string, node *yaml.Node) []str
 
 func formatUnknownFieldError(automationName, key string, knownKeys []string) string {
 	msg := fmt.Sprintf("%s: unknown field %q", automationName, key)
-	known := make(map[string]bool, len(knownKeys))
-	for _, k := range knownKeys {
-		known[k] = true
-	}
-	if suggestion := suggestField(key, known); suggestion != "" {
-		msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
+	if s := suggest.Best(key, knownKeys, fieldSuggestMaxDist(key)); s != "" {
+		msg += fmt.Sprintf(" (did you mean %q?)", s)
 	}
 	return msg
 }
 
 func formatUnknownStepFieldError(automationName string, stepIndex int, key string, knownKeys []string) string {
 	msg := fmt.Sprintf("%s step[%d]: unknown field %q", automationName, stepIndex, key)
-	known := make(map[string]bool, len(knownKeys))
-	for _, k := range knownKeys {
-		known[k] = true
-	}
-	if suggestion := suggestField(key, known); suggestion != "" {
-		msg += fmt.Sprintf(" (did you mean %q?)", suggestion)
+	if s := suggest.Best(key, knownKeys, fieldSuggestMaxDist(key)); s != "" {
+		msg += fmt.Sprintf(" (did you mean %q?)", s)
 	}
 	return msg
 }
 
-// suggestField returns the closest known field name to the given unknown key,
-// or "" if nothing is close enough. Uses Levenshtein distance.
-func suggestField(unknown string, known map[string]bool) string {
-	maxDist := len(unknown) / 2
+// suggestFieldName returns the closest known field name to the given unknown
+// key, or "" if nothing is close enough.
+func suggestFieldName(unknown string, known map[string]bool) string {
+	candidates := slices.Sorted(maps.Keys(known))
+	return suggest.Best(unknown, candidates, fieldSuggestMaxDist(unknown))
+}
+
+func fieldSuggestMaxDist(field string) int {
+	maxDist := len(field) / 2
 	if maxDist < 2 {
 		maxDist = 2
 	}
-
-	type match struct {
-		name     string
-		distance int
-	}
-	var matches []match
-
-	for name := range known {
-		d := levenshtein(unknown, name)
-		if d > 0 && d <= maxDist {
-			matches = append(matches, match{name: name, distance: d})
-		}
-	}
-
-	if len(matches) == 0 {
-		return ""
-	}
-
-	sort.Slice(matches, func(i, j int) bool {
-		if matches[i].distance != matches[j].distance {
-			return matches[i].distance < matches[j].distance
-		}
-		return matches[i].name < matches[j].name
-	})
-
-	return matches[0].name
-}
-
-// levenshtein computes the edit distance between two strings.
-func levenshtein(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-
-	prev := make([]int, lb+1)
-	for j := range prev {
-		prev[j] = j
-	}
-
-	curr := make([]int, lb+1)
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			ins := curr[j-1] + 1
-			del := prev[j] + 1
-			sub := prev[j-1] + cost
-			m := ins
-			if del < m {
-				m = del
-			}
-			if sub < m {
-				m = sub
-			}
-			curr[j] = m
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
-}
-
-func sortedKeys(m map[string]bool) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return maxDist
 }

@@ -1,8 +1,10 @@
 package validate
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -275,7 +277,7 @@ func TestCheckPiYamlUnknownFields_IntegrationWithRunner(t *testing.T) {
 func TestKnownPiYamlKeys_Complete(t *testing.T) {
 	expected := []string{"project", "shortcuts", "setup", "packages", "runtimes"}
 	sort.Strings(expected)
-	got := sortedKeys(knownPiYamlKeys)
+	got := slices.Sorted(maps.Keys(knownPiYamlKeys))
 	if len(got) != len(expected) {
 		t.Fatalf("knownPiYamlKeys has %d entries, want %d: %v", len(got), len(expected), got)
 	}
@@ -289,7 +291,7 @@ func TestKnownPiYamlKeys_Complete(t *testing.T) {
 func TestKnownRuntimesKeys_Complete(t *testing.T) {
 	expected := []string{"provision", "manager"}
 	sort.Strings(expected)
-	got := sortedKeys(knownRuntimesKeys)
+	got := slices.Sorted(maps.Keys(knownRuntimesKeys))
 	if len(got) != len(expected) {
 		t.Fatalf("knownRuntimesKeys has %d entries, want %d: %v", len(got), len(expected), got)
 	}

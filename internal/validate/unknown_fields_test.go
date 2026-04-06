@@ -8,6 +8,7 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/suggest"
 	"github.com/vyper-tooling/pi/internal/discovery"
 )
 
@@ -548,71 +549,69 @@ steps:
 
 // --- suggestField unit tests ---
 
-func TestSuggestField_ExactMatch(t *testing.T) {
+func TestSuggestFieldName_ExactMatch(t *testing.T) {
 	known := map[string]bool{"description": true, "bash": true}
-	got := suggestField("description", known)
+	got := suggestFieldName("description", known)
 	if got != "" {
 		t.Errorf("exact match should return empty, got %q", got)
 	}
 }
 
-func TestSuggestField_CloseMatch(t *testing.T) {
+func TestSuggestFieldName_CloseMatch(t *testing.T) {
 	known := map[string]bool{"description": true, "bash": true}
-	got := suggestField("descrption", known)
+	got := suggestFieldName("descrption", known)
 	if got != "description" {
 		t.Errorf("expected 'description', got %q", got)
 	}
 }
 
-func TestSuggestField_NoMatch(t *testing.T) {
+func TestSuggestFieldName_NoMatch(t *testing.T) {
 	known := map[string]bool{"description": true, "bash": true}
-	got := suggestField("xyzabc", known)
+	got := suggestFieldName("xyzabc", known)
 	if got != "" {
 		t.Errorf("expected empty for no match, got %q", got)
 	}
 }
 
-func TestSuggestField_MultipleCandidates(t *testing.T) {
+func TestSuggestFieldName_MultipleCandidates(t *testing.T) {
 	known := map[string]bool{"silent": true, "slent": true}
-	got := suggestField("sient", known)
+	got := suggestFieldName("sient", known)
 	if got == "" {
 		t.Error("expected a suggestion")
 	}
 }
 
-func TestSuggestField_ShortField(t *testing.T) {
+func TestSuggestFieldName_ShortField(t *testing.T) {
 	known := map[string]bool{"if": true, "env": true, "dir": true}
-	got := suggestField("iff", known)
+	got := suggestFieldName("iff", known)
 	if got != "if" {
 		t.Errorf("expected 'if', got %q", got)
 	}
 }
 
-// --- levenshtein unit tests ---
-
 func TestLevenshtein_Identical(t *testing.T) {
-	if d := levenshtein("hello", "hello"); d != 0 {
+	if d := suggest.Levenshtein("hello", "hello"); d != 0 {
 		t.Errorf("expected 0, got %d", d)
 	}
 }
 
 func TestLevenshtein_Empty(t *testing.T) {
-	if d := levenshtein("", "hello"); d != 5 {
+	if d := suggest.Levenshtein("", "hello"); d != 5 {
 		t.Errorf("expected 5, got %d", d)
 	}
-	if d := levenshtein("hello", ""); d != 5 {
+	if d := suggest.Levenshtein("hello", ""); d != 5 {
 		t.Errorf("expected 5, got %d", d)
 	}
 }
 
 func TestLevenshtein_OneDiff(t *testing.T) {
-	if d := levenshtein("hello", "helo"); d != 1 {
+	if d := suggest.Levenshtein("hello", "helo"); d != 1 {
 		t.Errorf("expected 1, got %d", d)
 	}
 }
 
 func TestLevenshtein_Substitution(t *testing.T) {
-	if d := levenshtein("cat", "bat"); d != 1 {
+	if d := suggest.Levenshtein("cat", "bat"); d != 1 {
 		t.Errorf("expected 1, got %d", d)
 	}
 }

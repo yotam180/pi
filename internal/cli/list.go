@@ -3,7 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -144,7 +145,7 @@ func printPackageAutomations(out io.Writer, result *discovery.Result) error {
 		fmt.Fprintln(out, strings.Repeat("─", padding))
 
 		// Sort and print automations in this package
-		names := sortedKeys(autos)
+		names := slices.Sorted(maps.Keys(autos))
 		w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
 		for _, name := range names {
 			a := autos[name]
@@ -165,16 +166,6 @@ func printPackageAutomations(out io.Writer, result *discovery.Result) error {
 	}
 
 	return nil
-}
-
-// sortedKeys returns sorted keys from a map.
-func sortedKeys(m map[string]*automation.Automation) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func formatInputsSummary(a *automation.Automation) string {

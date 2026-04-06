@@ -2,8 +2,10 @@ package shell
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -94,7 +96,7 @@ func generateFunction(name string, sc config.Shortcut, piBinary, repoRoot string
 }
 
 func buildWithArgs(with map[string]string) string {
-	withNames := sortedKeys(with)
+	withNames := slices.Sorted(maps.Keys(with))
 
 	var withParts []string
 	for _, k := range withNames {
@@ -119,15 +121,6 @@ func isPositionalRef(v string) bool {
 		}
 	}
 	return true
-}
-
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // GenerateGlobalWrapper builds the content of the global pi() shell function.
