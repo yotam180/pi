@@ -22,6 +22,10 @@ func newRunCmd() *cobra.Command {
 in the current project. PI walks up from the current directory to find pi.yaml,
 so this works from any subdirectory of the project.
 
+Arguments after the automation name (or after --) are forwarded:
+  - If the automation declares inputs:, args map to inputs by position.
+  - Otherwise, args are available in bash steps as $1, $2, $@ and as $PI_ARGS.
+
 Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).
 Use --with key=value to pass named inputs (repeatable).
 Use --silent to suppress PI status lines for installer automations.

@@ -207,6 +207,26 @@ Automation-level env does not propagate into sub-automations invoked by `run:` s
 
 Single-step shorthand can use a top-level `env:` next to `bash:`, `run:`, etc.; that `env:` is automation-level, the same as in multi-step files.
 
+### Extra Arguments (`PI_ARGS`)
+
+When extra arguments are passed to `pi run` (after `--` or after the automation name), they are available to steps in two ways:
+
+1. **`$PI_ARGS`** — environment variable containing all extra args, space-joined
+2. **`$@`, `$1`, `$2`** — bash positional parameters (bash steps only)
+
+```yaml
+# .pi/test.yaml
+description: Run tests with optional extra flags
+bash: cargo test $PI_ARGS
+```
+
+```bash
+pi run test -- --ignored --nocapture
+# Executes: cargo test --ignored --nocapture
+```
+
+For automations with `inputs:`, positional args are mapped to declared inputs (not to `PI_ARGS`). Excess positional args beyond the declared inputs produce an error.
+
 ### Working Directory (`dir:`)
 
 Steps can declare a `dir:` field to override the working directory for that step's execution. By default, all steps run in the project root (directory containing `pi.yaml`).

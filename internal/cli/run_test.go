@@ -161,6 +161,26 @@ steps:
 	}
 }
 
+func TestRunAutomation_PIArgsAvailable(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(root, ".pi")
+	os.MkdirAll(piDir, 0o755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build with extra args
+bash: echo "args=$PI_ARGS"
+`), 0o644)
+
+	var buf strings.Builder
+	err := runAutomation(root, "build", []string{"--release", "--verbose"}, nil, false, false, &buf, os.Stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(buf.String())
+	if got != "args=--release --verbose" {
+		t.Errorf("output = %q, want %q", got, "args=--release --verbose")
+	}
+}
+
 func TestRunAutomation_ExcessPositionalArgs(t *testing.T) {
 	root := t.TempDir()
 	os.WriteFile(filepath.Join(root, "pi.yaml"), []byte("project: test\n"), 0o644)

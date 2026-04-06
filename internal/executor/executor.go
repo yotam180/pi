@@ -125,6 +125,10 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		args = nil
 	}
 
+	if len(args) > 0 {
+		inputEnv = append(inputEnv, "PI_ARGS="+strings.Join(args, " "))
+	}
+
 	if err := e.ValidateRequirements(a); err != nil {
 		var ve *ValidationError
 		if errors.As(err, &ve) {

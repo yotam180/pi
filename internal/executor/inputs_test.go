@@ -222,3 +222,71 @@ func TestRunWithInputs_RunStepWithWith(t *testing.T) {
 		t.Errorf("output = %q, want %q", got, "from-outer")
 	}
 }
+
+func TestRunWithInputs_PIArgsSetForNoInputAutomation(t *testing.T) {
+	dir := t.TempDir()
+	a := newAutomation("test", bashStep(`echo "$PI_ARGS"`))
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"--release", "--verbose"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "--release --verbose" {
+		t.Errorf("PI_ARGS = %q, want %q", got, "--release --verbose")
+	}
+}
+
+func TestRunWithInputs_PIArgsNotSetWhenNoArgs(t *testing.T) {
+	dir := t.TempDir()
+	outFile := filepath.Join(dir, "out.txt")
+	a := newAutomation("test", bashStep(`echo ">${PI_ARGS}<" > `+outFile))
+
+	exec := newExecutor(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, _ := os.ReadFile(outFile)
+	got := strings.TrimSpace(string(data))
+	if got != "><" {
+		t.Errorf("output = %q, want %q (PI_ARGS should be empty)", got, "><")
+	}
+}
+
+func TestRunWithInputs_PIArgsNotSetWhenInputsConsumeArgs(t *testing.T) {
+	dir := t.TempDir()
+	a := automationWithInputs("test",
+		map[string]automation.InputSpec{
+			"target": {Description: "build target"},
+		},
+		[]string{"target"},
+		bashStep(`echo "target=$PI_IN_TARGET args=$PI_ARGS"`),
+	)
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"release"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "target=release args=" {
+		t.Errorf("output = %q, want %q", got, "target=release args=")
+	}
+}
+
+func TestRunWithInputs_PIArgsSingleArg(t *testing.T) {
+	dir := t.TempDir()
+	a := newAutomation("test", bashStep(`echo "cmd $PI_ARGS"`))
+
+	exec, stdout, _ := newExecutorWithCapture(dir, newDiscovery(nil))
+	err := exec.RunWithInputs(a, []string{"--ignored"}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "cmd --ignored" {
+		t.Errorf("output = %q, want %q", got, "cmd --ignored")
+	}
+}

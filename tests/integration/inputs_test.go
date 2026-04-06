@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,5 +114,53 @@ func TestInputs_List_ShowsInputs(t *testing.T) {
 	}
 	if !strings.Contains(out, "name, greeting?") {
 		t.Errorf("expected 'name, greeting?' in list output, got:\n%s", out)
+	}
+}
+
+func setupPIArgsWorkspace(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0o644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0o755)
+
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte("description: Build with forwarded args\nbash: echo \"build $PI_ARGS\"\n"), 0o644)
+	os.WriteFile(filepath.Join(piDir, "test.yaml"), []byte("description: Run tests with forwarded args\nbash: echo \"test $PI_ARGS\"\n"), 0o644)
+	return dir
+}
+
+func TestInputs_PIArgs_ForwardedToNoInputAutomation(t *testing.T) {
+	dir := setupPIArgsWorkspace(t)
+	out, code := runPiStdout(t, dir, "run", "build", "--", "--release", "--verbose")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed != "build --release --verbose" {
+		t.Errorf("output = %q, want %q", trimmed, "build --release --verbose")
+	}
+}
+
+func TestInputs_PIArgs_SingleArg(t *testing.T) {
+	dir := setupPIArgsWorkspace(t)
+	out, code := runPiStdout(t, dir, "run", "test", "--", "--ignored")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed != "test --ignored" {
+		t.Errorf("output = %q, want %q", trimmed, "test --ignored")
+	}
+}
+
+func TestInputs_PIArgs_EmptyWhenNoArgs(t *testing.T) {
+	dir := setupPIArgsWorkspace(t)
+	out, code := runPiStdout(t, dir, "run", "build")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed != "build" {
+		t.Errorf("output = %q, want %q", trimmed, "build")
 	}
 }
