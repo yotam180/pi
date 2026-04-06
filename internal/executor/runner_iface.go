@@ -15,6 +15,19 @@ type StepRunner interface {
 	Run(ctx *RunContext) error
 }
 
+// FileExtProvider is an optional interface that StepRunner implementations
+// can satisfy to declare which file extension they own (e.g. ".sh", ".py").
+// The Registry uses this to detect file references without hardcoding extensions.
+type FileExtProvider interface {
+	FileExt() string
+}
+
+// ParentShellCapable is an optional interface that StepRunner implementations
+// can satisfy to declare support for parent_shell: true steps.
+type ParentShellCapable interface {
+	SupportsParentShell() bool
+}
+
 // RunContext bundles everything a step runner needs to execute a step.
 // Runners should treat this as read-only except for stdout/stdin which
 // represent the step's I/O targets.
@@ -79,21 +92,21 @@ func (r *Registry) Get(stepType automation.StepType) StepRunner {
 }
 
 // FileExtForStepType returns the file extension for a step type's runner,
-// or "" if the runner is not a SubprocessRunner or has no FileExt set.
+// or "" if the runner doesn't implement FileExtProvider.
 func (r *Registry) FileExtForStepType(stepType automation.StepType) string {
 	runner := r.runners[stepType]
-	if sr, ok := runner.(*SubprocessRunner); ok {
-		return sr.Config.FileExt
+	if p, ok := runner.(FileExtProvider); ok {
+		return p.FileExt()
 	}
 	return ""
 }
 
 // StepTypeSupportsParentShell reports whether the runner registered for
-// stepType has the SupportsParentShell capability flag set.
+// stepType implements ParentShellCapable and returns true.
 func (r *Registry) StepTypeSupportsParentShell(stepType automation.StepType) bool {
 	runner := r.runners[stepType]
-	if sr, ok := runner.(*SubprocessRunner); ok {
-		return sr.Config.SupportsParentShell
+	if p, ok := runner.(ParentShellCapable); ok {
+		return p.SupportsParentShell()
 	}
 	return false
 }

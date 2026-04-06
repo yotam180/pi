@@ -62,6 +62,16 @@ type SubprocessRunner struct {
 	Config SubprocessConfig
 }
 
+// FileExt implements FileExtProvider.
+func (r *SubprocessRunner) FileExt() string {
+	return r.Config.FileExt
+}
+
+// SupportsParentShell implements ParentShellCapable.
+func (r *SubprocessRunner) SupportsParentShell() bool {
+	return r.Config.SupportsParentShell
+}
+
 func (r *SubprocessRunner) Run(ctx *RunContext) error {
 	bin := r.Config.Binary
 	if r.Config.BinaryFunc != nil {

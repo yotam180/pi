@@ -257,6 +257,72 @@ func TestRegistry_CustomTakesPrecedenceOverCached(t *testing.T) {
 	}
 }
 
+// --- Capability interfaces: custom runners declaring capabilities ---
+
+type capableRunner struct {
+	fileExt      string
+	parentShell  bool
+}
+
+func (r *capableRunner) Run(_ *RunContext) error { return nil }
+func (r *capableRunner) FileExt() string          { return r.fileExt }
+func (r *capableRunner) SupportsParentShell() bool { return r.parentShell }
+
+type plainRunner struct{}
+
+func (r *plainRunner) Run(_ *RunContext) error { return nil }
+
+func TestRegistry_CapabilityInterfaces_CustomRunner(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(automation.StepTypeBash, &capableRunner{
+		fileExt:     ".custom",
+		parentShell: true,
+	})
+
+	if ext := reg.FileExtForStepType(automation.StepTypeBash); ext != ".custom" {
+		t.Errorf("FileExtForStepType = %q, want %q", ext, ".custom")
+	}
+	if !reg.StepTypeSupportsParentShell(automation.StepTypeBash) {
+		t.Error("custom runner with SupportsParentShell() true should be detected")
+	}
+}
+
+func TestRegistry_CapabilityInterfaces_PlainRunner(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register(automation.StepTypeBash, &plainRunner{})
+
+	if ext := reg.FileExtForStepType(automation.StepTypeBash); ext != "" {
+		t.Errorf("FileExtForStepType = %q, want empty for runner without FileExtProvider", ext)
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypeBash) {
+		t.Error("plain runner without ParentShellCapable should return false")
+	}
+}
+
+func TestRegistry_CapabilityInterfaces_PartialImplementation(t *testing.T) {
+	reg := NewRegistry()
+	fileRunner := &capableRunner{fileExt: ".xyz", parentShell: false}
+	reg.Register(automation.StepTypePython, fileRunner)
+
+	if ext := reg.FileExtForStepType(automation.StepTypePython); ext != ".xyz" {
+		t.Errorf("FileExtForStepType = %q, want %q", ext, ".xyz")
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypePython) {
+		t.Error("runner with SupportsParentShell() false should return false")
+	}
+}
+
+func TestRegistry_CapabilityInterfaces_UnregisteredType(t *testing.T) {
+	reg := NewRegistry()
+
+	if ext := reg.FileExtForStepType(automation.StepTypeBash); ext != "" {
+		t.Errorf("FileExtForStepType for unregistered type = %q, want empty", ext)
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypeBash) {
+		t.Error("unregistered type should return false for SupportsParentShell")
+	}
+}
+
 // --- execFirstBlock no-match + capturePipe (81% → improved) ---
 
 func TestFirstBlock_NoneMatch_PipeCapture_EmptyBuffer(t *testing.T) {
