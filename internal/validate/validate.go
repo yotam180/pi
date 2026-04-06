@@ -25,6 +25,7 @@ type Context struct {
 // Result holds the outcome of a project validation.
 type Result struct {
 	Errors          []string
+	Warnings        []string
 	AutomationCount int
 	ShortcutCount   int
 	SetupCount      int
@@ -46,9 +47,25 @@ type CheckFunc struct {
 func (c CheckFunc) Name() string              { return c.CheckName }
 func (c CheckFunc) Run(ctx *Context) []string { return c.Fn(ctx) }
 
+// WarnCheck produces non-fatal warnings (separate from errors).
+type WarnCheck interface {
+	Name() string
+	Run(ctx *Context) []string
+}
+
+// WarnCheckFunc adapts a plain function to the WarnCheck interface.
+type WarnCheckFunc struct {
+	CheckName string
+	Fn        func(ctx *Context) []string
+}
+
+func (c WarnCheckFunc) Name() string              { return c.CheckName }
+func (c WarnCheckFunc) Run(ctx *Context) []string { return c.Fn(ctx) }
+
 // Runner collects checks and runs them against a project context.
 type Runner struct {
-	checks []Check
+	checks     []Check
+	warnChecks []WarnCheck
 }
 
 // NewRunner creates an empty runner.
@@ -61,8 +78,19 @@ func (r *Runner) Register(c Check) {
 	r.checks = append(r.checks, c)
 }
 
+// RegisterWarn adds a warning check to the runner.
+func (r *Runner) RegisterWarn(c WarnCheck) {
+	r.warnChecks = append(r.warnChecks, c)
+}
+
 // Run executes all registered checks and returns the aggregated result.
+// Warning checks only run when includeWarnings is true.
 func (r *Runner) Run(ctx *Context) Result {
+	return r.RunWithOpts(ctx, false)
+}
+
+// RunWithOpts executes checks and optionally includes warning checks.
+func (r *Runner) RunWithOpts(ctx *Context, includeWarnings bool) Result {
 	result := Result{
 		AutomationCount: len(ctx.Discovery.Names()),
 		ShortcutCount:   len(ctx.Config.Shortcuts),
@@ -71,12 +99,22 @@ func (r *Runner) Run(ctx *Context) Result {
 	for _, c := range r.checks {
 		result.Errors = append(result.Errors, c.Run(ctx)...)
 	}
+	if includeWarnings {
+		for _, c := range r.warnChecks {
+			result.Warnings = append(result.Warnings, c.Run(ctx)...)
+		}
+	}
 	return result
 }
 
 // Checks returns the registered check count (useful for tests).
 func (r *Runner) Checks() int {
 	return len(r.checks)
+}
+
+// WarnChecks returns the registered warning check count.
+func (r *Runner) WarnChecks() int {
+	return len(r.warnChecks)
 }
 
 // DefaultRunner returns a Runner pre-loaded with all built-in validation checks.
@@ -93,6 +131,9 @@ func DefaultRunner() *Runner {
 	r.Register(CheckFunc{CheckName: "conditions", Fn: checkConditions})
 	r.Register(CheckFunc{CheckName: "unknown-fields", Fn: checkUnknownFields})
 	r.Register(CheckFunc{CheckName: "unknown-pi-yaml-fields", Fn: checkPiYamlUnknownFields})
+	r.RegisterWarn(WarnCheckFunc{CheckName: "missing-description", Fn: warnMissingDescription})
+	r.RegisterWarn(WarnCheckFunc{CheckName: "unused-automations", Fn: warnUnusedAutomations})
+	r.RegisterWarn(WarnCheckFunc{CheckName: "shortcut-shadowing", Fn: warnShortcutShadowing})
 	return r
 }
 

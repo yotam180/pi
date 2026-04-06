@@ -792,6 +792,7 @@ Literal strings in `with:` values pass through unchanged.
 | `pi list --builtins`          | Include built-in (`pi:*`) automations in the list        |
 | `pi doctor`                   | Check requirement health for all automations             |
 | `pi validate`                 | Statically validate all config and automation files      |
+| `pi validate --warnings`      | Include non-fatal warnings (missing descriptions, unused automations, shortcut shadowing) |
 | `pi version`                  | Print the PI version                                     |
 | `pi --version`                | Same as `pi version`                                     |
 | `pi init`                         | Initialize a new PI project (`pi.yaml` + `.pi/` + example) |

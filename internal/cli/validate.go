@@ -11,7 +11,9 @@ import (
 )
 
 func newValidateCmd() *cobra.Command {
-	return &cobra.Command{
+	var showWarnings bool
+
+	cmd := &cobra.Command{
 		Use:   "validate",
 		Short: "Validate all automation files and config",
 		Long: `Statically validate pi.yaml and all automation YAML files in .pi/ without
@@ -33,24 +35,33 @@ Checks performed:
   - Unknown fields in automation YAML files (with "did you mean?" suggestions)
   - Unknown fields in pi.yaml (with "did you mean?" suggestions)
 
+Use --warnings to also check for non-fatal issues:
+  - Automations without a description: field
+  - Local automations not referenced by any shortcut, setup, or run: step
+  - Shortcuts whose names shadow shell builtins or common commands
+
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := getwd()
 			if err != nil {
 				return err
 			}
-			return runValidate(cwd, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			return runValidate(cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), showWarnings)
 		},
 	}
+
+	cmd.Flags().BoolVarP(&showWarnings, "warnings", "w", false, "Include non-fatal warnings in output")
+
+	return cmd
 }
 
-func runValidate(startDir string, stdout, stderr io.Writer) error {
+func runValidate(startDir string, stdout, stderr io.Writer, showWarnings bool) error {
 	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
 	}
 
-	result := validateProject(pc.Root)
+	result := validateProject(pc.Root, showWarnings)
 
 	if len(result.Errors) > 0 {
 		for _, e := range result.Errors {
@@ -60,12 +71,23 @@ func runValidate(startDir string, stdout, stderr io.Writer) error {
 		return &executor.ExitError{Code: 1}
 	}
 
-	fmt.Fprintf(stdout, "✓ Validated %d automation(s), %d shortcut(s), %d setup entry(ies)\n",
+	if len(result.Warnings) > 0 {
+		for _, w := range result.Warnings {
+			fmt.Fprintf(stderr, "⚠ %s\n", w)
+		}
+		fmt.Fprintln(stderr)
+	}
+
+	msg := fmt.Sprintf("✓ Validated %d automation(s), %d shortcut(s), %d setup entry(ies)",
 		result.AutomationCount, result.ShortcutCount, result.SetupCount)
+	if len(result.Warnings) > 0 {
+		msg += fmt.Sprintf(", %d warning(s)", len(result.Warnings))
+	}
+	fmt.Fprintln(stdout, msg)
 	return nil
 }
 
-func validateProject(root string) validate.Result {
+func validateProject(root string, includeWarnings bool) validate.Result {
 	cfg, cfgErr := config.Load(root)
 	if cfgErr != nil {
 		return validate.Result{
@@ -86,5 +108,5 @@ func validateProject(root string) validate.Result {
 		Discovery: disc,
 	}
 
-	return validate.DefaultRunner().Run(ctx)
+	return validate.DefaultRunner().RunWithOpts(ctx, includeWarnings)
 }

@@ -53,7 +53,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestValidate_NoAutomations(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: empty\n"), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,7 +102,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken shortcut reference")
 	}
@@ -137,7 +137,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken setup reference")
 	}
@@ -162,7 +162,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken run step reference")
 	}
@@ -191,7 +191,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken references")
 	}
@@ -224,7 +224,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -238,7 +238,7 @@ setup:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ setup:
 func TestValidate_NoPiYaml(t *testing.T) {
 	dir := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error when no pi.yaml found")
 	}
@@ -268,7 +268,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken file reference")
 	}
@@ -293,7 +293,7 @@ steps:
 	os.WriteFile(filepath.Join(piDir, "build.sh"), []byte("#!/bin/bash\necho build\n"), 0755)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -315,7 +315,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -336,7 +336,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken file references in first: block")
 	}
@@ -360,7 +360,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken file reference")
 	}
@@ -382,7 +382,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken file references")
 	}
@@ -411,7 +411,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken installer scalar file refs")
 	}
@@ -445,7 +445,7 @@ install:
 	os.WriteFile(filepath.Join(piDir, "install.sh"), []byte("#!/bin/bash\nbrew install tool\n"), 0755)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
 	}
@@ -469,7 +469,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken installer step-list file refs")
 	}
@@ -499,7 +499,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken file refs in installer first: block")
 	}
@@ -525,7 +525,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken verify file ref")
 	}
@@ -551,7 +551,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
 	}
@@ -580,7 +580,7 @@ bash: echo "installing python $PI_IN_VERSION"
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
 	}
@@ -609,7 +609,7 @@ bash: echo "installing python $PI_IN_VERSION"
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown input key")
 	}
@@ -641,7 +641,7 @@ bash: echo hello
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for with: on target with no inputs")
 	}
@@ -670,7 +670,7 @@ bash: echo "installing python $PI_IN_VERSION"
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown setup input key")
 	}
@@ -702,7 +702,7 @@ bash: echo "installing python $PI_IN_VERSION"
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
 	}
@@ -731,7 +731,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown run step input key")
 	}
@@ -764,7 +764,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
 	}
@@ -789,7 +789,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for with: on target with no inputs")
 	}
@@ -821,7 +821,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown input in first: block run step")
 	}
@@ -850,7 +850,7 @@ bash: echo hello
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for broken reference")
 	}
@@ -885,7 +885,7 @@ bash: echo "installing python $PI_IN_VERSION"
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for multiple unknown input keys")
 	}
@@ -913,7 +913,7 @@ bash: echo hello
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for with: on target with no inputs")
 	}
@@ -1014,7 +1014,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for circular dependency")
 	}
@@ -1052,7 +1052,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for indirect circular dependency")
 	}
@@ -1076,7 +1076,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for self-referencing automation")
 	}
@@ -1107,7 +1107,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for circular dep through first: block")
 	}
@@ -1140,7 +1140,7 @@ bash: echo done
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("diamond dependencies should not be flagged: %v\nstderr: %s", err, stderr.String())
 	}
@@ -1167,7 +1167,7 @@ bash: echo end
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("linear chain should not be flagged: %v\nstderr: %s", err, stderr.String())
 	}
@@ -1188,7 +1188,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1217,7 +1217,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected errors")
 	}
@@ -1365,7 +1365,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("expected no error for valid conditions, got: %v\nstderr: %s", err, stderr.String())
 	}
@@ -1386,7 +1386,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for syntax error in if: condition")
 	}
@@ -1408,7 +1408,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown predicate")
 	}
@@ -1432,7 +1432,7 @@ bash: echo hello
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown predicate on automation-level if:")
 	}
@@ -1463,7 +1463,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown predicate in first: block")
 	}
@@ -1494,7 +1494,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("expected no error for dynamic predicates, got: %v\nstderr: %s", err, stderr.String())
 	}
@@ -1515,7 +1515,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected errors for multiple bad conditions")
 	}
@@ -1552,7 +1552,7 @@ install:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown predicate in install phase")
 	}
@@ -1580,7 +1580,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected errors")
 	}
@@ -1604,7 +1604,7 @@ bash: go build ./...
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown field 'descrption'")
 	}
@@ -1633,7 +1633,7 @@ steps:
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown step field 'timout'")
 	}
@@ -1665,7 +1665,7 @@ silent: true
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error for valid file: %v\nstderr: %s", err, stderr.String())
 	}
@@ -1682,7 +1682,7 @@ shortcutz:
 	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown pi.yaml field 'shortcutz'")
 	}
@@ -1712,7 +1712,7 @@ pakages:
 	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown pi.yaml field 'pakages'")
 	}
@@ -1737,7 +1737,7 @@ runtimes:
 	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err == nil {
 		t.Fatal("expected error for unknown runtimes field 'maneger'")
 	}
@@ -1767,8 +1767,146 @@ runtimes:
 	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: test\nbash: echo hi\n"), 0644)
 
 	var stdout, stderr bytes.Buffer
-	err := runValidate(dir, &stdout, &stderr)
+	err := runValidate(dir, &stdout, &stderr, false)
 	if err != nil {
 		t.Fatalf("unexpected error for valid pi.yaml with all fields: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
+// --- Warning flag tests ---
+
+func TestValidate_WarningsFlagShowsWarnings(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("bash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "⚠") {
+		t.Errorf("expected warning icon in output, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "missing description") {
+		t.Errorf("expected missing-description warning, got: %s", errOut)
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "warning(s)") {
+		t.Errorf("expected warning count in success message, got: %s", out)
+	}
+}
+
+func TestValidate_NoWarningsFlagHidesWarnings(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("bash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	errOut := stderr.String()
+	if strings.Contains(errOut, "⚠") {
+		t.Errorf("warnings should be hidden without --warnings flag, got: %s", errOut)
+	}
+
+	out := stdout.String()
+	if strings.Contains(out, "warning(s)") {
+		t.Errorf("warning count should not appear without --warnings flag, got: %s", out)
+	}
+}
+
+func TestValidate_WarningsWithCleanProject(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  hi: hello
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("description: Say hello\nbash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	errOut := stderr.String()
+	if strings.Contains(errOut, "⚠") {
+		t.Errorf("clean project should have no warnings, got: %s", errOut)
+	}
+
+	out := stdout.String()
+	if strings.Contains(out, "warning(s)") {
+		t.Errorf("warning count should not appear for clean project, got: %s", out)
+	}
+}
+
+func TestValidate_WarningsWithErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  bad: nonexistent
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "hello.yaml"), []byte("bash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr, true)
+
+	var exitErr *executor.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected ExitError, got: %v", err)
+	}
+
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "✗") {
+		t.Errorf("expected error marker, got: %s", errOut)
+	}
+	// Warnings should not be shown when there are errors
+	if strings.Contains(errOut, "⚠") {
+		t.Errorf("warnings should not be shown when errors exist, got: %s", errOut)
+	}
+}
+
+func TestValidate_WarningsMultipleTypes(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  test: tests/run
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "orphan.yaml"), []byte("description: Orphaned\nbash: echo hi\n"), 0644)
+	os.MkdirAll(filepath.Join(piDir, "tests"), 0755)
+	os.WriteFile(filepath.Join(piDir, "tests", "run.yaml"), []byte("bash: echo hi\n"), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v\nstderr: %s", err, stderr.String())
+	}
+
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "missing description") {
+		t.Errorf("expected missing-description warning, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "not referenced") {
+		t.Errorf("expected unused-automations warning, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "shell builtin") {
+		t.Errorf("expected shortcut-shadowing warning, got: %s", errOut)
 	}
 }

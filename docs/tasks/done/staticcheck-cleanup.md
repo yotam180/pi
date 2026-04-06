@@ -4,7 +4,7 @@
 chore
 
 ## Status
-in_progress
+done
 
 ## Priority
 medium
