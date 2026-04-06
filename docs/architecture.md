@@ -65,7 +65,7 @@ internal/
     init_test.go                   pi init tests (13 tests — creates files, name flag, already initialized, .pi exists, yes flag, prompt, non-interactive, next steps, kebab-case, reusable initProject)
     new_test.go                    pi new tests (14 tests — basic, bash flag, python flag, description, nested path, already exists, no project, strip extension, output, valid content, generate default, generate nested, init creates example, init next steps)
     completion_test.go             pi completion tests (11 tests — bash/zsh/fish/powershell output, dynamic automation completion, description inclusion, builtin exclusion, graceful error handling)
-    discover_test.go               on-demand fetch advisory tests (4 tests)
+    discover_test.go               15 tests (advisory output format, nil writer, fetch status text, down arrow icon, resolveFilePackage [existing dir, alias, missing, missing alias, not-a-dir, relative path, nil printer, nil stderr], resolvePackageSource file routing, mergePackages [empty list, missing file source skipped])
     run_test.go                    pi run tests (24 tests — includes --with, inputs, --silent, excess positional args, PI_ARGS, natural arg forwarding, Cobra flag isolation tests)
     validate_test.go               pi validate tests (59 tests — valid project, broken refs, multiple errors, builtin refs, no pi.yaml, broken file refs, valid file refs, inline scripts, first: block file refs, subdir file refs, multiple file ref errors, installer scalar file refs [broken + valid], installer step-list file refs, installer first: block file refs, installer verify phase file refs, installer inline scripts not flagged, shortcut with: valid/unknown/no-inputs, setup with: valid/unknown/no-inputs, run step with: valid/unknown/no-inputs/first-block, broken ref skips input check, multiple with: errors, checkWithInputs unit tests [no-with, all-valid, unknown-key, no-inputs, multiple-sorted], circular deps [direct, indirect, self-ref, first-block, diamond-ok, linear-chain-ok, chain-format, with-other-errors], detectCycles unit tests [no-cycles, direct, self-loop, three-node, diamond, multiple, disconnected], normalizeCycleKey unit tests [rotation, self-loop])
     add_test.go                    pi add tests (8 tests — file source, file with alias, idempotent duplicate, no version error, invalid source, no pi.yaml, no args, builtin ref error)
@@ -74,7 +74,7 @@ internal/
     setup_add_test.go              pi setup add tests (21 tests — bare string, short-form expansion, pi: prefix, if flag, key=value, invalid key=value, duplicate, replace same run target, no pi.yaml yes, no pi.yaml non-interactive, local automation, source flag, groups flag, combined flags, invoke before writing, invoke failure, only-add, invoke not found, tool resolution help contains all builtins, tool resolution help deterministic, tool resolution help prefers canonical name)
     setup_test.go                  pi setup tests (8 tests — includes --silent, parent eval file)
     shell_test.go                  pi shell tests (5 tests — includes shadow warning integration tests)
-    doctor_test.go                 pi doctor tests (9 tests — no-automations, no-requirements, satisfied, missing, mixed, skips)
+    doctor_test.go                 pi doctor tests (16 tests — no-automations, no-requirements, satisfied, missing, mixed, skips, formatDoctorLabel unit [command ± version, runtime ± version], command with version integration, runtime requirement label integration)
   conditions/                      Boolean expression parser/evaluator for if: fields
     conditions.go                  Lexer, AST, recursive-descent parser, Eval(), Predicates()
     conditions_test.go             31 tests
@@ -142,7 +142,7 @@ internal/
     root_test.go                   4 tests
   runtimes/                        Sandboxed runtime provisioning
     runtimes.go                    KnownRuntimes map (python/node/go/rust), Provisioner, Provision(), provisionWithMise(), provisionDirect(), PrependToPath(), knownRuntimeList()
-    runtimes_test.go               16 tests
+    runtimes_test.go               25 tests (provisioner defaults, config, never mode, unknown runtime, already provisioned, ask mode [nil prompt, user declines, user accepts, version in prompt, no version in prompt], binDirFor [not provisioned, provisioned, default version], prependToPath, defaultVersion, runtimeBinary, knownRuntimes, mise fallback, provisionDirect [go unsupported, rust unsupported, unknown runtime], unknown manager, binDir default version path, stderr default, mise integration)
   semver/                          Semver-aware version constraint checking
     semver.go                      Satisfies() — checks version against constraint; normalises incomplete versions; wraps Masterminds/semver/v3; isChannelName() — detects non-semver channel names (stable, nightly, beta) and accepts any valid version
     semver_test.go                 50 tests (exact, >=, ^, ~, range, v-prefix, error cases, practical installer scenarios, channel names, isChannelName unit)

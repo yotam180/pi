@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/vyper-tooling/pi/internal/automation"
 )
 
 func TestDoctorHelp(t *testing.T) {
@@ -188,6 +190,82 @@ steps:
 	}
 	if !strings.Contains(output, "✗") {
 		t.Errorf("expected ✗ for missing, got: %s", output)
+	}
+}
+
+func TestFormatDoctorLabel(t *testing.T) {
+	tests := []struct {
+		name string
+		req  automation.Requirement
+		want string
+	}{
+		{
+			name: "command without version",
+			req:  automation.Requirement{Kind: automation.RequirementCommand, Name: "jq"},
+			want: "command: jq",
+		},
+		{
+			name: "command with version",
+			req:  automation.Requirement{Kind: automation.RequirementCommand, Name: "curl", MinVersion: "7.0"},
+			want: "command: curl >= 7.0",
+		},
+		{
+			name: "runtime without version",
+			req:  automation.Requirement{Kind: automation.RequirementRuntime, Name: "python"},
+			want: "python",
+		},
+		{
+			name: "runtime with version",
+			req:  automation.Requirement{Kind: automation.RequirementRuntime, Name: "node", MinVersion: "18"},
+			want: "node >= 18",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatDoctorLabel(tt.req)
+			if got != tt.want {
+				t.Errorf("formatDoctorLabel() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDoctor_CommandWithVersion(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "needs-bash-ver.yaml"), []byte("description: Needs bash with version\nrequires:\n  - command: bash >= 1.0\nsteps:\n  - bash: echo ok\n"), 0644)
+
+	var buf bytes.Buffer
+	err := runDoctor(dir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "command: bash >= 1.0") {
+		t.Errorf("expected 'command: bash >= 1.0' label, got: %s", output)
+	}
+}
+
+func TestDoctor_RuntimeRequirementLabel(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "needs-go.yaml"), []byte("description: Needs go\nrequires:\n  - go >= 1.20\nsteps:\n  - bash: echo ok\n"), 0644)
+
+	var buf bytes.Buffer
+	err := runDoctor(dir, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "go >= 1.20") {
+		t.Errorf("expected 'go >= 1.20' label, got: %s", output)
+	}
+	if strings.Contains(output, "command: go") {
+		t.Errorf("runtime requirement should not have 'command:' prefix, got: %s", output)
 	}
 }
 

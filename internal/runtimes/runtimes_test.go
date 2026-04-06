@@ -265,6 +265,195 @@ func TestProvision_MiseFallbackToDirect(t *testing.T) {
 	}
 }
 
+func TestProvisionDirect_GoUnsupported(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("go", "1.23")
+	if err == nil {
+		t.Fatal("expected error for unsupported direct provisioning of go")
+	}
+	if !strings.Contains(err.Error(), "direct provisioning for \"go\" is not supported") {
+		t.Errorf("error should mention unsupported direct provisioning, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "mise") {
+		t.Errorf("error should suggest mise, got: %v", err)
+	}
+}
+
+func TestProvisionDirect_RustUnsupported(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	_, err := p.Provision("rust", "stable")
+	if err == nil {
+		t.Fatal("expected error for unsupported direct provisioning of rust")
+	}
+	if !strings.Contains(err.Error(), "direct provisioning for \"rust\" is not supported") {
+		t.Errorf("error should mention unsupported direct provisioning, got: %v", err)
+	}
+}
+
+func TestProvision_UnknownManager(t *testing.T) {
+	base := t.TempDir()
+	p := &Provisioner{
+		Mode:    config.ProvisionAuto,
+		Manager: "unknown-manager",
+		BaseDir: base,
+	}
+
+	_, err := p.Provision("python", "3.13")
+	if err == nil {
+		t.Fatal("expected error for unknown runtime manager")
+	}
+	if !strings.Contains(err.Error(), "unknown runtime manager") {
+		t.Errorf("error should mention unknown runtime manager, got: %v", err)
+	}
+}
+
+func TestBinDirFor_DefaultVersion(t *testing.T) {
+	base := t.TempDir()
+	binDir := filepath.Join(base, "python", "3.13", "bin")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "python3"), []byte("#!/bin/sh\necho ok"), 0755)
+
+	p := &Provisioner{BaseDir: base}
+
+	got := p.BinDirFor("python", "")
+	if got != binDir {
+		t.Errorf("BinDirFor with empty version should use default, got %q, want %q", got, binDir)
+	}
+}
+
+func TestProvision_AskMode_VersionInPrompt(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+	var promptMsg string
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAsk,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		PromptFunc: func(msg string) bool {
+			promptMsg = msg
+			return false
+		},
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	p.Provision("node", "20")
+	if !strings.Contains(promptMsg, "node") {
+		t.Errorf("prompt should mention node, got: %s", promptMsg)
+	}
+	if !strings.Contains(promptMsg, ">= 20") {
+		t.Errorf("prompt should mention version >= 20, got: %s", promptMsg)
+	}
+}
+
+func TestProvision_AskMode_NoVersionInPrompt(t *testing.T) {
+	base := t.TempDir()
+	var stderr bytes.Buffer
+	var promptMsg string
+
+	p := &Provisioner{
+		Mode:    config.ProvisionAsk,
+		Manager: config.RuntimeManagerDirect,
+		BaseDir: base,
+		Stderr:  &stderr,
+		PromptFunc: func(msg string) bool {
+			promptMsg = msg
+			return false
+		},
+		LookPath: func(name string) (string, error) {
+			return "", fmt.Errorf("not found")
+		},
+	}
+
+	p.Provision("python", "")
+	if !strings.Contains(promptMsg, "python") {
+		t.Errorf("prompt should mention python, got: %s", promptMsg)
+	}
+	if strings.Contains(promptMsg, ">=") {
+		t.Errorf("prompt should not mention >= when no version specified, got: %s", promptMsg)
+	}
+}
+
+func TestProvisionDirect_UnknownRuntime(t *testing.T) {
+	p := &Provisioner{
+		BaseDir: t.TempDir(),
+	}
+	err := p.provisionDirect("unknown", "1.0")
+	if err == nil {
+		t.Fatal("expected error for unknown runtime")
+	}
+	if !strings.Contains(err.Error(), "direct provisioning not supported") {
+		t.Errorf("error should mention unsupported, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "mise") {
+		t.Errorf("error should suggest mise, got: %v", err)
+	}
+}
+
+func TestBinDir_DefaultVersionPath(t *testing.T) {
+	base := t.TempDir()
+	p := &Provisioner{BaseDir: base}
+
+	got := p.binDir("python", "")
+	want := filepath.Join(base, "python", "3.13", "bin")
+	if got != want {
+		t.Errorf("binDir with empty version: got %q, want %q", got, want)
+	}
+
+	got = p.binDir("node", "")
+	want = filepath.Join(base, "node", "20", "bin")
+	if got != want {
+		t.Errorf("binDir with empty version: got %q, want %q", got, want)
+	}
+
+	got = p.binDir("go", "")
+	want = filepath.Join(base, "go", "1.23", "bin")
+	if got != want {
+		t.Errorf("binDir with empty version: got %q, want %q", got, want)
+	}
+
+	got = p.binDir("rust", "")
+	want = filepath.Join(base, "rust", "stable", "bin")
+	if got != want {
+		t.Errorf("binDir with empty version: got %q, want %q", got, want)
+	}
+}
+
+func TestStderr_Default(t *testing.T) {
+	p := &Provisioner{}
+	w := p.stderr()
+	if w != os.Stderr {
+		t.Error("stderr() should return os.Stderr when Stderr field is nil")
+	}
+}
+
 func TestProvision_AutoMode_MiseInstalled(t *testing.T) {
 	// Only run when mise is actually installed
 	misePath, err := exec.LookPath("mise")
