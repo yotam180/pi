@@ -354,6 +354,373 @@ func TestDryRun_DirAndTimeoutAnnotations(t *testing.T) {
 	}
 }
 
+func TestDryRun_RunStepWithInputs(t *testing.T) {
+	target := automationWithInputs("target",
+		map[string]automation.InputSpec{
+			"version": {Type: "string"},
+		},
+		[]string{"version"},
+		automation.Step{Type: automation.StepTypeBash, Value: "echo $PI_IN_VERSION"},
+	)
+	caller := newAutomation("caller",
+		automation.Step{Type: automation.StepTypeRun, Value: "target", With: map[string]string{"version": "3.13"}},
+	)
+
+	all := map[string]*automation.Automation{"caller": caller, "target": target}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller", "target"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(caller, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "run") {
+		t.Errorf("expected 'run' step type, got: %q", got)
+	}
+	if !strings.Contains(got, "echo") {
+		t.Errorf("expected target step to appear (recursion with inputs), got: %q", got)
+	}
+}
+
+func TestDryRun_RunStepArgsForwarding(t *testing.T) {
+	target := automationWithInputs("target",
+		map[string]automation.InputSpec{
+			"env": {Type: "string"},
+		},
+		[]string{"env"},
+		automation.Step{Type: automation.StepTypeBash, Value: "deploy $PI_IN_ENV"},
+	)
+	caller := newAutomation("caller",
+		automation.Step{Type: automation.StepTypeRun, Value: "target"},
+	)
+
+	all := map[string]*automation.Automation{"caller": caller, "target": target}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller", "target"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(caller, []string{"prod"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "deploy") {
+		t.Errorf("expected target step in output, got: %q", got)
+	}
+}
+
+func TestDryRun_RunStepTargetInstaller(t *testing.T) {
+	target := &automation.Automation{
+		Name:     "install-tool",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test:    automation.InstallPhase{IsScalar: true, Scalar: "command -v tool"},
+			Run:     automation.InstallPhase{IsScalar: true, Scalar: "curl install.sh | sh"},
+			Version: "tool --version",
+		},
+	}
+	caller := newAutomation("caller",
+		automation.Step{Type: automation.StepTypeRun, Value: "install-tool"},
+	)
+
+	all := map[string]*automation.Automation{"caller": caller, "install-tool": target}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller", "install-tool"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(caller, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "install") {
+		t.Errorf("expected 'install' lifecycle in output, got: %q", got)
+	}
+	if !strings.Contains(got, "test") {
+		t.Errorf("expected 'test' phase in output, got: %q", got)
+	}
+}
+
+func TestDryRun_RunStepTargetGoFunc(t *testing.T) {
+	target := &automation.Automation{
+		Name:     "go-target",
+		FilePath: "/fake/path/automation.yaml",
+		GoFunc:   func(inputs map[string]string) error { return nil },
+	}
+	caller := newAutomation("caller",
+		automation.Step{Type: automation.StepTypeRun, Value: "go-target"},
+	)
+
+	all := map[string]*automation.Automation{"caller": caller, "go-target": target}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller", "go-target"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(caller, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "go-func") {
+		t.Errorf("expected 'go-func' in output for go-backed target, got: %q", got)
+	}
+}
+
+func TestDryRun_RunStepFindError(t *testing.T) {
+	caller := newAutomation("caller",
+		automation.Step{Type: automation.StepTypeRun, Value: "nonexistent"},
+	)
+
+	all := map[string]*automation.Automation{"caller": caller}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	err := e.Run(caller, nil)
+	if err != nil {
+		t.Fatalf("dry-run should not fail on unresolvable run: target, got: %v", err)
+	}
+}
+
+func TestDryRun_InstallerExplicitVerify(t *testing.T) {
+	verify := automation.InstallPhase{IsScalar: true, Scalar: "foo --check"}
+	a := &automation.Automation{
+		Name:     "install-foo",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test:    automation.InstallPhase{IsScalar: true, Scalar: "command -v foo"},
+			Run:     automation.InstallPhase{IsScalar: true, Scalar: "curl install.sh | sh"},
+			Verify:  &verify,
+			Version: "foo --version",
+		},
+	}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"install-foo": a}, []string{"install-foo"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "verify") {
+		t.Errorf("expected 'verify' phase in output, got: %q", got)
+	}
+	if !strings.Contains(got, "foo --check") {
+		t.Errorf("expected explicit verify command in output, got: %q", got)
+	}
+	if strings.Contains(got, "re-runs test") {
+		t.Errorf("should NOT show 're-runs test' when explicit verify is present, got: %q", got)
+	}
+}
+
+func TestDryRun_InstallerNoVersion(t *testing.T) {
+	a := &automation.Automation{
+		Name:     "install-bar",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test: automation.InstallPhase{IsScalar: true, Scalar: "command -v bar"},
+			Run:  automation.InstallPhase{IsScalar: true, Scalar: "apt install bar"},
+		},
+	}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"install-bar": a}, []string{"install-bar"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if strings.Contains(got, "version") {
+		t.Errorf("should NOT show 'version' when no version field, got: %q", got)
+	}
+}
+
+func TestDryRun_InstallerStepListPhase(t *testing.T) {
+	a := &automation.Automation{
+		Name:     "install-multi",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test: automation.InstallPhase{
+				Steps: []automation.Step{
+					{Type: automation.StepTypeBash, Value: "command -v multi"},
+				},
+			},
+			Run: automation.InstallPhase{
+				Steps: []automation.Step{
+					{Type: automation.StepTypeBash, Value: "curl install.sh | sh"},
+					{Type: automation.StepTypeBash, Value: "chmod +x /usr/local/bin/multi"},
+				},
+			},
+			Version: "multi --version",
+		},
+	}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"install-multi": a}, []string{"install-multi"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "command -v multi") {
+		t.Errorf("expected test step-list content, got: %q", got)
+	}
+	if !strings.Contains(got, "curl install.sh") {
+		t.Errorf("expected run step-list content, got: %q", got)
+	}
+	if !strings.Contains(got, "chmod") {
+		t.Errorf("expected second run step in output, got: %q", got)
+	}
+}
+
+func TestDryRun_FirstBlockRunStepRecurses(t *testing.T) {
+	target := newAutomation("target", automation.Step{Type: automation.StepTypeBash, Value: "echo inner"})
+	caller := newAutomation("caller", automation.Step{
+		First: []automation.Step{
+			{Type: automation.StepTypeRun, Value: "target"},
+		},
+	})
+
+	all := map[string]*automation.Automation{"caller": caller, "target": target}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(all, []string{"caller", "target"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(caller, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "echo inner") {
+		t.Errorf("expected first: block run step to recurse into target, got: %q", got)
+	}
+}
+
+func TestDryRun_ParentShellAnnotation(t *testing.T) {
+	a := newAutomation("test",
+		automation.Step{Type: automation.StepTypeBash, Value: "source .venv/bin/activate", ParentShell: true},
+	)
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"test": a}, []string{"test"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "parent_shell") {
+		t.Errorf("expected 'parent_shell' annotation, got: %q", got)
+	}
+	if !strings.Contains(got, "parent") {
+		t.Errorf("expected 'parent' step type, got: %q", got)
+	}
+}
+
+func TestDryRun_InstallerPhaseConditionError(t *testing.T) {
+	a := &automation.Automation{
+		Name:     "install-bad",
+		FilePath: "/fake/path/automation.yaml",
+		Install: &automation.InstallSpec{
+			Test: automation.InstallPhase{
+				Steps: []automation.Step{
+					{Type: automation.StepTypeBash, Value: "check", If: "invalid.("},
+				},
+			},
+			Run: automation.InstallPhase{IsScalar: true, Scalar: "install"},
+		},
+	}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"install-bad": a}, []string{"install-bad"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	err := e.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error from bad condition in install phase")
+	}
+	if !strings.Contains(err.Error(), "if:") {
+		t.Errorf("expected condition error, got: %v", err)
+	}
+}
+
+func TestDryRun_InstallerWithAutomationEnv(t *testing.T) {
+	a := &automation.Automation{
+		Name:     "install-env",
+		FilePath: "/fake/path/automation.yaml",
+		Env:      map[string]string{"TOOL_VERSION": "1.0"},
+		Install: &automation.InstallSpec{
+			Test:    automation.InstallPhase{IsScalar: true, Scalar: "tool --version"},
+			Run:     automation.InstallPhase{IsScalar: true, Scalar: "install-tool"},
+			Version: "tool --version",
+		},
+	}
+	var stderr strings.Builder
+	e := &Executor{
+		RepoRoot:  t.TempDir(),
+		Discovery: discovery.NewResult(map[string]*automation.Automation{"install-env": a}, []string{"install-env"}),
+		Stderr:    &stderr,
+		DryRun:    true,
+	}
+
+	if err := e.Run(a, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := stderr.String()
+	if !strings.Contains(got, "install") {
+		t.Errorf("expected install output, got: %q", got)
+	}
+}
+
 func TestDryRunTruncate(t *testing.T) {
 	tests := []struct {
 		input  string

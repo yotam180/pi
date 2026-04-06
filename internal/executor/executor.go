@@ -467,27 +467,6 @@ func AppendToParentEval(path, command string) error {
 	return nil
 }
 
-// interpolateWithCtx delegates to interpolation.ResolveWith for backward
-// compatibility with tests that reference the method name.
-func (e *Executor) interpolateWithCtx(with map[string]string, currentInputEnv []string) map[string]string {
-	return interpolation.ResolveWith(with, &e.Outputs, currentInputEnv)
-}
-
-// interpolateWith resolves output references without input context.
-func (e *Executor) interpolateWith(with map[string]string) map[string]string {
-	return interpolation.ResolveWith(with, &e.Outputs, nil)
-}
-
-// interpolateEnv delegates to interpolation.ResolveEnv.
-func (e *Executor) interpolateEnv(env map[string]string, inputEnv []string) map[string]string {
-	return interpolation.ResolveEnv(env, &e.Outputs, inputEnv)
-}
-
-// interpolateValue delegates to interpolation.ResolveValue.
-func (e *Executor) interpolateValue(v string, inputEnv []string) string {
-	return interpolation.ResolveValue(v, &e.Outputs, inputEnv)
-}
-
 func (e *Executor) stdout() io.Writer {
 	if e.Stdout != nil {
 		return e.Stdout

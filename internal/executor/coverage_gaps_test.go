@@ -12,53 +12,54 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/display"
+	"github.com/vyper-tooling/pi/internal/interpolation"
 )
 
-// --- interpolateWith (0% → 100%) ---
+// --- ResolveWith via interpolation package (formerly executor wrappers) ---
 
-func TestInterpolateWith_Empty(t *testing.T) {
-	e := &Executor{}
-	got := e.interpolateWith(nil)
+func TestResolveWith_Empty(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	got := interpolation.ResolveWith(nil, &tracker, nil)
 	if got != nil {
-		t.Errorf("interpolateWith(nil) = %v, want nil", got)
+		t.Errorf("ResolveWith(nil) = %v, want nil", got)
 	}
 }
 
-func TestInterpolateWith_EmptyMap(t *testing.T) {
-	e := &Executor{}
-	got := e.interpolateWith(map[string]string{})
+func TestResolveWith_EmptyMap(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	got := interpolation.ResolveWith(map[string]string{}, &tracker, nil)
 	if len(got) != 0 {
-		t.Errorf("interpolateWith(empty) = %v, want empty", got)
+		t.Errorf("ResolveWith(empty) = %v, want empty", got)
 	}
 }
 
-func TestInterpolateWith_OutputsLast(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("hello")
-	e.Outputs.Record("world")
-	got := e.interpolateWith(map[string]string{"key": "outputs.last"})
+func TestResolveWith_OutputsLast(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("hello")
+	tracker.Record("world")
+	got := interpolation.ResolveWith(map[string]string{"key": "outputs.last"}, &tracker, nil)
 	if got["key"] != "world" {
-		t.Errorf("interpolateWith outputs.last = %q, want %q", got["key"], "world")
+		t.Errorf("ResolveWith outputs.last = %q, want %q", got["key"], "world")
 	}
 }
 
-func TestInterpolateWith_Literal(t *testing.T) {
-	e := &Executor{}
-	got := e.interpolateWith(map[string]string{"key": "literal-value"})
+func TestResolveWith_Literal(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	got := interpolation.ResolveWith(map[string]string{"key": "literal-value"}, &tracker, nil)
 	if got["key"] != "literal-value" {
-		t.Errorf("interpolateWith literal = %q, want %q", got["key"], "literal-value")
+		t.Errorf("ResolveWith literal = %q, want %q", got["key"], "literal-value")
 	}
 }
 
-func TestInterpolateWith_MultipleKeys(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("v1")
-	e.Outputs.Record("v2")
-	got := e.interpolateWith(map[string]string{
+func TestResolveWith_MultipleKeys(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("v1")
+	tracker.Record("v2")
+	got := interpolation.ResolveWith(map[string]string{
 		"a": "outputs.0",
 		"b": "outputs.last",
 		"c": "plain",
-	})
+	}, &tracker, nil)
 	if got["a"] != "v1" {
 		t.Errorf("key a = %q, want %q", got["a"], "v1")
 	}

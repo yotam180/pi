@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/interpolation"
 )
 
 func TestOutputsLast_PassedViaWith(t *testing.T) {
@@ -434,100 +435,100 @@ func TestGoFunc_SkippedByCondition(t *testing.T) {
 	}
 }
 
-func TestInterpolateValue_NoMatch(t *testing.T) {
-	e := &Executor{}
+func TestResolveValue_NoMatch(t *testing.T) {
+	var tracker interpolation.OutputTracker
 
-	if got := e.interpolateValue("hello", nil); got != "hello" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "hello", got, "hello")
+	if got := interpolation.ResolveValue("hello", &tracker, nil); got != "hello" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "hello", got, "hello")
 	}
 
-	if got := e.interpolateValue("outputs.last", nil); got != "" {
-		t.Errorf("interpolateValue(%q) = %q, want empty", "outputs.last", got)
-	}
-}
-
-func TestInterpolateValue_OutputsLast(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("first")
-	e.Outputs.Record("second")
-
-	if got := e.interpolateValue("outputs.last", nil); got != "second" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.last", got, "second")
+	if got := interpolation.ResolveValue("outputs.last", &tracker, nil); got != "" {
+		t.Errorf("ResolveValue(%q) = %q, want empty", "outputs.last", got)
 	}
 }
 
-func TestInterpolateValue_OutputsIndexed(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("zero")
-	e.Outputs.Record("one")
-	e.Outputs.Record("two")
+func TestResolveValue_OutputsLast(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("first")
+	tracker.Record("second")
 
-	if got := e.interpolateValue("outputs.0", nil); got != "zero" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.0", got, "zero")
-	}
-	if got := e.interpolateValue("outputs.2", nil); got != "two" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.2", got, "two")
-	}
-	if got := e.interpolateValue("outputs.99", nil); got != "outputs.99" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.99", got, "outputs.99")
+	if got := interpolation.ResolveValue("outputs.last", &tracker, nil); got != "second" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "outputs.last", got, "second")
 	}
 }
 
-func TestInterpolateValue_Inputs(t *testing.T) {
-	e := &Executor{}
+func TestResolveValue_OutputsIndexed(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("zero")
+	tracker.Record("one")
+	tracker.Record("two")
+
+	if got := interpolation.ResolveValue("outputs.0", &tracker, nil); got != "zero" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "outputs.0", got, "zero")
+	}
+	if got := interpolation.ResolveValue("outputs.2", &tracker, nil); got != "two" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "outputs.2", got, "two")
+	}
+	if got := interpolation.ResolveValue("outputs.99", &tracker, nil); got != "outputs.99" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "outputs.99", got, "outputs.99")
+	}
+}
+
+func TestResolveValue_Inputs(t *testing.T) {
+	var tracker interpolation.OutputTracker
 	inputEnv := []string{"PI_IN_VERSION=22", "PI_INPUT_VERSION=22"}
 
-	if got := e.interpolateValue("inputs.version", inputEnv); got != "22" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "inputs.version", got, "22")
+	if got := interpolation.ResolveValue("inputs.version", &tracker, inputEnv); got != "22" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "inputs.version", got, "22")
 	}
 
-	if got := e.interpolateValue("inputs.unknown", inputEnv); got != "inputs.unknown" {
-		t.Errorf("interpolateValue(%q) = %q, want %q", "inputs.unknown", got, "inputs.unknown")
+	if got := interpolation.ResolveValue("inputs.unknown", &tracker, inputEnv); got != "inputs.unknown" {
+		t.Errorf("ResolveValue(%q) = %q, want %q", "inputs.unknown", got, "inputs.unknown")
 	}
 }
 
-func TestInterpolateEnv_NilMap(t *testing.T) {
-	e := &Executor{}
-	got := e.interpolateEnv(nil, nil)
+func TestResolveEnv_NilMap(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	got := interpolation.ResolveEnv(nil, &tracker, nil)
 	if got != nil {
 		t.Errorf("expected nil for nil input, got %v", got)
 	}
 }
 
-func TestInterpolateEnv_EmptyMap(t *testing.T) {
-	e := &Executor{}
-	got := e.interpolateEnv(map[string]string{}, nil)
+func TestResolveEnv_EmptyMap(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	got := interpolation.ResolveEnv(map[string]string{}, &tracker, nil)
 	if len(got) != 0 {
 		t.Errorf("expected empty map, got %v", got)
 	}
 }
 
-func TestInterpolateEnv_NoInterpolation(t *testing.T) {
-	e := &Executor{}
+func TestResolveEnv_NoInterpolation(t *testing.T) {
+	var tracker interpolation.OutputTracker
 	env := map[string]string{"FOO": "bar", "BAZ": "qux"}
-	got := e.interpolateEnv(env, nil)
+	got := interpolation.ResolveEnv(env, &tracker, nil)
 	if got["FOO"] != "bar" || got["BAZ"] != "qux" {
 		t.Errorf("expected unchanged values, got %v", got)
 	}
 }
 
-func TestInterpolateEnv_OutputsLast(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("first")
-	e.Outputs.Record("second")
+func TestResolveEnv_OutputsLast(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("first")
+	tracker.Record("second")
 	env := map[string]string{"MY_VAR": "outputs.last"}
-	got := e.interpolateEnv(env, nil)
+	got := interpolation.ResolveEnv(env, &tracker, nil)
 	if got["MY_VAR"] != "second" {
 		t.Errorf("MY_VAR = %q, want %q", got["MY_VAR"], "second")
 	}
 }
 
-func TestInterpolateEnv_OutputsIndexed(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("zero")
-	e.Outputs.Record("one")
+func TestResolveEnv_OutputsIndexed(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("zero")
+	tracker.Record("one")
 	env := map[string]string{"FIRST": "outputs.0", "SECOND": "outputs.1"}
-	got := e.interpolateEnv(env, nil)
+	got := interpolation.ResolveEnv(env, &tracker, nil)
 	if got["FIRST"] != "zero" {
 		t.Errorf("FIRST = %q, want %q", got["FIRST"], "zero")
 	}
@@ -536,26 +537,26 @@ func TestInterpolateEnv_OutputsIndexed(t *testing.T) {
 	}
 }
 
-func TestInterpolateEnv_Inputs(t *testing.T) {
-	e := &Executor{}
+func TestResolveEnv_Inputs(t *testing.T) {
+	var tracker interpolation.OutputTracker
 	inputEnv := []string{"PI_IN_VERSION=3.13"}
 	env := map[string]string{"MY_VERSION": "inputs.version"}
-	got := e.interpolateEnv(env, inputEnv)
+	got := interpolation.ResolveEnv(env, &tracker, inputEnv)
 	if got["MY_VERSION"] != "3.13" {
 		t.Errorf("MY_VERSION = %q, want %q", got["MY_VERSION"], "3.13")
 	}
 }
 
-func TestInterpolateEnv_MixedValues(t *testing.T) {
-	e := &Executor{}
-	e.Outputs.Record("captured")
+func TestResolveEnv_MixedValues(t *testing.T) {
+	var tracker interpolation.OutputTracker
+	tracker.Record("captured")
 	inputEnv := []string{"PI_IN_NAME=alice"}
 	env := map[string]string{
 		"LITERAL":    "hello",
 		"FROM_OUT":   "outputs.last",
 		"FROM_INPUT": "inputs.name",
 	}
-	got := e.interpolateEnv(env, inputEnv)
+	got := interpolation.ResolveEnv(env, &tracker, inputEnv)
 	if got["LITERAL"] != "hello" {
 		t.Errorf("LITERAL = %q, want %q", got["LITERAL"], "hello")
 	}
