@@ -919,3 +919,89 @@ shortcuts:
 		t.Errorf("shortcuts preserved = %d, want 1", len(cfg.Shortcuts))
 	}
 }
+
+// --- Shared YAML block helper unit tests ---
+
+func TestFindBlockIndex_Found(t *testing.T) {
+	lines := []string{"project: test", "", "setup:", "  - pi:install-uv"}
+	idx := findBlockIndex(lines, "setup")
+	if idx != 2 {
+		t.Errorf("findBlockIndex = %d, want 2", idx)
+	}
+}
+
+func TestFindBlockIndex_NotFound(t *testing.T) {
+	lines := []string{"project: test", "", "shortcuts:", "  up: docker/up"}
+	idx := findBlockIndex(lines, "setup")
+	if idx != -1 {
+		t.Errorf("findBlockIndex = %d, want -1", idx)
+	}
+}
+
+func TestFindBlockIndex_MultipleBlocks(t *testing.T) {
+	lines := []string{"project: test", "setup:", "  - a", "packages:", "  - b"}
+	idx := findBlockIndex(lines, "packages")
+	if idx != 3 {
+		t.Errorf("findBlockIndex = %d, want 3", idx)
+	}
+}
+
+func TestAppendToBlock_Simple(t *testing.T) {
+	lines := []string{"setup:", "  - existing"}
+	got := appendToBlock(lines, 0, "  - new-entry")
+	if !strings.Contains(got, "- existing") {
+		t.Error("should preserve existing entry")
+	}
+	if !strings.Contains(got, "- new-entry") {
+		t.Error("should contain new entry")
+	}
+}
+
+func TestAppendToBlock_WithTrailingBlanks(t *testing.T) {
+	lines := []string{"setup:", "  - existing", "", "shortcuts:"}
+	got := appendToBlock(lines, 0, "  - new-entry")
+	if !strings.Contains(got, "- new-entry") {
+		t.Error("should contain new entry")
+	}
+	if !strings.Contains(got, "shortcuts:") {
+		t.Error("should preserve following block")
+	}
+}
+
+func TestAppendNewBlock(t *testing.T) {
+	content := "project: test\n"
+	got := appendNewBlock(content, "setup", "  - pi:install-uv")
+	if !strings.Contains(got, "setup:\n  - pi:install-uv") {
+		t.Errorf("unexpected output: %q", got)
+	}
+}
+
+func TestAppendNewBlock_StripsTrailingNewlines(t *testing.T) {
+	content := "project: test\n\n\n"
+	got := appendNewBlock(content, "packages", "  - org/repo@v1.0")
+	if strings.HasPrefix(got, "project: test\n\n\n") {
+		t.Error("should strip trailing newlines before appending")
+	}
+	if !strings.Contains(got, "packages:\n  - org/repo@v1.0") {
+		t.Errorf("unexpected output: %q", got)
+	}
+}
+
+func TestInsertIntoBlock_ExistingBlock(t *testing.T) {
+	content := "project: test\n\npackages:\n  - existing@v1.0\n"
+	got := insertIntoBlock(content, "packages", "  - new@v2.0")
+	if !strings.Contains(got, "- existing@v1.0") {
+		t.Error("should preserve existing entry")
+	}
+	if !strings.Contains(got, "- new@v2.0") {
+		t.Error("should contain new entry")
+	}
+}
+
+func TestInsertIntoBlock_NoBlock(t *testing.T) {
+	content := "project: test\n"
+	got := insertIntoBlock(content, "packages", "  - org/repo@v1.0")
+	if !strings.Contains(got, "packages:\n  - org/repo@v1.0") {
+		t.Errorf("should create block, got: %q", got)
+	}
+}

@@ -165,13 +165,7 @@ func sortedKeys(m map[string]string) []string {
 func replaceSetupEntry(content string, entryIdx int, newYAML string) (string, error) {
 	lines := strings.Split(content, "\n")
 
-	setupIdx := -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "setup:" {
-			setupIdx = i
-			break
-		}
-	}
+	setupIdx := findBlockIndex(lines, "setup")
 	if setupIdx == -1 {
 		return "", fmt.Errorf("setup: block not found")
 	}
@@ -239,61 +233,7 @@ func replaceSetupEntry(content string, entryIdx int, newYAML string) (string, er
 // insertSetupEntry appends the rendered YAML entry to the setup: block in the
 // file content. Creates the setup: block if it doesn't exist.
 func insertSetupEntry(content string, entryYAML string) (string, error) {
-	lines := strings.Split(content, "\n")
-	setupIdx := -1
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "setup:" {
-			setupIdx = i
-			break
-		}
-	}
-
-	if setupIdx == -1 {
-		return appendNewSetupBlock(content, entryYAML), nil
-	}
-
-	return appendToExistingSetupBlock(lines, setupIdx, entryYAML), nil
-}
-
-// appendNewSetupBlock adds a setup: block at the end of the file.
-func appendNewSetupBlock(content string, entryYAML string) string {
-	trimmed := strings.TrimRight(content, "\n")
-	return trimmed + "\n\nsetup:\n" + entryYAML + "\n"
-}
-
-// appendToExistingSetupBlock inserts a new entry at the end of the setup: list.
-func appendToExistingSetupBlock(lines []string, setupIdx int, entryYAML string) string {
-	insertIdx := setupIdx + 1
-
-	for insertIdx < len(lines) {
-		line := lines[insertIdx]
-		if line == "" {
-			insertIdx++
-			continue
-		}
-
-		trimmed := strings.TrimSpace(line)
-
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" {
-			break
-		}
-
-		insertIdx++
-	}
-
-	for insertIdx > setupIdx+1 && strings.TrimSpace(lines[insertIdx-1]) == "" {
-		insertIdx--
-	}
-
-	entryLines := strings.Split(entryYAML, "\n")
-
-	result := make([]string, 0, len(lines)+len(entryLines))
-	result = append(result, lines[:insertIdx]...)
-	result = append(result, entryLines...)
-	result = append(result, lines[insertIdx:]...)
-
-	return strings.Join(result, "\n")
+	return insertIntoBlock(content, "setup", entryYAML), nil
 }
 
 // AddPackage adds a package entry to pi.yaml in the given directory.
@@ -360,23 +300,7 @@ func isDuplicate(packages []PackageEntry, entry PackageEntry) bool {
 // insertPackageEntry appends the package entry to the packages: block in the
 // YAML content. Creates the packages: block if it doesn't exist.
 func insertPackageEntry(content string, entry PackageEntry) (string, error) {
-	entryYAML := formatPackageEntry(entry)
-
-	lines := strings.Split(content, "\n")
-	packagesIdx := -1
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "packages:" {
-			packagesIdx = i
-			break
-		}
-	}
-
-	if packagesIdx == -1 {
-		return appendNewPackagesBlock(content, entryYAML), nil
-	}
-
-	return appendToExistingPackagesBlock(lines, packagesIdx, entryYAML), nil
+	return insertIntoBlock(content, "packages", formatPackageEntry(entry)), nil
 }
 
 // formatPackageEntry formats a PackageEntry as a YAML list item string.
@@ -388,16 +312,25 @@ func formatPackageEntry(entry PackageEntry) string {
 	return "  - source: " + entry.Source + "\n    as: " + entry.As
 }
 
-// appendNewPackagesBlock adds a packages: block at the end of the file.
-func appendNewPackagesBlock(content string, entryYAML string) string {
-	trimmed := strings.TrimRight(content, "\n")
-	return trimmed + "\n\npackages:\n" + entryYAML + "\n"
+// --- Shared YAML block helpers ---
+
+// findBlockIndex returns the line index of a top-level YAML block (e.g. "setup:"
+// or "packages:") in the given lines, or -1 if not found.
+func findBlockIndex(lines []string, blockName string) int {
+	target := blockName + ":"
+	for i, line := range lines {
+		if strings.TrimSpace(line) == target {
+			return i
+		}
+	}
+	return -1
 }
 
-// appendToExistingPackagesBlock inserts a new entry at the end of the
-// packages: list items.
-func appendToExistingPackagesBlock(lines []string, packagesIdx int, entryYAML string) string {
-	insertIdx := packagesIdx + 1
+// appendToBlock appends entryYAML to an existing YAML list block starting at
+// blockIdx. The entry is inserted after the last indented line belonging to the
+// block, skipping trailing blank lines within the block.
+func appendToBlock(lines []string, blockIdx int, entryYAML string) string {
+	insertIdx := blockIdx + 1
 
 	for insertIdx < len(lines) {
 		line := lines[insertIdx]
@@ -405,27 +338,39 @@ func appendToExistingPackagesBlock(lines []string, packagesIdx int, entryYAML st
 			insertIdx++
 			continue
 		}
-
 		trimmed := strings.TrimSpace(line)
-
 		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") && trimmed != "" {
 			break
 		}
-
 		insertIdx++
 	}
 
-	// Walk back over trailing blank lines within the packages block
-	for insertIdx > packagesIdx+1 && strings.TrimSpace(lines[insertIdx-1]) == "" {
+	for insertIdx > blockIdx+1 && strings.TrimSpace(lines[insertIdx-1]) == "" {
 		insertIdx--
 	}
 
 	entryLines := strings.Split(entryYAML, "\n")
-
 	result := make([]string, 0, len(lines)+len(entryLines))
 	result = append(result, lines[:insertIdx]...)
 	result = append(result, entryLines...)
 	result = append(result, lines[insertIdx:]...)
-
 	return strings.Join(result, "\n")
+}
+
+// appendNewBlock creates a new YAML block at the end of the file content.
+func appendNewBlock(content string, blockName string, entryYAML string) string {
+	trimmed := strings.TrimRight(content, "\n")
+	return trimmed + "\n\n" + blockName + ":\n" + entryYAML + "\n"
+}
+
+// insertIntoBlock inserts entryYAML into the named block (e.g. "setup" or
+// "packages") within the raw file content. If the block doesn't exist, it is
+// created at the end of the file.
+func insertIntoBlock(content string, blockName string, entryYAML string) string {
+	lines := strings.Split(content, "\n")
+	idx := findBlockIndex(lines, blockName)
+	if idx == -1 {
+		return appendNewBlock(content, blockName, entryYAML)
+	}
+	return appendToBlock(lines, idx, entryYAML)
 }
