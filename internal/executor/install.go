@@ -95,7 +95,7 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 		}
 
 		var outputCapture bytes.Buffer
-		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv)
+		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv, e.RepoRoot)
 		ctx.Stderr = stderrWriter
 
 		if err := runner.Run(ctx); err != nil {
@@ -114,7 +114,7 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 
 	step := automation.Step{Type: automation.StepTypeBash, Value: versionCmd}
 	var buf bytes.Buffer
-	ctx := e.newRunContext(a, step, nil, &buf, nil, inputEnv)
+	ctx := e.newRunContext(a, step, nil, &buf, nil, inputEnv, e.RepoRoot)
 	ctx.Stderr = io.Discard
 
 	runner := e.registry().Get(automation.StepTypeBash)
@@ -154,7 +154,7 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
 		}
 
-		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv)
+		ctx := e.newRunContext(a, sub, nil, io.Discard, nil, inputEnv, e.RepoRoot)
 		ctx.Stderr = stderrWriter
 
 		return runner.Run(ctx)

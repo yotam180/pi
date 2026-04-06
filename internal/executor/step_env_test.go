@@ -165,12 +165,8 @@ func TestStepEnv_PerStepIsolation(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_WithStepEnv(t *testing.T) {
-	exec := &Executor{
-		RepoRoot: t.TempDir(),
-	}
-
-	env := exec.buildEnv(nil, nil, map[string]string{"FOO": "bar"})
+func TestBuildStepEnv_WithStepEnv(t *testing.T) {
+	env := BuildStepEnv(nil, nil, nil, map[string]string{"FOO": "bar"})
 	if env == nil {
 		t.Fatal("expected non-nil env when step env is set")
 	}
@@ -187,11 +183,7 @@ func TestBuildEnv_WithStepEnv(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_StepEnvDeterministicOrder(t *testing.T) {
-	exec := &Executor{
-		RepoRoot: t.TempDir(),
-	}
-
+func TestBuildStepEnv_StepEnvDeterministicOrder(t *testing.T) {
 	stepEnv := map[string]string{
 		"ZEBRA":  "z",
 		"ALPHA":  "a",
@@ -199,7 +191,7 @@ func TestBuildEnv_StepEnvDeterministicOrder(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i++ {
-		env := exec.buildEnv(nil, nil, stepEnv)
+		env := BuildStepEnv(nil, nil, nil, stepEnv)
 		if env == nil {
 			t.Fatal("expected non-nil env")
 		}
@@ -218,13 +210,9 @@ func TestBuildEnv_StepEnvDeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_WithAllThree(t *testing.T) {
-	exec := &Executor{
-		RepoRoot:     t.TempDir(),
-		runtimePaths: []string{"/provisioned/bin"},
-	}
-
-	env := exec.buildEnv(
+func TestBuildStepEnv_WithAllThree(t *testing.T) {
+	env := BuildStepEnv(
+		[]string{"/provisioned/bin"},
 		[]string{"PI_INPUT_X=1"},
 		map[string]string{"AUTO_VAR": "av"},
 		map[string]string{"STEP_VAR": "sv"},
@@ -365,12 +353,8 @@ func TestAutomationEnv_DoesNotPropagateToRunStep(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_WithAutomationEnv(t *testing.T) {
-	exec := &Executor{
-		RepoRoot: t.TempDir(),
-	}
-
-	env := exec.buildEnv(nil, map[string]string{"AUTO_KEY": "auto_val"}, nil)
+func TestBuildStepEnv_WithAutomationEnv(t *testing.T) {
+	env := BuildStepEnv(nil, nil, map[string]string{"AUTO_KEY": "auto_val"}, nil)
 	if env == nil {
 		t.Fatal("expected non-nil env when automation env is set")
 	}
@@ -387,12 +371,9 @@ func TestBuildEnv_WithAutomationEnv(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_AutomationEnvOverriddenByStepEnv(t *testing.T) {
-	exec := &Executor{
-		RepoRoot: t.TempDir(),
-	}
-
-	env := exec.buildEnv(
+func TestBuildStepEnv_AutomationEnvOverriddenByStepEnv(t *testing.T) {
+	env := BuildStepEnv(
+		nil,
 		nil,
 		map[string]string{"SHARED": "auto"},
 		map[string]string{"SHARED": "step"},

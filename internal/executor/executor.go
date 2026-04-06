@@ -297,10 +297,14 @@ func (e *Executor) execStepSuppressed(ctx *stepExecCtx, step automation.Step, in
 
 func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
 	a := ctx.automation
+
+	workDir := e.RepoRoot
 	if step.Dir != "" {
-		if _, err := resolveStepDir(e.RepoRoot, step.Dir); err != nil {
+		resolved, err := resolveStepDir(e.RepoRoot, step.Dir)
+		if err != nil {
 			return fmt.Errorf("automation %q step[%d]: %w", a.Name, index, err)
 		}
+		workDir = resolved
 	}
 
 	stdout := e.stdout()
@@ -326,7 +330,7 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
-	err := runner.Run(e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv))
+	err := runner.Run(e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir))
 	if !capturePipe {
 		e.recordOutput(outputCapture.String())
 	}
@@ -345,15 +349,10 @@ func (e *Executor) registry() *Registry {
 }
 
 // newRunContext builds a RunContext from the executor's current state.
-// If the step declares dir:, it must be resolved before calling this method
-// and the resolved path passed via workDir. If workDir is empty, RepoRoot is used.
-func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string) *RunContext {
-	workDir := e.RepoRoot
-	if step.Dir != "" {
-		if resolved, err := resolveStepDir(e.RepoRoot, step.Dir); err == nil {
-			workDir = resolved
-		}
-	}
+// workDir is the resolved working directory — pass e.RepoRoot when the step
+// has no dir: override. The caller is responsible for resolving and validating
+// the directory before calling this method.
+func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, workDir string) *RunContext {
 	return &RunContext{
 		Automation:   a,
 		Step:         step,
@@ -366,7 +365,6 @@ func (e *Executor) newRunContext(a *automation.Automation, step automation.Step,
 		RuntimePaths: e.runtimePaths,
 		WorkDir:      workDir,
 		Discovery:    e.Discovery,
-		BuildEnv:     e.buildEnv,
 		RunAutomation: func(target *automation.Automation, args []string, withArgs map[string]string, targetStdout io.Writer, targetStdin io.Reader) error {
 			origStdout, origStdin := e.Stdout, e.Stdin
 			e.Stdout, e.Stdin = targetStdout, targetStdin

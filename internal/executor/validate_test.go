@@ -792,24 +792,15 @@ func TestValidateRequirements_NoProvisioner_FallsThrough(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_NoRuntimePaths(t *testing.T) {
-	exec := &Executor{
-		RepoRoot: t.TempDir(),
-	}
-
-	env := exec.buildEnv(nil, nil, nil)
+func TestBuildStepEnv_NoRuntimePaths(t *testing.T) {
+	env := BuildStepEnv(nil, nil, nil, nil)
 	if env != nil {
 		t.Error("expected nil env when no input vars and no runtime paths")
 	}
 }
 
-func TestBuildEnv_WithRuntimePaths(t *testing.T) {
-	exec := &Executor{
-		RepoRoot:     t.TempDir(),
-		runtimePaths: []string{"/provisioned/python/bin"},
-	}
-
-	env := exec.buildEnv(nil, nil, nil)
+func TestBuildStepEnv_WithRuntimePaths(t *testing.T) {
+	env := BuildStepEnv([]string{"/provisioned/python/bin"}, nil, nil, nil)
 	if env == nil {
 		t.Fatal("expected non-nil env when runtime paths are set")
 	}
@@ -829,14 +820,9 @@ func TestBuildEnv_WithRuntimePaths(t *testing.T) {
 	}
 }
 
-func TestBuildEnv_WithInputsAndRuntimePaths(t *testing.T) {
-	exec := &Executor{
-		RepoRoot:     t.TempDir(),
-		runtimePaths: []string{"/provisioned/node/bin"},
-	}
-
+func TestBuildStepEnv_WithInputsAndRuntimePaths(t *testing.T) {
 	inputEnv := []string{"PI_INPUT_VERSION=3.13"}
-	env := exec.buildEnv(inputEnv, nil, nil)
+	env := BuildStepEnv([]string{"/provisioned/node/bin"}, inputEnv, nil, nil)
 	if env == nil {
 		t.Fatal("expected non-nil env")
 	}
