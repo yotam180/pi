@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/config"
+	"github.com/vyper-tooling/pi/internal/tools"
 )
 
 func writeTestPiDir(t *testing.T, dir, name, content string) {
@@ -423,7 +424,7 @@ func TestRunSetupAdd_CombinedFlags(t *testing.T) {
 }
 
 func TestSetupAddToolResolutionHelp_ContainsAllBuiltins(t *testing.T) {
-	help := setupAddToolResolutionHelp()
+	help := tools.ToolResolutionHelp()
 
 	expected := []string{
 		"python", "pi:install-python",
@@ -448,9 +449,9 @@ func TestSetupAddToolResolutionHelp_ContainsAllBuiltins(t *testing.T) {
 }
 
 func TestSetupAddToolResolutionHelp_Deterministic(t *testing.T) {
-	first := setupAddToolResolutionHelp()
+	first := tools.ToolResolutionHelp()
 	for i := 0; i < 10; i++ {
-		got := setupAddToolResolutionHelp()
+		got := tools.ToolResolutionHelp()
 		if got != first {
 			t.Fatalf("non-deterministic output on iteration %d:\nfirst:\n%s\ngot:\n%s", i, first, got)
 		}
@@ -458,7 +459,7 @@ func TestSetupAddToolResolutionHelp_Deterministic(t *testing.T) {
 }
 
 func TestSetupAddToolResolutionHelp_PrefersCanonicalName(t *testing.T) {
-	help := setupAddToolResolutionHelp()
+	help := tools.ToolResolutionHelp()
 
 	// "go" should appear, not "golang" (both match suffix, "go" is shorter)
 	if strings.Contains(help, "golang") {

@@ -15,6 +15,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/runtimeinfo"
+	"github.com/vyper-tooling/pi/internal/tools"
 )
 
 // CheckResult holds the result of checking a single requirement.
@@ -250,32 +251,7 @@ func FormatRequirementLabel(req automation.Requirement) string {
 	return req.Name
 }
 
-// installHints maps tool names to their install commands.
-var installHints = map[string]string{
-	"python":  "brew install python3  or  https://www.python.org/downloads/",
-	"node":    "brew install node  or  https://nodejs.org/",
-	"docker":  "brew install --cask docker  or  https://docs.docker.com/get-docker/",
-	"jq":      "brew install jq",
-	"kubectl": "brew install kubectl",
-	"helm":    "brew install helm",
-	"tsx":     "npm install -g tsx",
-	"git":     "brew install git",
-	"curl":    "brew install curl",
-	"wget":    "brew install wget",
-	"go":      "brew install go  or  https://go.dev/dl/",
-	"rust":    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-	"rustc":   "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-	"cargo":   "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-	"rustup":  "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
-	"make":    "xcode-select --install  (macOS)  or  apt install build-essential",
-	"mise":    "curl https://mise.run | sh",
-	"uv":      "curl -LsSf https://astral.sh/uv/install.sh | sh",
-}
-
 // InstallHintFor returns a human-readable install hint for a requirement.
 func InstallHintFor(req automation.Requirement) string {
-	if hint, ok := installHints[req.Name]; ok {
-		return hint
-	}
-	return ""
+	return tools.InstallHintFor(req.Name)
 }

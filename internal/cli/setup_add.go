@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,99 +14,12 @@ import (
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
 	"github.com/vyper-tooling/pi/internal/project"
+	"github.com/vyper-tooling/pi/internal/tools"
 )
 
-// setupAddKnownTools maps short-form names (and pi: prefix variants) to their
-// canonical pi:install-* automation names.
-var setupAddKnownTools = map[string]string{
-	"python":    "pi:install-python",
-	"node":      "pi:install-node",
-	"nodejs":    "pi:install-node",
-	"go":        "pi:install-go",
-	"golang":    "pi:install-go",
-	"rust":      "pi:install-rust",
-	"ruby":      "pi:install-ruby",
-	"uv":        "pi:install-uv",
-	"tsx":       "pi:install-tsx",
-	"homebrew":  "pi:install-homebrew",
-	"brew":      "pi:install-homebrew",
-	"terraform": "pi:install-terraform",
-	"tf":        "pi:install-terraform",
-	"kubectl":   "pi:install-kubectl",
-	"k8s":       "pi:install-kubectl",
-	"helm":      "pi:install-helm",
-	"pnpm":      "pi:install-pnpm",
-	"bun":       "pi:install-bun",
-	"deno":      "pi:install-deno",
-	"aws-cli":   "pi:install-aws-cli",
-	"awscli":    "pi:install-aws-cli",
-	"aws":       "pi:install-aws-cli",
-
-	"pi:python":    "pi:install-python",
-	"pi:node":      "pi:install-node",
-	"pi:go":        "pi:install-go",
-	"pi:rust":      "pi:install-rust",
-	"pi:ruby":      "pi:install-ruby",
-	"pi:uv":        "pi:install-uv",
-	"pi:tsx":       "pi:install-tsx",
-	"pi:homebrew":  "pi:install-homebrew",
-	"pi:brew":      "pi:install-homebrew",
-	"pi:terraform": "pi:install-terraform",
-	"pi:kubectl":   "pi:install-kubectl",
-	"pi:helm":      "pi:install-helm",
-	"pi:pnpm":      "pi:install-pnpm",
-	"pi:bun":       "pi:install-bun",
-	"pi:deno":      "pi:install-deno",
-	"pi:aws-cli":   "pi:install-aws-cli",
-}
-
-// setupAddToolResolutionHelp builds the "Tool names are resolved automatically"
-// section from the setupAddKnownTools map, keeping it in sync with the actual
-// registered short-form names. When multiple short names resolve to the same
-// target, the canonical name is preferred (the one matching the pi:install-<name>
-// suffix), falling back to shortest.
-func setupAddToolResolutionHelp() string {
-	best := make(map[string]string) // resolved → best short name
-	for short, resolved := range setupAddKnownTools {
-		if strings.HasPrefix(short, "pi:") {
-			continue
-		}
-		prev, exists := best[resolved]
-		if !exists {
-			best[resolved] = short
-			continue
-		}
-		// Prefer the name that matches the install-<name> suffix
-		suffix := strings.TrimPrefix(resolved, "pi:install-")
-		shortIsCanonical := short == suffix
-		prevIsCanonical := prev == suffix
-		if shortIsCanonical && !prevIsCanonical {
-			best[resolved] = short
-		} else if !shortIsCanonical && prevIsCanonical {
-			// keep prev
-		} else if len(short) < len(prev) || (len(short) == len(prev) && short < prev) {
-			best[resolved] = short
-		}
-	}
-
-	type pair struct {
-		short    string
-		resolved string
-	}
-	pairs := make([]pair, 0, len(best))
-	for resolved, short := range best {
-		pairs = append(pairs, pair{short, resolved})
-	}
-	sort.Slice(pairs, func(i, j int) bool {
-		return pairs[i].short < pairs[j].short
-	})
-
-	var b strings.Builder
-	b.WriteString("Tool names are resolved automatically:\n")
-	for _, p := range pairs {
-		fmt.Fprintf(&b, "  %-12s→  %s\n", p.short, p.resolved)
-	}
-	return b.String()
+// setupAddKnownTools returns the short-name-to-builtin map from the tool registry.
+func setupAddKnownTools() map[string]string {
+	return tools.BuildShortNameMap()
 }
 
 func newSetupAddCmd() *cobra.Command {
@@ -137,7 +49,7 @@ Examples:
   pi setup add setup/install-deps
   pi setup add pi:install-homebrew --if os.macos
   pi setup add pi:cursor/install-extensions file=.pi/cursor/extensions.txt
-  pi setup add uv --only-add`, setupAddToolResolutionHelp()),
+  pi setup add uv --only-add`, tools.ToolResolutionHelp()),
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cwd, err := getwd()
@@ -174,7 +86,7 @@ func runSetupAdd(root, name string, kvArgs []string, versionFlag, ifFlag, source
 	}
 
 	resolvedName := name
-	if expanded, ok := setupAddKnownTools[name]; ok {
+	if expanded, ok := setupAddKnownTools()[name]; ok {
 		resolvedName = expanded
 		printer.Dim("Resolved '%s' → %s\n", name, resolvedName)
 		fmt.Fprintln(stdout)
