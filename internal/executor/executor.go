@@ -82,6 +82,15 @@ type Executor struct {
 	stepOutputs []string
 }
 
+// stepExecCtx bundles the per-automation execution state that is constant
+// across all steps within a single RunWithInputs call. Methods receive this
+// instead of repeating the same parameter list.
+type stepExecCtx struct {
+	automation *automation.Automation
+	args       []string
+	inputEnv   []string
+}
+
 // ExitError wraps a non-zero exit code from a step.
 type ExitError struct {
 	Code int
@@ -158,6 +167,12 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		return e.execInstall(a, inputEnv)
 	}
 
+	ctx := &stepExecCtx{
+		automation: a,
+		args:       args,
+		inputEnv:   inputEnv,
+	}
+
 	savedOutputs := e.stepOutputs
 	e.stepOutputs = nil
 	defer func() { e.stepOutputs = savedOutputs }()
@@ -187,7 +202,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		if step.IsFirst() {
 			isPipeSrc := step.Pipe && i < len(a.Steps)-1
-			if err := e.execFirstBlock(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+			if err := e.execFirstBlock(ctx, step, i, pipedInput, isPipeSrc); err != nil {
 				return err
 			}
 			pipedInput = nil
@@ -198,7 +213,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		}
 
 		if step.ParentShell {
-			if err := e.execParentShell(a, step, inputEnv); err != nil {
+			if err := e.execParentShell(ctx, step); err != nil {
 				return fmt.Errorf("automation %q step[%d]: %w", a.Name, i, err)
 			}
 			continue
@@ -206,16 +221,16 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		suppress := step.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, inputEnv, a.Env, step.Env))
+			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, ctx.inputEnv, a.Env, step.Env))
 		}
 
 		isPipeSrc := step.Pipe && i < len(a.Steps)-1
 		if suppress {
-			if err := e.execStepSuppressed(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+			if err := e.execStepSuppressed(ctx, step, i, pipedInput, isPipeSrc); err != nil {
 				return err
 			}
 		} else {
-			if err := e.execStep(a, step, args, i, pipedInput, isPipeSrc, inputEnv); err != nil {
+			if err := e.execStep(ctx, step, i, pipedInput, isPipeSrc); err != nil {
 				return err
 			}
 		}
@@ -230,7 +245,8 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 // execFirstBlock runs a first: block — evaluates sub-step conditions in order and
 // executes only the first sub-step whose if: condition passes (or has no if:).
 // If no sub-step matches, the block is silently skipped.
-func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
+	a := ctx.automation
 	for j, sub := range step.First {
 		if sub.If != "" {
 			skip, err := e.evaluateCondition(sub.If)
@@ -242,9 +258,8 @@ func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step
 			}
 		}
 
-		// Found our match — execute this sub-step
 		if sub.ParentShell {
-			if err := e.execParentShell(a, sub, inputEnv); err != nil {
+			if err := e.execParentShell(ctx, sub); err != nil {
 				return fmt.Errorf("automation %q step[%d].first[%d]: %w", a.Name, index, j, err)
 			}
 			return nil
@@ -252,18 +267,15 @@ func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step
 
 		suppress := sub.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, inputEnv, a.Env, sub.Env))
+			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, ctx.inputEnv, a.Env, sub.Env))
 		}
 
 		if suppress {
-			return e.execStepSuppressed(a, sub, args, index, stdinOverride, capturePipe, inputEnv)
+			return e.execStepSuppressed(ctx, sub, index, stdinOverride, capturePipe)
 		}
-		return e.execStep(a, sub, args, index, stdinOverride, capturePipe, inputEnv)
+		return e.execStep(ctx, sub, index, stdinOverride, capturePipe)
 	}
 
-	// No sub-step matched — silently skip the entire first: block.
-	// If this block is a pipe source, set an empty buffer so downstream steps
-	// receive empty stdin rather than stale data.
 	if capturePipe {
 		e.lastPipeBuffer = &bytes.Buffer{}
 	}
@@ -272,18 +284,19 @@ func (e *Executor) execFirstBlock(a *automation.Automation, step automation.Step
 
 // execStepSuppressed runs a step with stdout and stderr suppressed (for silent: true steps).
 // Pipe capture still works so that downstream steps can receive data.
-func (e *Executor) execStepSuppressed(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+func (e *Executor) execStepSuppressed(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
 	origStdout, origStderr := e.Stdout, e.Stderr
 	if !capturePipe {
 		e.Stdout = io.Discard
 	}
 	e.Stderr = io.Discard
-	err := e.execStep(a, step, args, index, stdinOverride, capturePipe, inputEnv)
+	err := e.execStep(ctx, step, index, stdinOverride, capturePipe)
 	e.Stdout, e.Stderr = origStdout, origStderr
 	return err
 }
 
-func (e *Executor) execStep(a *automation.Automation, step automation.Step, args []string, index int, stdinOverride io.Reader, capturePipe bool, inputEnv []string) error {
+func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
+	a := ctx.automation
 	if step.Dir != "" {
 		if _, err := resolveStepDir(e.RepoRoot, step.Dir); err != nil {
 			return fmt.Errorf("automation %q step[%d]: %w", a.Name, index, err)
@@ -313,7 +326,7 @@ func (e *Executor) execStep(a *automation.Automation, step automation.Step, args
 		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
-	err := runner.Run(e.newRunContext(a, step, args, stdout, stdin, inputEnv))
+	err := runner.Run(e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv))
 	if !capturePipe {
 		e.recordOutput(outputCapture.String())
 	}
@@ -424,12 +437,12 @@ func (e *Executor) popCall() {
 
 // execParentShell writes a parent_shell step's command to the eval file
 // instead of executing it. The calling shell wrapper sources the file after PI exits.
-func (e *Executor) execParentShell(a *automation.Automation, step automation.Step, inputEnv []string) error {
+func (e *Executor) execParentShell(ctx *stepExecCtx, step automation.Step) error {
 	if e.ParentEvalFile == "" {
 		e.printer().Warn("  ⚠  parent_shell step skipped: not running inside a PI shell wrapper. Run 'pi shell' to install shell integration.\n")
 		return nil
 	}
-	e.printer().StepTrace("parent", expandTraceVars(step.Value, inputEnv, a.Env, step.Env))
+	e.printer().StepTrace("parent", expandTraceVars(step.Value, ctx.inputEnv, ctx.automation.Env, step.Env))
 	return AppendToParentEval(e.ParentEvalFile, step.Value)
 }
 
