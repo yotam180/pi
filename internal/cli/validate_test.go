@@ -10,6 +10,7 @@ import (
 
 	"github.com/vyper-tooling/pi/internal/automation"
 	"github.com/vyper-tooling/pi/internal/executor"
+	"github.com/vyper-tooling/pi/internal/validate"
 )
 
 func TestValidateHelp(t *testing.T) {
@@ -927,11 +928,11 @@ bash: echo hello
 
 func TestCheckWithInputs_NoWith(t *testing.T) {
 	a := &automation.Automation{Name: "test"}
-	msgs := checkWithInputs(nil, a)
+	msgs := validate.CheckWithInputs(nil, a)
 	if len(msgs) != 0 {
 		t.Errorf("expected no errors for nil with, got: %v", msgs)
 	}
-	msgs = checkWithInputs(map[string]string{}, a)
+	msgs = validate.CheckWithInputs(map[string]string{}, a)
 	if len(msgs) != 0 {
 		t.Errorf("expected no errors for empty with, got: %v", msgs)
 	}
@@ -943,7 +944,7 @@ func TestCheckWithInputs_AllValid(t *testing.T) {
 		Inputs:    map[string]automation.InputSpec{"version": {}, "arch": {}},
 		InputKeys: []string{"version", "arch"},
 	}
-	msgs := checkWithInputs(map[string]string{"version": "3.13", "arch": "arm64"}, a)
+	msgs := validate.CheckWithInputs(map[string]string{"version": "3.13", "arch": "arm64"}, a)
 	if len(msgs) != 0 {
 		t.Errorf("expected no errors, got: %v", msgs)
 	}
@@ -955,7 +956,7 @@ func TestCheckWithInputs_UnknownKey(t *testing.T) {
 		Inputs:    map[string]automation.InputSpec{"version": {}},
 		InputKeys: []string{"version"},
 	}
-	msgs := checkWithInputs(map[string]string{"vrsion": "3.13"}, a)
+	msgs := validate.CheckWithInputs(map[string]string{"vrsion": "3.13"}, a)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(msgs), msgs)
 	}
@@ -969,7 +970,7 @@ func TestCheckWithInputs_UnknownKey(t *testing.T) {
 
 func TestCheckWithInputs_NoInputsOnTarget(t *testing.T) {
 	a := &automation.Automation{Name: "hello"}
-	msgs := checkWithInputs(map[string]string{"name": "world"}, a)
+	msgs := validate.CheckWithInputs(map[string]string{"name": "world"}, a)
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(msgs), msgs)
 	}
@@ -984,7 +985,7 @@ func TestCheckWithInputs_MultipleUnknownSorted(t *testing.T) {
 		Inputs:    map[string]automation.InputSpec{"version": {}},
 		InputKeys: []string{"version"},
 	}
-	msgs := checkWithInputs(map[string]string{"platform": "linux", "arch": "arm64"}, a)
+	msgs := validate.CheckWithInputs(map[string]string{"platform": "linux", "arch": "arm64"}, a)
 	if len(msgs) != 2 {
 		t.Fatalf("expected 2 errors, got %d: %v", len(msgs), msgs)
 	}
@@ -1237,7 +1238,7 @@ func TestDetectCycles_NoCycles(t *testing.T) {
 		"b": {"c"},
 		"c": nil,
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 0 {
 		t.Errorf("expected no cycles, got: %v", cycles)
 	}
@@ -1248,7 +1249,7 @@ func TestDetectCycles_DirectCycle(t *testing.T) {
 		"a": {"b"},
 		"b": {"a"},
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 1 {
 		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
 	}
@@ -1262,7 +1263,7 @@ func TestDetectCycles_SelfLoop(t *testing.T) {
 	graph := map[string][]string{
 		"x": {"x"},
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 1 {
 		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
 	}
@@ -1277,7 +1278,7 @@ func TestDetectCycles_ThreeNodeCycle(t *testing.T) {
 		"b": {"c"},
 		"c": {"a"},
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 1 {
 		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
 	}
@@ -1290,7 +1291,7 @@ func TestDetectCycles_DiamondNoCycle(t *testing.T) {
 		"right":  {"bottom"},
 		"bottom": nil,
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 0 {
 		t.Errorf("diamond should have no cycles, got: %v", cycles)
 	}
@@ -1303,7 +1304,7 @@ func TestDetectCycles_MultipleCycles(t *testing.T) {
 		"c": {"d"},
 		"d": {"c"},
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 2 {
 		t.Fatalf("expected 2 cycles, got %d: %v", len(cycles), cycles)
 	}
@@ -1315,22 +1316,22 @@ func TestDetectCycles_DisconnectedGraphWithCycle(t *testing.T) {
 		"b":      {"a"},
 		"island": nil,
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 1 {
 		t.Fatalf("expected 1 cycle (island should not affect detection), got %d: %v", len(cycles), cycles)
 	}
 }
 
 func TestNormalizeCycleKey_Rotation(t *testing.T) {
-	k1 := normalizeCycleKey([]string{"b", "c", "a", "b"})
-	k2 := normalizeCycleKey([]string{"a", "b", "c", "a"})
+	k1 := validate.NormalizeCycleKey([]string{"b", "c", "a", "b"})
+	k2 := validate.NormalizeCycleKey([]string{"a", "b", "c", "a"})
 	if k1 != k2 {
 		t.Errorf("rotated cycles should normalize to same key: %q vs %q", k1, k2)
 	}
 }
 
 func TestNormalizeCycleKey_SelfLoop(t *testing.T) {
-	key := normalizeCycleKey([]string{"x", "x"})
+	key := validate.NormalizeCycleKey([]string{"x", "x"})
 	if key != "x" {
 		t.Errorf("self-loop key = %q, want %q", key, "x")
 	}
@@ -1341,7 +1342,7 @@ func TestBuildRunGraph_SkipsBrokenRefs(t *testing.T) {
 		"a": {"b"},
 		"b": nil,
 	}
-	cycles := detectCycles(graph)
+	cycles := validate.DetectCycles(graph)
 	if len(cycles) != 0 {
 		t.Errorf("expected no cycles for valid graph, got: %v", cycles)
 	}
