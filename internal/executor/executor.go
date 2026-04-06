@@ -41,6 +41,11 @@ type Executor struct {
 	// overriding per-step silent: true flags.
 	Loud bool
 
+	// DryRun prints what steps would be executed without actually running them.
+	// Conditions are evaluated, run: targets are resolved and recursed into,
+	// but no subprocess commands or side effects occur.
+	DryRun bool
+
 	// callStack tracks the chain of automation names currently being executed,
 	// used to detect circular run: dependencies.
 	callStack []string
@@ -158,6 +163,10 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 			return &ExitError{Code: 1}
 		}
 		return err
+	}
+
+	if e.DryRun {
+		return e.dryRunAutomation(a, args, inputEnv)
 	}
 
 	if a.IsGoFunc() {

@@ -390,8 +390,9 @@ pi-setup-myproject
 
 Automations that install tools use the `install:` block instead of `steps:`. The two are mutually exclusive. The `install:` block explicitly declares a test-run-verify lifecycle, and PI manages all status output.
 
+**Scalar form** — each phase is a single string that executes as a **bash** command:
+
 ```yaml
-# Scalar shorthand for simple installs
 description: Install Homebrew (macOS only)
 if: os.macos
 
@@ -401,8 +402,9 @@ install:
   version: brew --version | head -1 | awk '{print $2}'
 ```
 
+**Step-list form** — each phase is a list of typed steps (bash, python, etc.), supporting `if:`, `first:`, and all other step features:
+
 ```yaml
-# Step list with first: block for conditional install paths
 description: Install Python at a specific version
 
 inputs:
@@ -434,6 +436,8 @@ PI prints one status line per installer:
 ```
 
 When `verify:` is omitted, PI re-runs `test:` as verification after `run:` completes. Use `--silent` to suppress status lines.
+
+The `version:` field is always a bash command (scalar only). Scalar install phases (`test:`, `run:`, `verify:`) execute as bash — use the step-list form when you need Python, TypeScript, or multi-step logic.
 
 ### Conditional Steps (`if:`)
 
@@ -799,6 +803,7 @@ Automation-level `env:` also supports these references, resolved once when the a
 | `pi run --repo <path> <name>`           | Run an automation with explicit project root             |
 | `pi run --silent <name>`                | Suppress PI status lines for installer automations       |
 | `pi run --loud <name>`                  | Force all steps to print trace lines and output          |
+| `pi run --dry-run <name>`               | Show what steps would be executed without running them    |
 | `pi info <name>`                        | Show name, description, and input docs for an automation |
 | `pi setup`                    | Run all setup automations, then install shell shortcuts  |
 | `pi setup --no-shell`         | Run setup automations without installing shortcuts       |

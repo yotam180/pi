@@ -14,6 +14,7 @@ func newRunCmd() *cobra.Command {
 	var withFlags []string
 	var silent bool
 	var loud bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "run <automation> [args...]",
@@ -38,7 +39,8 @@ Forwarded arguments work as follows:
 Use --repo to specify the project root explicitly (used by "anywhere" shortcuts).
 Use --with key=value to pass named inputs (repeatable).
 Use --silent to suppress PI status lines for installer automations.
-Use --loud to force trace lines and output for all steps (overrides silent: true).`,
+Use --loud to force trace lines and output for all steps (overrides silent: true).
+Use --dry-run to show what steps would be executed without running them.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			startDir := repoFlag
@@ -55,7 +57,7 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 				return err
 			}
 
-			return runAutomation(startDir, args[0], args[1:], withArgs, silent, loud, os.Stdout, os.Stderr)
+			return runAutomation(startDir, args[0], args[1:], withArgs, silent, loud, dryRun, os.Stdout, os.Stderr)
 		},
 	}
 
@@ -64,6 +66,7 @@ Use --loud to force trace lines and output for all steps (overrides silent: true
 	cmd.Flags().StringArrayVar(&withFlags, "with", nil, "pass named input as key=value (repeatable)")
 	cmd.Flags().BoolVar(&silent, "silent", false, "suppress PI status lines for installer automations")
 	cmd.Flags().BoolVar(&loud, "loud", false, "force trace lines and output for all steps (overrides silent: true)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what steps would be executed without running them")
 	cmd.ValidArgsFunction = automationCompleter()
 
 	return cmd
@@ -86,7 +89,7 @@ func parseWithFlags(flags []string) (map[string]string, error) {
 }
 
 // runAutomation resolves and executes an automation. Extracted for testability.
-func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent, loud bool, stdout, stderr io.Writer) error {
+func runAutomation(startDir, name string, args []string, withArgs map[string]string, silent, loud, dryRun bool, stdout, stderr io.Writer) error {
 	pc, err := resolveProject(startDir)
 	if err != nil {
 		return err
@@ -107,6 +110,7 @@ func runAutomation(startDir, name string, args []string, withArgs map[string]str
 		Stderr: stderr,
 		Silent: silent,
 		Loud:   loud,
+		DryRun: dryRun,
 	})
 
 	return exec.RunWithInputs(a, args, withArgs)

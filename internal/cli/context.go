@@ -60,6 +60,7 @@ type ExecutorOpts struct {
 	Stderr io.Writer
 	Silent bool
 	Loud   bool
+	DryRun bool
 }
 
 // NewExecutor builds an Executor from the project context and discovery result.
@@ -82,6 +83,7 @@ func (pc *ProjectContext) NewExecutor(result *discovery.Result, opts ExecutorOpt
 		Stderr:         stderr,
 		Silent:         opts.Silent,
 		Loud:           opts.Loud,
+		DryRun:         opts.DryRun,
 		ParentEvalFile: os.Getenv("PI_PARENT_EVAL_FILE"),
 	}
 

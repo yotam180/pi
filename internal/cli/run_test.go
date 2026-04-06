@@ -54,7 +54,7 @@ steps:
 
 func TestRunAutomation_Success(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "hello", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestRunAutomation_Success(t *testing.T) {
 
 func TestRunAutomation_NestedName(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "docker/up", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "docker/up", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRunAutomation_NestedName(t *testing.T) {
 
 func TestRunAutomation_NotFound(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "nonexistent", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "nonexistent", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error for unknown automation")
 	}
@@ -84,7 +84,7 @@ func TestRunAutomation_NotFound(t *testing.T) {
 
 func TestRunAutomation_ExitCode(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "fail", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "fail", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error for failed step")
 	}
@@ -99,7 +99,7 @@ func TestRunAutomation_ExitCode(t *testing.T) {
 
 func TestRunAutomation_WithArgs(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "args", []string{"foo", "bar"}, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "args", []string{"foo", "bar"}, nil, false, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestRunAutomation_WithArgs(t *testing.T) {
 
 func TestRunAutomation_RunStep(t *testing.T) {
 	root := setupRunWorkspace(t)
-	err := runAutomation(root, "chain", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "chain", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestRunAutomation_FromSubdirectory(t *testing.T) {
 	sub := filepath.Join(root, "src", "deep")
 	os.MkdirAll(sub, 0o755)
 
-	err := runAutomation(sub, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(sub, "hello", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestRunAutomation_FromSubdirectory(t *testing.T) {
 
 func TestRunAutomation_NoPiYaml(t *testing.T) {
 	dir := t.TempDir()
-	err := runAutomation(dir, "hello", nil, nil, false, false, os.Stdout, os.Stderr)
+	err := runAutomation(dir, "hello", nil, nil, false, false, false, os.Stdout, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error when no pi.yaml found")
 	}
@@ -151,7 +151,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "greet", nil, map[string]string{"name": "alice"}, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "greet", nil, map[string]string{"name": "alice"}, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +171,7 @@ bash: echo "args=$PI_ARGS"
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "build", []string{"--release", "--verbose"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "build", []string{"--release", "--verbose"}, nil, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -196,7 +196,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "greet", []string{"alice", "--extra", "stuff"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "greet", []string{"alice", "--extra", "stuff"}, nil, false, false, false, &buf, os.Stderr)
 	if err == nil {
 		t.Fatal("expected error for excess positional args")
 	}
@@ -223,7 +223,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "deploy", []string{"prod", "eu-west-1"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "deploy", []string{"prod", "eu-west-1"}, nil, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -251,7 +251,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "deploy", []string{"staging"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "deploy", []string{"staging"}, nil, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -271,7 +271,7 @@ bash: echo "args=$PI_ARGS"
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "build", []string{"--release", "--target=linux"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "build", []string{"--release", "--target=linux"}, nil, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -296,7 +296,7 @@ steps:
 `), 0o644)
 
 	var buf strings.Builder
-	err := runAutomation(root, "build", []string{"release"}, nil, false, false, &buf, os.Stderr)
+	err := runAutomation(root, "build", []string{"release"}, nil, false, false, false, &buf, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -316,7 +316,7 @@ bash: echo "args=$PI_ARGS"
 `), 0o644)
 
 	var stdout strings.Builder
-	err := runAutomation(root, "build", []string{"--silent", "--loud"}, nil, false, false, &stdout, os.Stderr)
+	err := runAutomation(root, "build", []string{"--silent", "--loud"}, nil, false, false, false, &stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestRunCmd_PiFlagsBeforeAutomation(t *testing.T) {
 bash: echo "running"
 `), 0o644)
 
-	err := runAutomation(root, "build", nil, nil, true, false, os.Stdout, os.Stderr)
+	err := runAutomation(root, "build", nil, nil, true, false, false, os.Stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -364,7 +364,7 @@ bash: echo "args=$PI_ARGS"
 `), 0o644)
 
 	var stdout strings.Builder
-	err := runAutomation(root, "build", []string{"--release"}, nil, false, false, &stdout, os.Stderr)
+	err := runAutomation(root, "build", []string{"--release"}, nil, false, false, false, &stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -389,13 +389,48 @@ steps:
 `), 0o644)
 
 	var stdout strings.Builder
-	err := runAutomation(root, "greet", nil, map[string]string{"name": "world"}, false, false, &stdout, os.Stderr)
+	err := runAutomation(root, "greet", nil, map[string]string{"name": "world"}, false, false, false, &stdout, os.Stderr)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	got := strings.TrimSpace(stdout.String())
 	if got != "hello world" {
 		t.Errorf("expected --with to pass input, got: %q", got)
+	}
+}
+
+func TestRunAutomation_DryRun(t *testing.T) {
+	root := setupRunWorkspace(t)
+	var stdout, stderr strings.Builder
+	err := runAutomation(root, "chain", nil, nil, false, false, true, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// stdout should be empty (no commands executed)
+	if got := stdout.String(); got != "" {
+		t.Errorf("dry-run should produce no stdout, got: %q", got)
+	}
+
+	// stderr should show the run: step and the target's bash step
+	got := stderr.String()
+	if !strings.Contains(got, "run") {
+		t.Errorf("expected 'run' in dry-run output, got: %q", got)
+	}
+	if !strings.Contains(got, "echo hello world") {
+		t.Errorf("expected target step in dry-run output, got: %q", got)
+	}
+}
+
+func TestRunAutomation_DryRunDoesNotExecute(t *testing.T) {
+	root := setupRunWorkspace(t)
+	var stdout strings.Builder
+	err := runAutomation(root, "fail", nil, nil, false, false, true, &stdout, &strings.Builder{})
+	if err != nil {
+		t.Fatalf("dry-run should not fail even for 'exit 42' automation: %v", err)
+	}
+	if got := stdout.String(); got != "" {
+		t.Errorf("dry-run should produce no stdout, got: %q", got)
 	}
 }
 
