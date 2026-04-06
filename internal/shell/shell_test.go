@@ -115,7 +115,7 @@ func TestGenerateShellFile_Sorted(t *testing.T) {
 
 func TestGenerateFunction_Default(t *testing.T) {
 	sc := config.Shortcut{Run: "docker/up"}
-	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo")
+	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo", DefaultDialect())
 
 	if !strings.Contains(fn, "function dup()") {
 		t.Errorf("expected function dup(), got:\n%s", fn)
@@ -139,7 +139,7 @@ func TestGenerateFunction_Default(t *testing.T) {
 
 func TestGenerateFunction_Anywhere(t *testing.T) {
 	sc := config.Shortcut{Run: "deploy/push", Anywhere: true}
-	fn := generateFunction("deploy", sc, "/usr/local/bin/pi", "/home/dev/repo")
+	fn := generateFunction("deploy", sc, "/usr/local/bin/pi", "/home/dev/repo", DefaultDialect())
 
 	if !strings.Contains(fn, "function deploy()") {
 		t.Errorf("expected function deploy(), got:\n%s", fn)
@@ -551,7 +551,7 @@ func TestListInstalled_ExcludesWrapper(t *testing.T) {
 
 func TestGenerateFunction_EvalInsideSubshell(t *testing.T) {
 	sc := config.Shortcut{Run: "docker/up"}
-	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo")
+	fn := generateFunction("dup", sc, "/usr/local/bin/pi", "/home/dev/repo", DefaultDialect())
 
 	// PI_PARENT_EVAL_FILE must be inside the subshell, not prefixing it.
 	// Correct: (cd "/path" && PI_PARENT_EVAL_FILE="$_pi_eval_file" /usr/local/bin/pi ...)
@@ -669,7 +669,7 @@ func TestGenerateFunction_WithInputs_EvalInsideSubshell(t *testing.T) {
 		Run:  "docker/logs",
 		With: map[string]string{"service": "$1"},
 	}
-	fn := generateFunction("dlogs", sc, "/usr/local/bin/pi", "/home/dev/repo")
+	fn := generateFunction("dlogs", sc, "/usr/local/bin/pi", "/home/dev/repo", DefaultDialect())
 
 	if strings.Contains(fn, `PI_PARENT_EVAL_FILE="$_pi_eval_file" (cd`) {
 		t.Errorf("PI_PARENT_EVAL_FILE must be inside the subshell, not outside:\n%s", fn)
