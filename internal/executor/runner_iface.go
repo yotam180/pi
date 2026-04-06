@@ -77,6 +77,16 @@ func (r *Registry) FileExtForStepType(stepType automation.StepType) string {
 	return ""
 }
 
+// StepTypeSupportsParentShell reports whether the runner registered for
+// stepType has the SupportsParentShell capability flag set.
+func (r *Registry) StepTypeSupportsParentShell(stepType automation.StepType) bool {
+	runner := r.runners[stepType]
+	if sr, ok := runner.(*SubprocessRunner); ok {
+		return sr.Config.SupportsParentShell
+	}
+	return false
+}
+
 // NewDefaultRegistry creates a registry with all built-in step runners.
 func NewDefaultRegistry() *Registry {
 	r := NewRegistry()

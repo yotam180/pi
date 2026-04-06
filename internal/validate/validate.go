@@ -131,6 +131,7 @@ func DefaultRunner() *Runner {
 	r.Register(CheckFunc{CheckName: "conditions", Fn: checkConditions})
 	r.Register(CheckFunc{CheckName: "unknown-fields", Fn: checkUnknownFields})
 	r.Register(CheckFunc{CheckName: "unknown-pi-yaml-fields", Fn: checkPiYamlUnknownFields})
+	r.Register(CheckFunc{CheckName: "parent-shell-capability", Fn: checkParentShellCapability})
 	r.RegisterWarn(WarnCheckFunc{CheckName: "missing-description", Fn: warnMissingDescription})
 	r.RegisterWarn(WarnCheckFunc{CheckName: "unused-automations", Fn: warnUnusedAutomations})
 	r.RegisterWarn(WarnCheckFunc{CheckName: "shortcut-shadowing", Fn: warnShortcutShadowing})
@@ -294,6 +295,24 @@ func checkConditions(ctx *Context) []string {
 					errs = append(errs,
 						fmt.Sprintf("%s if: %s", loc.FormatPath(a.Name), err))
 				}
+			}
+		})
+	}
+	return errs
+}
+
+func checkParentShellCapability(ctx *Context) []string {
+	reg := executor.NewDefaultRegistry()
+	var errs []string
+	for _, name := range ctx.Discovery.Names() {
+		a := ctx.Discovery.Automations[name]
+		automation.WalkSteps(a, func(step automation.Step, loc automation.StepLocation) {
+			if !step.ParentShell {
+				return
+			}
+			if !reg.StepTypeSupportsParentShell(step.Type) {
+				errs = append(errs,
+					fmt.Sprintf("%s: step type %q does not support parent_shell", loc.FormatPath(a.Name), step.Type))
 			}
 		})
 	}

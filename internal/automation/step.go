@@ -154,9 +154,6 @@ func (sr *stepRaw) toStep(index int, warnWriter io.Writer) (Step, error) {
 		step.With = sr.With
 	}
 	if sr.ParentShell {
-		if s.t != StepTypeBash {
-			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' is only valid on 'bash' steps", index)
-		}
 		if pipe {
 			return Step{}, fmt.Errorf("step[%d]: 'parent_shell' cannot be combined with 'pipe'", index)
 		}

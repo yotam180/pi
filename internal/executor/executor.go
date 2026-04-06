@@ -428,6 +428,9 @@ func (e *Executor) popCall() {
 // execParentShell writes a parent_shell step's command to the eval file
 // instead of executing it. The calling shell wrapper sources the file after PI exits.
 func (e *Executor) execParentShell(ctx *stepExecCtx, step automation.Step) error {
+	if !e.registry().StepTypeSupportsParentShell(step.Type) {
+		return fmt.Errorf("step type %q does not support parent_shell", step.Type)
+	}
 	if e.ParentEvalFile == "" {
 		e.printer().Warn("  ⚠  parent_shell step skipped: not running inside a PI shell wrapper. Run 'pi shell' to install shell integration.\n")
 		return nil

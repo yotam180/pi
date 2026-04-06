@@ -806,23 +806,26 @@ steps:
 	}
 }
 
-func TestLoad_ParentShellOnNonBashStep_Error(t *testing.T) {
+func TestLoad_ParentShellOnNonBashStep_ParsesSuccessfully(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFile(t, dir, "bad.yaml", `
 name: bad-parent-shell
-description: Invalid parent_shell on python
+description: parent_shell on python parses ok — caught at validate/execution time
 
 steps:
   - python: print("hello")
     parent_shell: true
 `)
 
-	_, err := Load(path, nil)
-	if err == nil {
-		t.Fatal("expected error for parent_shell on non-bash step")
+	a, err := Load(path, nil)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "parent_shell") {
-		t.Errorf("error should mention parent_shell, got: %v", err)
+	if !a.Steps[0].ParentShell {
+		t.Error("expected parent_shell to be true")
+	}
+	if a.Steps[0].Type != StepTypePython {
+		t.Errorf("step type = %q, want python", a.Steps[0].Type)
 	}
 }
 

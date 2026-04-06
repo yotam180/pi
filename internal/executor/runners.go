@@ -46,6 +46,10 @@ type SubprocessConfig struct {
 	// step values are treated as inline scripts.
 	FileExt string
 
+	// SupportsParentShell indicates that steps of this type may use parent_shell: true.
+	// Only set for runners whose output can be eval-ed by the calling shell.
+	SupportsParentShell bool
+
 	// Language is the human-readable name for error messages (e.g. "bash", "python").
 	Language string
 }
@@ -129,9 +133,10 @@ func resolvePythonBin() string {
 // NewBashRunner creates a SubprocessRunner configured for bash steps.
 func NewBashRunner() *SubprocessRunner {
 	return &SubprocessRunner{Config: SubprocessConfig{
-		Binary:   "bash",
-		Language: "bash",
-		FileExt:  ".sh",
+		Binary:              "bash",
+		Language:            "bash",
+		FileExt:             ".sh",
+		SupportsParentShell: true,
 		InlineArgs: func(script string) []string {
 			return []string{"-c", script, "--"}
 		},

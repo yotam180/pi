@@ -185,3 +185,66 @@ func TestAppendToParentEval(t *testing.T) {
 		t.Errorf("eval file content = %q, want %q", string(data), expected)
 	}
 }
+
+func TestParentShell_PythonStep_Rejected(t *testing.T) {
+	dir := t.TempDir()
+	evalFile := filepath.Join(dir, "eval.sh")
+
+	step := automation.Step{
+		Type:        automation.StepTypePython,
+		Value:       "print('hello')",
+		ParentShell: true,
+	}
+	a := newAutomation("test", step)
+
+	exec := newExecutor(dir, newDiscovery(nil))
+	exec.ParentEvalFile = evalFile
+
+	err := exec.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error for parent_shell on python step")
+	}
+	if !strings.Contains(err.Error(), "does not support parent_shell") {
+		t.Errorf("error = %q, want mention of 'does not support parent_shell'", err.Error())
+	}
+}
+
+func TestParentShell_TypeScriptStep_Rejected(t *testing.T) {
+	dir := t.TempDir()
+	evalFile := filepath.Join(dir, "eval.sh")
+
+	step := automation.Step{
+		Type:        automation.StepTypeTypeScript,
+		Value:       "console.log('hi')",
+		ParentShell: true,
+	}
+	a := newAutomation("test", step)
+
+	exec := newExecutor(dir, newDiscovery(nil))
+	exec.ParentEvalFile = evalFile
+
+	err := exec.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error for parent_shell on typescript step")
+	}
+	if !strings.Contains(err.Error(), "does not support parent_shell") {
+		t.Errorf("error = %q, want mention of 'does not support parent_shell'", err.Error())
+	}
+}
+
+func TestRegistry_SupportsParentShell(t *testing.T) {
+	reg := NewDefaultRegistry()
+
+	if !reg.StepTypeSupportsParentShell(automation.StepTypeBash) {
+		t.Error("bash should support parent_shell")
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypePython) {
+		t.Error("python should not support parent_shell")
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypeTypeScript) {
+		t.Error("typescript should not support parent_shell")
+	}
+	if reg.StepTypeSupportsParentShell(automation.StepTypeRun) {
+		t.Error("run should not support parent_shell")
+	}
+}

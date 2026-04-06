@@ -121,10 +121,10 @@ func TestRunner_ChecksRunInOrder(t *testing.T) {
 	}
 }
 
-func TestDefaultRunner_Has11Checks(t *testing.T) {
+func TestDefaultRunner_Has12Checks(t *testing.T) {
 	r := DefaultRunner()
-	if r.Checks() != 11 {
-		t.Errorf("DefaultRunner should have 11 checks, got %d", r.Checks())
+	if r.Checks() != 12 {
+		t.Errorf("DefaultRunner should have 12 checks, got %d", r.Checks())
 	}
 }
 
@@ -953,5 +953,113 @@ func TestCheck_FileReferences_ExistingFile(t *testing.T) {
 	errs := checkFileReferences(ctx)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got: %v", errs)
+	}
+}
+
+// --- parent_shell capability checks ---
+
+func TestCheck_ParentShellCapability_BashStep_NoError(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"activate": {
+				Name: "activate",
+				Steps: []automation.Step{
+					{Type: automation.StepTypeBash, Value: "source venv/bin/activate", ParentShell: true},
+				},
+			},
+		},
+	)
+	errs := checkParentShellCapability(ctx)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for bash parent_shell, got: %v", errs)
+	}
+}
+
+func TestCheck_ParentShellCapability_PythonStep_Error(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"bad": {
+				Name: "bad",
+				Steps: []automation.Step{
+					{Type: automation.StepTypePython, Value: "print('hello')", ParentShell: true},
+				},
+			},
+		},
+	)
+	errs := checkParentShellCapability(ctx)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0], "does not support parent_shell") {
+		t.Errorf("error = %q, want mention of 'does not support parent_shell'", errs[0])
+	}
+	if !strings.Contains(errs[0], "python") {
+		t.Errorf("error = %q, want mention of 'python'", errs[0])
+	}
+}
+
+func TestCheck_ParentShellCapability_TypeScriptStep_Error(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"bad": {
+				Name: "bad",
+				Steps: []automation.Step{
+					{Type: automation.StepTypeTypeScript, Value: "console.log('hi')", ParentShell: true},
+				},
+			},
+		},
+	)
+	errs := checkParentShellCapability(ctx)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0], "does not support parent_shell") {
+		t.Errorf("error = %q, want mention of 'does not support parent_shell'", errs[0])
+	}
+}
+
+func TestCheck_ParentShellCapability_NoParentShell_NoError(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"normal": {
+				Name: "normal",
+				Steps: []automation.Step{
+					{Type: automation.StepTypePython, Value: "print('hello')"},
+				},
+			},
+		},
+	)
+	errs := checkParentShellCapability(ctx)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for step without parent_shell, got: %v", errs)
+	}
+}
+
+func TestCheck_ParentShellCapability_InsideFirstBlock(t *testing.T) {
+	ctx := newTestContext(t,
+		&config.ProjectConfig{Project: "test"},
+		map[string]*automation.Automation{
+			"bad-first": {
+				Name: "bad-first",
+				Steps: []automation.Step{
+					{
+						First: []automation.Step{
+							{Type: automation.StepTypePython, Value: "print('hello')", ParentShell: true},
+						},
+					},
+				},
+			},
+		},
+	)
+	errs := checkParentShellCapability(ctx)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for parent_shell inside first: block, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0], "does not support parent_shell") {
+		t.Errorf("error = %q, want mention of 'does not support parent_shell'", errs[0])
 	}
 }
