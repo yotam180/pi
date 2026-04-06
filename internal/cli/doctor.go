@@ -9,6 +9,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
+	"github.com/vyper-tooling/pi/internal/reqcheck"
 )
 
 func newDoctorCmd() *cobra.Command {
@@ -65,7 +66,7 @@ func runDoctor(startDir string, out io.Writer) error {
 		anyPrinted = true
 
 		for _, req := range a.Requires {
-			check := executor.CheckRequirementForDoctor(req, env)
+			check := reqcheck.CheckRequirementForDoctor(req, env)
 			if check.Satisfied {
 				label := formatDoctorLabel(req)
 				if check.DetectedVersion != "" {
@@ -75,7 +76,7 @@ func runDoctor(startDir string, out io.Writer) error {
 				}
 			} else {
 				label := formatDoctorLabel(req)
-				hint := executor.InstallHintFor(req)
+				hint := reqcheck.InstallHintFor(req)
 				if hint != "" {
 					p.Red("    ✗ %-25s %s → %s\n", label, check.Error, hint)
 				} else {
