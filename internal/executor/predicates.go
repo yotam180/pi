@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/vyper-tooling/pi/internal/conditions"
 )
 
 // RuntimeEnv captures the runtime values needed for predicate resolution.
@@ -133,4 +135,68 @@ func resolveSingle(name string, repoRoot string, env *RuntimeEnv) (bool, error) 
 			"file.exists(\"<path>\"), dir.exists(\"<path>\"), shell.zsh, shell.bash",
 		name,
 	)
+}
+
+// knownExactPredicates lists predicates that must match exactly.
+var knownExactPredicates = map[string]bool{
+	"os.macos":      true,
+	"os.linux":      true,
+	"os.windows":    true,
+	"os.arch.arm64": true,
+	"os.arch.amd64": true,
+	"shell.zsh":     true,
+	"shell.bash":    true,
+}
+
+// ValidatePredicateName checks whether a predicate name is statically valid
+// without resolving its runtime value. This enables pi validate to catch
+// typos like "os.macoss" at validation time instead of at execution time.
+func ValidatePredicateName(name string) error {
+	if knownExactPredicates[name] {
+		return nil
+	}
+
+	if strings.HasPrefix(name, "env.") {
+		if name[len("env."):] == "" {
+			return fmt.Errorf("invalid predicate %q: env variable name is empty", name)
+		}
+		return nil
+	}
+
+	if strings.HasPrefix(name, "command.") {
+		if name[len("command."):] == "" {
+			return fmt.Errorf("invalid predicate %q: command name is empty", name)
+		}
+		return nil
+	}
+
+	if strings.HasPrefix(name, "file.exists(\"") && strings.HasSuffix(name, "\")") {
+		return nil
+	}
+
+	if strings.HasPrefix(name, "dir.exists(\"") && strings.HasSuffix(name, "\")") {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"unknown predicate %q; valid predicates: os.macos, os.linux, os.windows, "+
+			"os.arch.arm64, os.arch.amd64, env.<NAME>, command.<name>, "+
+			"file.exists(\"<path>\"), dir.exists(\"<path>\"), shell.zsh, shell.bash",
+		name,
+	)
+}
+
+// ValidateConditionExpr statically validates an if: expression by parsing it
+// and checking that all predicate names are recognized. Returns nil if valid.
+func ValidateConditionExpr(expr string) error {
+	preds, err := conditions.Predicates(expr)
+	if err != nil {
+		return err
+	}
+	for _, pred := range preds {
+		if err := ValidatePredicateName(pred); err != nil {
+			return err
+		}
+	}
+	return nil
 }

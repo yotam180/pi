@@ -364,6 +364,119 @@ func TestResolvePredicatesIntegration(t *testing.T) {
 	}
 }
 
+func TestValidatePredicateName(t *testing.T) {
+	valid := []string{
+		"os.macos",
+		"os.linux",
+		"os.windows",
+		"os.arch.arm64",
+		"os.arch.amd64",
+		"shell.zsh",
+		"shell.bash",
+		"env.HOME",
+		"env.CI",
+		"env.MY_CUSTOM_VAR",
+		"command.docker",
+		"command.brew",
+		"command.git",
+		`file.exists(".env")`,
+		`file.exists("config/settings.yaml")`,
+		`dir.exists("src")`,
+		`dir.exists("vendor/cache")`,
+	}
+	for _, name := range valid {
+		t.Run("valid_"+name, func(t *testing.T) {
+			if err := ValidatePredicateName(name); err != nil {
+				t.Errorf("expected valid, got error: %v", err)
+			}
+		})
+	}
+
+	invalid := []struct {
+		name    string
+		wantMsg string
+	}{
+		{"os.macoss", "unknown predicate"},
+		{"os.freebsd", "unknown predicate"},
+		{"os.arch.mips", "unknown predicate"},
+		{"bogus.thing", "unknown predicate"},
+		{"env.", "env variable name is empty"},
+		{"command.", "command name is empty"},
+		{"shell.fish", "unknown predicate"},
+		{"whatisthis", "unknown predicate"},
+	}
+	for _, tc := range invalid {
+		t.Run("invalid_"+tc.name, func(t *testing.T) {
+			err := ValidatePredicateName(tc.name)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !contains(err.Error(), tc.wantMsg) {
+				t.Errorf("expected error to contain %q, got: %v", tc.wantMsg, err)
+			}
+		})
+	}
+}
+
+func TestValidateConditionExpr(t *testing.T) {
+	t.Run("valid_simple", func(t *testing.T) {
+		if err := ValidateConditionExpr("os.macos"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_compound", func(t *testing.T) {
+		if err := ValidateConditionExpr("os.macos and not command.jq"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_complex", func(t *testing.T) {
+		if err := ValidateConditionExpr("(os.linux or os.macos) and command.docker"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_file_exists", func(t *testing.T) {
+		if err := ValidateConditionExpr(`file.exists(".env")`); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid_empty", func(t *testing.T) {
+		if err := ValidateConditionExpr(""); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("syntax_error", func(t *testing.T) {
+		err := ValidateConditionExpr("os.macos and and os.linux")
+		if err == nil {
+			t.Fatal("expected error for syntax error")
+		}
+	})
+
+	t.Run("unknown_predicate", func(t *testing.T) {
+		err := ValidateConditionExpr("os.macoss")
+		if err == nil {
+			t.Fatal("expected error for unknown predicate")
+		}
+		if !contains(err.Error(), "unknown predicate") {
+			t.Errorf("expected error to mention 'unknown predicate', got: %v", err)
+		}
+	})
+
+	t.Run("unknown_in_compound", func(t *testing.T) {
+		err := ValidateConditionExpr("os.macos and bogus.thing")
+		if err == nil {
+			t.Fatal("expected error for unknown predicate in compound expression")
+		}
+		if !contains(err.Error(), "unknown predicate") {
+			t.Errorf("expected error to mention 'unknown predicate', got: %v", err)
+		}
+	})
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && containsStr(s, substr)
 }

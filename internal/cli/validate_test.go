@@ -1346,3 +1346,248 @@ func TestBuildRunGraph_SkipsBrokenRefs(t *testing.T) {
 		t.Errorf("expected no cycles for valid graph, got: %v", cycles)
 	}
 }
+
+// --- Condition validation tests ---
+
+func TestValidate_ValidConditions(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Build with conditions
+if: os.macos
+steps:
+  - bash: echo step1
+    if: command.docker
+  - bash: echo step2
+    if: os.linux or os.macos
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("expected no error for valid conditions, got: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_ConditionSyntaxErrorCaughtAtLoadTime(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Broken syntax
+steps:
+  - bash: echo hello
+    if: os.macos and and os.linux
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for syntax error in if: condition")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "invalid if expression") {
+		t.Errorf("expected error to mention 'invalid if expression', got: %s", errOut)
+	}
+}
+
+func TestValidate_UnknownPredicateInCondition(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Unknown predicate
+steps:
+  - bash: echo hello
+    if: os.macoss
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown predicate")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "unknown predicate") {
+		t.Errorf("expected error to mention 'unknown predicate', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "os.macoss") {
+		t.Errorf("expected error to mention the bad predicate name, got: %s", errOut)
+	}
+}
+
+func TestValidate_UnknownPredicateOnAutomation(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Bad automation-level condition
+if: os.freebsd
+bash: echo hello
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown predicate on automation-level if:")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "unknown predicate") {
+		t.Errorf("expected error to mention 'unknown predicate', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "os.freebsd") {
+		t.Errorf("expected error to mention 'os.freebsd', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "build") {
+		t.Errorf("expected error to mention automation name 'build', got: %s", errOut)
+	}
+}
+
+func TestValidate_ConditionInFirstBlock(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: First block with bad condition
+steps:
+  - first:
+      - bash: echo one
+        if: command.mise
+      - bash: echo two
+        if: bogus.pred
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown predicate in first: block")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "unknown predicate") {
+		t.Errorf("expected error to mention 'unknown predicate', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "bogus.pred") {
+		t.Errorf("expected error to mention 'bogus.pred', got: %s", errOut)
+	}
+}
+
+func TestValidate_DynamicPredicatesPass(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Dynamic predicates
+steps:
+  - bash: echo step1
+    if: command.docker
+  - bash: echo step2
+    if: env.CI
+  - bash: echo step3
+    if: "file.exists(\".env\")"
+  - bash: echo step4
+    if: "dir.exists(\"src\")"
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("expected no error for dynamic predicates, got: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
+func TestValidate_MultipleConditionErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Multiple bad conditions
+if: os.bsd
+steps:
+  - bash: echo one
+    if: shell.fish
+  - bash: echo two
+    if: os.macoss
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected errors for multiple bad conditions")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "os.bsd") {
+		t.Errorf("expected error to mention 'os.bsd', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "shell.fish") {
+		t.Errorf("expected error to mention 'shell.fish', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "os.macoss") {
+		t.Errorf("expected error to mention 'os.macoss', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "3 error(s)") {
+		t.Errorf("expected 3 errors, got: %s", errOut)
+	}
+}
+
+func TestValidate_ConditionInInstallPhase(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "install-tool.yaml"), []byte(`description: Install tool
+install:
+  test: command -v tool
+  run:
+    - first:
+        - bash: mise install tool
+          if: command.mise
+        - bash: brew install tool
+          if: os.macoss
+  version: tool --version
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for unknown predicate in install phase")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "unknown predicate") {
+		t.Errorf("expected error to mention 'unknown predicate', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "os.macoss") {
+		t.Errorf("expected error to mention 'os.macoss', got: %s", errOut)
+	}
+}
+
+func TestValidate_ConditionWithOtherErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  bad: nonexistent
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "build.yaml"), []byte(`description: Bad condition and broken ref
+steps:
+  - bash: echo hello
+    if: os.macoss
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected errors")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "nonexistent") {
+		t.Errorf("expected broken ref error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "os.macoss") {
+		t.Errorf("expected condition error, got: %s", errOut)
+	}
+}

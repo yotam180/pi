@@ -34,6 +34,7 @@ Checks performed:
   - with: keys on setup entries match target automation's declared inputs
   - with: keys on run: steps match target automation's declared inputs
   - Circular run: step dependencies (A → B → A)
+  - if: conditions are syntactically valid with known predicates
 
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -102,6 +103,7 @@ func validateProject(root string) ValidationResult {
 	validateSetupInputs(cfg, disc, &result)
 	validateRunStepInputs(disc, &result)
 	validateCircularDeps(disc, &result)
+	validateConditions(disc, &result)
 
 	return result
 }
@@ -347,6 +349,32 @@ func normalizeCycleKey(cycle []string) string {
 		rotated[i] = ring[(minIdx+i)%len(ring)]
 	}
 	return strings.Join(rotated, "→")
+}
+
+// validateConditions checks that all if: expressions on automations, steps,
+// first: sub-steps, and install phases are syntactically valid and use
+// recognized predicate names. Setup entry if: conditions are already validated
+// by config.Load() so they are not re-checked here.
+func validateConditions(disc *discovery.Result, result *ValidationResult) {
+	for _, name := range disc.Names() {
+		a := disc.Automations[name]
+
+		if a.If != "" {
+			if err := executor.ValidateConditionExpr(a.If); err != nil {
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("%s if: %s", name, err))
+			}
+		}
+
+		automation.WalkSteps(a, func(step automation.Step, loc automation.StepLocation) {
+			if step.If != "" {
+				if err := executor.ValidateConditionExpr(step.If); err != nil {
+					result.Errors = append(result.Errors,
+						fmt.Sprintf("%s if: %s", loc.FormatPath(a.Name), err))
+				}
+			}
+		})
+	}
 }
 
 // checkWithInputs validates that with: keys match the target automation's
