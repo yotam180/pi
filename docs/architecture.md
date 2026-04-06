@@ -1071,7 +1071,7 @@ Makefile                               build, vet, test, test-matrix targets
 
 Unit tests per package using `testing` and `t.TempDir()` fixtures. Integration tests in `tests/integration/` build the `pi` binary and run it against `examples/` workspaces using `exec.Command`.
 
-Total tests: 1743 (189 automation [177 base + 12 walker] + 142 builtins + 32 cache + 261 CLI [includes 6 completion, 12 init, 21 setup add, 20 info, 67 validate] + 30 conditions + 67 config + 42 display + 55 discovery [46 base + 9 suggest] + 305 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 57 semver + 40 shell + 52 validate + 277 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate])
+Total tests: 1756+ (189 automation [177 base + 12 walker] + 142 builtins + 32 cache + 261 CLI [includes 6 completion, 12 init, 21 setup add, 20 info, 67 validate] + 30 conditions + 67 config + 42 display + 55 discovery [46 base + 9 suggest] + 305 executor [across 16 test files] + 4 project + 46 refparser + 16 runtimes + 57 semver + 40 shell + 52 validate + 290 integration [includes 8 completion, 8 init, 17 setup add, 8 info, 11 validate, 13 outputs, 5 dry-run])
 
 ### Runtime skip guards
 Tests that require specific runtimes use `requirePython(t)`, `requireNode(t)`, or `requireTsx(t)` helpers that call `t.Skip()` when the runtime isn't in PATH. This allows the full test suite to run on any environment — tests naturally skip rather than fail when their runtime is unavailable.
@@ -1107,6 +1107,7 @@ tests/integration/
   setup_add_test.go               17 tests — pi setup add: bare string, short-form resolution, if flag, idempotent duplicate, key=value args, no pi.yaml auto-init, local automation, multiple adds, no args, pi: prefix expansion, replace same run target, replace preserves position, preserves existing content, invoke before writing, invoke failure, only-add skips execution, not found without only-add
   basic_test.go                   9 tests — basic example: list, greet, greet with args, build/compile, deploy (run chaining), not-found, not-found did-you-mean, not-found no-suggestions, from subdirectory
   docker_test.go                  6 tests — docker-project example: list, up, down, logs, logs with args, build-and-up (ordering)
+  dry_run_test.go                 5 tests — dry-run mode: shows steps without executing, run step recurses, conditional skips show reason, first: block shows match info, installer shows lifecycle
   pipe_test.go                    3 tests — pipe example: list, upper (bash pipe), count-lines (bash→python pipe)
   version_test.go                 3 tests — version: --version flag, version subcommand, flag and subcommand match
   inputs_test.go                  9 tests — inputs: positional args, both args, --with flags, defaults, missing required, unknown input, run step with with, info env var prefix, list INPUTS column
@@ -1129,6 +1130,7 @@ tests/integration/
   packages_test.go                11 tests — packages: list (SOURCE column), list --all (grouped sections), run local, run package automation, run via alias, run utils, info, validate, setup fetches packages, local shadows package
   completion_test.go              8 tests — completion: bash/zsh/fish output, no arg error, works without pi.yaml, shell install creates completion file, dynamic run/info completion, builtin exclusion
   on_demand_test.go               6 tests — on-demand fetch: file: ref never on-demand, GitHub ref undeclared shows advisory, declared package no advisory, cached package silent, file: missing path clear error, advisory to stderr
+  outputs_test.go                 13 tests — outputs interpolation: outputs.last in with, outputs.last in env, indexed outputs, inputs in with, inputs in env, automation-level env with inputs, mixed literals+interpolation, pipe captures output for indexed access, three-step chain, list, validate, info, dry-run
   polyglot_test.go                Polyglot runner tests (Python inline/file, TypeScript inline/file, multi-step pipe chains)
   shell_test.go                   Shell shortcut tests (install, uninstall, list, --repo, setup integration, --no-shell, conditional entries)
 ```

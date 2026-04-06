@@ -1,0 +1,9 @@
+description: Access step outputs by index
+
+steps:
+  - bash: echo "first-output"
+  - bash: echo "second-output"
+  - bash: echo "step0=$STEP0 step1=$STEP1"
+    env:
+      STEP0: outputs.0
+      STEP1: outputs.1

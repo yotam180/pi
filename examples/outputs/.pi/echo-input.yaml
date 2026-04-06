@@ -1,0 +1,8 @@
+description: Echo a message from input
+
+inputs:
+  message:
+    type: string
+    required: true
+
+bash: echo "received=$PI_IN_MESSAGE"

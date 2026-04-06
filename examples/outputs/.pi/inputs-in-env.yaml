@@ -1,0 +1,10 @@
+description: Forward own input to step env
+
+inputs:
+  tag:
+    type: string
+    required: true
+
+bash: echo "tag=$MY_TAG"
+env:
+  MY_TAG: inputs.tag

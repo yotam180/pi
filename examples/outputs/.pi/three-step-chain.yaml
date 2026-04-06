@@ -1,0 +1,10 @@
+description: Three-step chain where each step uses the previous output
+
+steps:
+  - bash: echo "alpha"
+  - bash: echo "${PREV}-beta"
+    env:
+      PREV: outputs.last
+  - bash: echo "${PREV}-gamma"
+    env:
+      PREV: outputs.last

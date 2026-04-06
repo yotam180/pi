@@ -1,0 +1,7 @@
+description: Step 1 captures output, step 2 passes it via with to a sub-automation
+
+steps:
+  - bash: echo "captured-value"
+  - run: echo-input
+    with:
+      message: outputs.last

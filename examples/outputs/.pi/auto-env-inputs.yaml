@@ -1,0 +1,13 @@
+description: Automation-level env references input values
+
+inputs:
+  version:
+    type: string
+    required: true
+
+env:
+  BUILD_VERSION: inputs.version
+
+steps:
+  - bash: echo "building=$BUILD_VERSION"
+  - bash: echo "still=$BUILD_VERSION"

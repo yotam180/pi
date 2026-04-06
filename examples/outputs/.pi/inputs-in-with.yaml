@@ -1,0 +1,10 @@
+description: Forward own input to sub-automation via with
+
+inputs:
+  msg:
+    type: string
+    required: true
+
+run: echo-input
+with:
+  message: inputs.msg

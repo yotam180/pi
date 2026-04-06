@@ -1,0 +1,9 @@
+description: Pipe captures output that is also available via outputs.last
+
+steps:
+  - bash: echo "piped-data"
+    pipe: true
+  - bash: cat
+  - bash: echo "last=$LAST"
+    env:
+      LAST: outputs.1

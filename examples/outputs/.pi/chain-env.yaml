@@ -1,0 +1,7 @@
+description: Step 1 output is used in step 2 env
+
+steps:
+  - bash: echo "env-value-42"
+  - bash: echo "from_env=$CAPTURED"
+    env:
+      CAPTURED: outputs.last
