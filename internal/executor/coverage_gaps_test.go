@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/interpolation"
+	"github.com/vyper-tooling/pi/internal/reqcheck"
 )
 
 // --- ResolveWith via interpolation package (formerly executor wrappers) ---
@@ -549,7 +551,7 @@ func TestResolvePythonBin_WithVenv(t *testing.T) {
 
 func TestInstallHintFor_Known(t *testing.T) {
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
-	got := InstallHintFor(req)
+	got := reqcheck.InstallHintFor(req)
 	if got == "" {
 		t.Error("InstallHintFor(python) should return a hint")
 	}
@@ -557,7 +559,7 @@ func TestInstallHintFor_Known(t *testing.T) {
 
 func TestInstallHintFor_Unknown(t *testing.T) {
 	req := automation.Requirement{Name: "unknown-tool-xyz", Kind: automation.RequirementCommand}
-	got := InstallHintFor(req)
+	got := reqcheck.InstallHintFor(req)
 	if got != "" {
 		t.Errorf("InstallHintFor(unknown) = %q, want empty", got)
 	}
@@ -566,9 +568,9 @@ func TestInstallHintFor_Unknown(t *testing.T) {
 // --- ValidationError formatting ---
 
 func TestFormatValidationError_WithHint(t *testing.T) {
-	ve := &ValidationError{
+	ve := &reqcheck.ValidationError{
 		AutomationName: "build",
-		Results: []CheckResult{
+		Results: []reqcheck.CheckResult{
 			{
 				Requirement: automation.Requirement{Name: "python", Kind: automation.RequirementRuntime},
 				Satisfied:   false,
@@ -576,7 +578,7 @@ func TestFormatValidationError_WithHint(t *testing.T) {
 			},
 		},
 	}
-	got := FormatValidationError(ve)
+	got := reqcheck.FormatValidationError(ve)
 	if !strings.Contains(got, "python") {
 		t.Errorf("should contain requirement name, got: %q", got)
 	}
@@ -586,9 +588,9 @@ func TestFormatValidationError_WithHint(t *testing.T) {
 }
 
 func TestFormatValidationError_WithoutHint(t *testing.T) {
-	ve := &ValidationError{
+	ve := &reqcheck.ValidationError{
 		AutomationName: "build",
-		Results: []CheckResult{
+		Results: []reqcheck.CheckResult{
 			{
 				Requirement: automation.Requirement{Name: "obscure-tool", Kind: automation.RequirementCommand},
 				Satisfied:   false,
@@ -596,16 +598,16 @@ func TestFormatValidationError_WithoutHint(t *testing.T) {
 			},
 		},
 	}
-	got := FormatValidationError(ve)
+	got := reqcheck.FormatValidationError(ve)
 	if strings.Contains(got, "install:") {
 		t.Errorf("should not contain install hint for unknown tool, got: %q", got)
 	}
 }
 
 func TestFormatValidationError_SkipsSatisfied(t *testing.T) {
-	ve := &ValidationError{
+	ve := &reqcheck.ValidationError{
 		AutomationName: "build",
-		Results: []CheckResult{
+		Results: []reqcheck.CheckResult{
 			{
 				Requirement: automation.Requirement{Name: "bash", Kind: automation.RequirementCommand},
 				Satisfied:   true,
@@ -617,7 +619,7 @@ func TestFormatValidationError_SkipsSatisfied(t *testing.T) {
 			},
 		},
 	}
-	got := FormatValidationError(ve)
+	got := reqcheck.FormatValidationError(ve)
 	if strings.Contains(got, "bash") {
 		t.Errorf("should not include satisfied requirements, got: %q", got)
 	}
@@ -627,55 +629,55 @@ func TestFormatValidationError_SkipsSatisfied(t *testing.T) {
 
 func TestFormatRequirementLabel_WithVersion(t *testing.T) {
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
-	got := formatRequirementLabel(req)
+	got := reqcheck.FormatRequirementLabel(req)
 	if got != "python >= 3.11" {
-		t.Errorf("formatRequirementLabel = %q, want %q", got, "python >= 3.11")
+		t.Errorf("FormatRequirementLabel = %q, want %q", got, "python >= 3.11")
 	}
 }
 
 func TestFormatRequirementLabel_CommandNoVersion(t *testing.T) {
 	req := automation.Requirement{Name: "jq", Kind: automation.RequirementCommand}
-	got := formatRequirementLabel(req)
+	got := reqcheck.FormatRequirementLabel(req)
 	if got != "command: jq" {
-		t.Errorf("formatRequirementLabel = %q, want %q", got, "command: jq")
+		t.Errorf("FormatRequirementLabel = %q, want %q", got, "command: jq")
 	}
 }
 
 func TestFormatRequirementLabel_RuntimeNoVersion(t *testing.T) {
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
-	got := formatRequirementLabel(req)
+	got := reqcheck.FormatRequirementLabel(req)
 	if got != "python" {
-		t.Errorf("formatRequirementLabel = %q, want %q", got, "python")
+		t.Errorf("FormatRequirementLabel = %q, want %q", got, "python")
 	}
 }
 
 // --- runtimeCommand branches ---
 
 func TestRuntimeCommand_Python(t *testing.T) {
-	got := runtimeCommand("python")
+	got := reqcheck.RuntimeCommand("python")
 	if got != "python3" {
-		t.Errorf("runtimeCommand(python) = %q, want %q", got, "python3")
+		t.Errorf("RuntimeCommand(python) = %q, want %q", got, "python3")
 	}
 }
 
 func TestRuntimeCommand_Rust(t *testing.T) {
-	got := runtimeCommand("rust")
+	got := reqcheck.RuntimeCommand("rust")
 	if got != "rustc" {
-		t.Errorf("runtimeCommand(rust) = %q, want %q", got, "rustc")
+		t.Errorf("RuntimeCommand(rust) = %q, want %q", got, "rustc")
 	}
 }
 
 func TestRuntimeCommand_Default(t *testing.T) {
-	got := runtimeCommand("node")
+	got := reqcheck.RuntimeCommand("node")
 	if got != "node" {
-		t.Errorf("runtimeCommand(node) = %q, want %q", got, "node")
+		t.Errorf("RuntimeCommand(node) = %q, want %q", got, "node")
 	}
 }
 
 // --- detectVersion with mocked env ---
 
 func TestDetectVersion_MockedEnv_VersionFlag(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		GOOS:   "darwin",
 		GOARCH: "arm64",
 		Getenv: func(s string) string { return "" },
@@ -693,14 +695,14 @@ func TestDetectVersion_MockedEnv_VersionFlag(t *testing.T) {
 			return ""
 		},
 	}
-	got := detectVersion("mytool", env)
+	got := reqcheck.DetectVersion("mytool", env)
 	if got != "2.5.1" {
-		t.Errorf("detectVersion = %q, want %q", got, "2.5.1")
+		t.Errorf("DetectVersion = %q, want %q", got, "2.5.1")
 	}
 }
 
 func TestDetectVersion_MockedEnv_FallbackToVersionSubcommand(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		GOOS:   "darwin",
 		GOARCH: "arm64",
 		Getenv: func(s string) string { return "" },
@@ -718,9 +720,9 @@ func TestDetectVersion_MockedEnv_FallbackToVersionSubcommand(t *testing.T) {
 			return ""
 		},
 	}
-	got := detectVersion("go", env)
+	got := reqcheck.DetectVersion("go", env)
 	if got != "1.23.0" {
-		t.Errorf("detectVersion = %q, want %q", got, "1.23.0")
+		t.Errorf("DetectVersion = %q, want %q", got, "1.23.0")
 	}
 }
 
@@ -740,9 +742,9 @@ func TestExtractVersion_Various(t *testing.T) {
 		{"", ""},
 	}
 	for _, tt := range tests {
-		got := extractVersion(tt.input)
+		got := reqcheck.ExtractVersion(tt.input)
 		if got != tt.want {
-			t.Errorf("extractVersion(%q) = %q, want %q", tt.input, got, tt.want)
+			t.Errorf("ExtractVersion(%q) = %q, want %q", tt.input, got, tt.want)
 		}
 	}
 }
@@ -761,22 +763,22 @@ func TestCompareVersions_Various(t *testing.T) {
 		{"2.0", "1.0", 1},
 	}
 	for _, tt := range tests {
-		got, err := compareVersions(tt.a, tt.b)
+		got, err := reqcheck.CompareVersions(tt.a, tt.b)
 		if err != nil {
-			t.Fatalf("compareVersions(%q, %q) error: %v", tt.a, tt.b, err)
+			t.Fatalf("CompareVersions(%q, %q) error: %v", tt.a, tt.b, err)
 		}
 		if got != tt.want {
-			t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			t.Errorf("CompareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
 	}
 }
 
 func TestCompareVersions_ParseError(t *testing.T) {
-	_, err := compareVersions("abc", "1.0")
+	_, err := reqcheck.CompareVersions("abc", "1.0")
 	if err == nil {
 		t.Fatal("expected error for non-numeric version")
 	}
-	_, err = compareVersions("1.0", "abc")
+	_, err = reqcheck.CompareVersions("1.0", "abc")
 	if err == nil {
 		t.Fatal("expected error for non-numeric version")
 	}

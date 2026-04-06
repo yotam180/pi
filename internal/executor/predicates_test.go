@@ -5,13 +5,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/vyper-tooling/pi/internal/conditions"
 )
 
-// These are smoke tests verifying the executor's delegation to conditions package.
+// These are smoke tests verifying the conditions package integration.
 // Comprehensive predicate tests live in internal/conditions/evaluator_test.go.
 
-func TestDelegatedResolvePredicates(t *testing.T) {
-	env := &RuntimeEnv{
+func TestResolvePredicatesWithEnv(t *testing.T) {
+	env := &conditions.RuntimeEnv{
 		GOOS:   "darwin",
 		GOARCH: "arm64",
 		Getenv: func(key string) string {
@@ -30,7 +32,7 @@ func TestDelegatedResolvePredicates(t *testing.T) {
 	}
 
 	preds := []string{"os.macos", "os.arch.arm64", "shell.zsh", "command.docker"}
-	result, err := ResolvePredicatesWithEnv(preds, "/tmp", env)
+	result, err := conditions.ResolvePredicatesWithEnv(preds, "/tmp", env)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -41,8 +43,8 @@ func TestDelegatedResolvePredicates(t *testing.T) {
 	}
 }
 
-func TestDelegatedDefaultRuntimeEnv(t *testing.T) {
-	env := DefaultRuntimeEnv()
+func TestDefaultRuntimeEnv(t *testing.T) {
+	env := conditions.DefaultRuntimeEnv()
 	if env.GOOS == "" {
 		t.Error("GOOS should not be empty")
 	}
@@ -51,37 +53,37 @@ func TestDelegatedDefaultRuntimeEnv(t *testing.T) {
 	}
 }
 
-func TestDelegatedResolvePredicatesIntegration(t *testing.T) {
+func TestResolvePredicatesIntegration(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hi"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := ResolvePredicates(
+	result, err := conditions.ResolvePredicates(
 		[]string{`file.exists("test.txt")`}, dir,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !result[`file.exists("test.txt")`] {
-		t.Error("expected true from delegated ResolvePredicates")
+		t.Error("expected true from ResolvePredicates")
 	}
 }
 
-func TestDelegatedValidatePredicateName(t *testing.T) {
-	if err := ValidatePredicateName("os.macos"); err != nil {
+func TestValidatePredicateName(t *testing.T) {
+	if err := conditions.ValidatePredicateName("os.macos"); err != nil {
 		t.Errorf("expected valid: %v", err)
 	}
-	if err := ValidatePredicateName("os.macoss"); err == nil {
+	if err := conditions.ValidatePredicateName("os.macoss"); err == nil {
 		t.Error("expected error for typo")
 	}
 }
 
-func TestDelegatedValidateConditionExpr(t *testing.T) {
-	if err := ValidateConditionExpr("os.macos and command.docker"); err != nil {
+func TestValidateConditionExpr(t *testing.T) {
+	if err := conditions.ValidateConditionExpr("os.macos and command.docker"); err != nil {
 		t.Errorf("expected valid: %v", err)
 	}
-	if err := ValidateConditionExpr("bogus.thing"); err == nil {
+	if err := conditions.ValidateConditionExpr("bogus.thing"); err == nil {
 		t.Error("expected error for unknown predicate")
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/interpolation"
+	"github.com/vyper-tooling/pi/internal/reqcheck"
 	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
@@ -56,8 +57,8 @@ type Executor struct {
 	lastPipeBuffer *bytes.Buffer
 
 	// RuntimeEnv overrides the default runtime environment for predicate resolution.
-	// If nil, DefaultRuntimeEnv() is used.
-	RuntimeEnv *RuntimeEnv
+	// If nil, conditions.DefaultRuntimeEnv() is used.
+	RuntimeEnv *conditions.RuntimeEnv
 
 	// Provisioner handles sandboxed runtime provisioning. If nil, no provisioning
 	// is attempted — missing requirements produce errors as before.
@@ -165,9 +166,9 @@ func (e *Executor) runWithContext(ctx context.Context, a *automation.Automation,
 	}
 
 	if err := e.ValidateRequirements(a); err != nil {
-		var ve *ValidationError
+		var ve *reqcheck.ValidationError
 		if errors.As(err, &ve) {
-			fmt.Fprint(e.stderr(), FormatValidationError(ve))
+			fmt.Fprint(e.stderr(), reqcheck.FormatValidationError(ve))
 			return &ExitError{Code: 1}
 		}
 		return err

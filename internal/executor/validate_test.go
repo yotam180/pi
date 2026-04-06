@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
+	"github.com/vyper-tooling/pi/internal/reqcheck"
 	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
@@ -35,9 +37,9 @@ func TestExtractVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got := extractVersion(tt.input)
+			got := reqcheck.ExtractVersion(tt.input)
 			if got != tt.want {
-				t.Errorf("extractVersion(%q) = %q, want %q", tt.input, got, tt.want)
+				t.Errorf("ExtractVersion(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -65,24 +67,24 @@ func TestCompareVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_vs_%s", tt.a, tt.b), func(t *testing.T) {
-			got, err := compareVersions(tt.a, tt.b)
+			got, err := reqcheck.CompareVersions(tt.a, tt.b)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if got != tt.want {
-				t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+				t.Errorf("CompareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestCompareVersions_Invalid(t *testing.T) {
-	_, err := compareVersions("abc", "1.0")
+	_, err := reqcheck.CompareVersions("abc", "1.0")
 	if err == nil {
 		t.Fatal("expected error for non-numeric version")
 	}
 
-	_, err = compareVersions("1.0", "abc")
+	_, err = reqcheck.CompareVersions("1.0", "abc")
 	if err == nil {
 		t.Fatal("expected error for non-numeric version")
 	}
@@ -99,14 +101,14 @@ func TestRuntimeCommand(t *testing.T) {
 		{"go", "go"},
 	}
 	for _, tt := range tests {
-		if got := runtimeCommand(tt.name); got != tt.want {
-			t.Errorf("runtimeCommand(%q) = %q, want %q", tt.name, got, tt.want)
+		if got := reqcheck.RuntimeCommand(tt.name); got != tt.want {
+			t.Errorf("RuntimeCommand(%q) = %q, want %q", tt.name, got, tt.want)
 		}
 	}
 }
 
-func mockEnv(lookPath map[string]bool, versionOutput map[string]string) *RuntimeEnv {
-	return &RuntimeEnv{
+func mockEnv(lookPath map[string]bool, versionOutput map[string]string) *conditions.RuntimeEnv {
+	return &conditions.RuntimeEnv{
 		GOOS:   "darwin",
 		GOARCH: "arm64",
 		Getenv: func(s string) string { return "" },
@@ -134,7 +136,7 @@ func TestCheckRequirement_CommandFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "docker", Kind: automation.RequirementCommand}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -147,7 +149,7 @@ func TestCheckRequirement_CommandNotFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied for missing command")
@@ -163,7 +165,7 @@ func TestCheckRequirement_RuntimeFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -176,7 +178,7 @@ func TestCheckRequirement_RuntimeNotFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied for missing runtime")
@@ -192,7 +194,7 @@ func TestCheckRequirement_VersionSatisfied(t *testing.T) {
 		map[string]string{"python3": "Python 3.13.0"},
 	)
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -208,7 +210,7 @@ func TestCheckRequirement_VersionTooLow(t *testing.T) {
 		map[string]string{"python3": "Python 3.9.7"},
 	)
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied for version too low")
@@ -224,7 +226,7 @@ func TestCheckRequirement_RustRuntimeFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -237,7 +239,7 @@ func TestCheckRequirement_RustRuntimeNotFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied for missing rust runtime")
@@ -253,7 +255,7 @@ func TestCheckRequirement_RustVersionSatisfied(t *testing.T) {
 		map[string]string{"rustc": "rustc 1.80.0 (051478957 2024-07-21)"},
 	)
 	req := automation.Requirement{Name: "rust", Kind: automation.RequirementRuntime, MinVersion: "1.75"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -269,7 +271,7 @@ func TestCheckRequirement_GoRuntimeFound(t *testing.T) {
 		nil,
 	)
 	req := automation.Requirement{Name: "go", Kind: automation.RequirementRuntime}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -282,7 +284,7 @@ func TestCheckRequirement_GoVersionSatisfied(t *testing.T) {
 		map[string]string{"go": "go version go1.23.0 darwin/arm64"},
 	)
 	req := automation.Requirement{Name: "go", Kind: automation.RequirementRuntime, MinVersion: "1.22"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -298,7 +300,7 @@ func TestCheckRequirement_CommandWithVersion(t *testing.T) {
 		map[string]string{"kubectl": "kubectl v1.28.3"},
 	)
 	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand, MinVersion: "1.28"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if !result.Satisfied {
 		t.Errorf("expected satisfied, got error: %s", result.Error)
@@ -311,7 +313,7 @@ func TestCheckRequirement_CommandVersionTooLow(t *testing.T) {
 		map[string]string{"kubectl": "kubectl v1.27.0"},
 	)
 	req := automation.Requirement{Name: "kubectl", Kind: automation.RequirementCommand, MinVersion: "1.28"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied for version too low")
@@ -324,7 +326,7 @@ func TestCheckRequirement_VersionUndetectable(t *testing.T) {
 		map[string]string{"sometool": "no version info here"},
 	)
 	req := automation.Requirement{Name: "sometool", Kind: automation.RequirementCommand, MinVersion: "1.0"}
-	result := checkRequirement(req, env)
+	result := reqcheck.CheckRequirement(req, env)
 
 	if result.Satisfied {
 		t.Error("expected not satisfied when version is undetectable")
@@ -395,9 +397,9 @@ func TestValidateRequirements_SomeMissing(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 
-	var ve *ValidationError
+	var ve *reqcheck.ValidationError
 	if !errors.As(err, &ve) {
-		t.Fatalf("expected *ValidationError, got %T", err)
+		t.Fatalf("expected *reqcheck.ValidationError, got %T", err)
 	}
 
 	if len(ve.Results) != 2 {
@@ -434,9 +436,9 @@ func TestValidateRequirements_NoRequirements(t *testing.T) {
 }
 
 func TestFormatValidationError(t *testing.T) {
-	ve := &ValidationError{
+	ve := &reqcheck.ValidationError{
 		AutomationName: "format-logs",
-		Results: []CheckResult{
+		Results: []reqcheck.CheckResult{
 			{
 				Requirement:     automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"},
 				Satisfied:       false,
@@ -451,7 +453,7 @@ func TestFormatValidationError(t *testing.T) {
 		},
 	}
 
-	output := FormatValidationError(ve)
+	output := reqcheck.FormatValidationError(ve)
 
 	if !strings.Contains(output, "✗ pi run format-logs") {
 		t.Errorf("output should contain automation name, got:\n%s", output)
@@ -493,12 +495,12 @@ func TestInstallHint(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := automation.Requirement{Name: tt.name}
-			got := installHint(req)
+			got := reqcheck.InstallHintFor(req)
 			if tt.want != "" && !strings.Contains(got, tt.want) {
-				t.Errorf("installHint(%q) = %q, want to contain %q", tt.name, got, tt.want)
+				t.Errorf("InstallHintFor(%q) = %q, want to contain %q", tt.name, got, tt.want)
 			}
 			if tt.want == "" && got != "" {
-				t.Errorf("installHint(%q) = %q, want empty", tt.name, got)
+				t.Errorf("InstallHintFor(%q) = %q, want empty", tt.name, got)
 			}
 		})
 	}
@@ -613,7 +615,7 @@ func TestRunWithInputs_InstallerWithMissingRequirement(t *testing.T) {
 }
 
 func TestCheckRequirementForDoctor_DetectsVersionWithoutConstraint(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "/usr/bin/" + file, nil },
 		ExecOutput: func(cmd string, args ...string) string {
 			if cmd == "bash" {
@@ -624,7 +626,7 @@ func TestCheckRequirementForDoctor_DetectsVersionWithoutConstraint(t *testing.T)
 	}
 
 	req := automation.Requirement{Name: "bash", Kind: automation.RequirementCommand}
-	result := CheckRequirementForDoctor(req, env)
+	result := reqcheck.CheckRequirementForDoctor(req, env)
 
 	if !result.Satisfied {
 		t.Fatalf("expected satisfied, got error: %s", result.Error)
@@ -635,12 +637,12 @@ func TestCheckRequirementForDoctor_DetectsVersionWithoutConstraint(t *testing.T)
 }
 
 func TestCheckRequirementForDoctor_NotFound(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
 	}
 
 	req := automation.Requirement{Name: "missing", Kind: automation.RequirementCommand}
-	result := CheckRequirementForDoctor(req, env)
+	result := reqcheck.CheckRequirementForDoctor(req, env)
 
 	if result.Satisfied {
 		t.Fatal("expected not satisfied for missing command")
@@ -651,7 +653,7 @@ func TestCheckRequirementForDoctor_NotFound(t *testing.T) {
 }
 
 func TestCheckRequirementForDoctor_VersionConstraint(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "/usr/bin/" + file, nil },
 		ExecOutput: func(cmd string, args ...string) string {
 			return "Python 3.13.0"
@@ -659,7 +661,7 @@ func TestCheckRequirementForDoctor_VersionConstraint(t *testing.T) {
 	}
 
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime, MinVersion: "3.11"}
-	result := CheckRequirementForDoctor(req, env)
+	result := reqcheck.CheckRequirementForDoctor(req, env)
 
 	if !result.Satisfied {
 		t.Fatalf("expected satisfied, got error: %s", result.Error)
@@ -671,7 +673,7 @@ func TestCheckRequirementForDoctor_VersionConstraint(t *testing.T) {
 
 func TestInstallHintFor_KnownTool(t *testing.T) {
 	req := automation.Requirement{Name: "python", Kind: automation.RequirementRuntime}
-	hint := InstallHintFor(req)
+	hint := reqcheck.InstallHintFor(req)
 	if hint == "" {
 		t.Error("expected install hint for python")
 	}
@@ -679,7 +681,7 @@ func TestInstallHintFor_KnownTool(t *testing.T) {
 
 func TestInstallHintFor_UnknownTool(t *testing.T) {
 	req := automation.Requirement{Name: "unknown-tool-xyz", Kind: automation.RequirementCommand}
-	hint := InstallHintFor(req)
+	hint := reqcheck.InstallHintFor(req)
 	if hint != "" {
 		t.Errorf("expected empty hint for unknown tool, got %q", hint)
 	}
@@ -698,7 +700,7 @@ func TestValidateRequirements_WithProvisioner_RuntimeProvisioned(t *testing.T) {
 		Stderr:  &bytes.Buffer{},
 	}
 
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
 	}
 
@@ -740,7 +742,7 @@ func TestValidateRequirements_WithProvisioner_CommandNotProvisioned(t *testing.T
 		Stderr:  &bytes.Buffer{},
 	}
 
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
 	}
 
@@ -767,7 +769,7 @@ func TestValidateRequirements_WithProvisioner_CommandNotProvisioned(t *testing.T
 }
 
 func TestValidateRequirements_NoProvisioner_FallsThrough(t *testing.T) {
-	env := &RuntimeEnv{
+	env := &conditions.RuntimeEnv{
 		LookPath: func(file string) (string, error) { return "", fmt.Errorf("not found") },
 	}
 

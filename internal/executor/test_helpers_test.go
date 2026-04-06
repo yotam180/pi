@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
 )
 
@@ -80,7 +81,7 @@ func newExecutorWithCapture(repoRoot string, disc *discovery.Result) (*Executor,
 	}, stdout, stderr
 }
 
-func newExecutorWithEnv(repoRoot string, disc *discovery.Result, env *RuntimeEnv) (*Executor, *bytes.Buffer, *bytes.Buffer) {
+func newExecutorWithEnv(repoRoot string, disc *discovery.Result, env *conditions.RuntimeEnv) (*Executor, *bytes.Buffer, *bytes.Buffer) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	return &Executor{
@@ -92,8 +93,8 @@ func newExecutorWithEnv(repoRoot string, disc *discovery.Result, env *RuntimeEnv
 	}, stdout, stderr
 }
 
-func fakeRuntimeEnv(goos string) *RuntimeEnv {
-	return &RuntimeEnv{
+func fakeRuntimeEnv(goos string) *conditions.RuntimeEnv {
+	return &conditions.RuntimeEnv{
 		GOOS:     goos,
 		GOARCH:   "arm64",
 		Getenv:   func(s string) string { return "" },

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 )
 
 func TestExecInstall_AlreadyInstalled(t *testing.T) {
@@ -330,7 +331,7 @@ func TestExecInstall_StepListWithConditionals(t *testing.T) {
 		Discovery: newDiscovery(nil),
 		Stdout:    io.Discard,
 		Stderr:    &stderr,
-		RuntimeEnv: &RuntimeEnv{
+		RuntimeEnv: &conditions.RuntimeEnv{
 			GOOS:     "darwin",
 			GOARCH:   "arm64",
 			Getenv:   func(string) string { return "" },
@@ -412,7 +413,7 @@ func TestExecInstall_FirstBlockFailStderrSurfaced(t *testing.T) {
 		Discovery: newDiscovery(nil),
 		Stdout:    io.Discard,
 		Stderr:    &stderr,
-		RuntimeEnv: &RuntimeEnv{
+		RuntimeEnv: &conditions.RuntimeEnv{
 			GOOS:     "darwin",
 			GOARCH:   "arm64",
 			Getenv:   func(string) string { return "" },
@@ -518,7 +519,7 @@ func TestExecInstall_WithAutomationLevelIf(t *testing.T) {
 		Discovery: newDiscovery(nil),
 		Stdout:    io.Discard,
 		Stderr:    &stderr,
-		RuntimeEnv: &RuntimeEnv{
+		RuntimeEnv: &conditions.RuntimeEnv{
 			GOOS:     "darwin",
 			GOARCH:   "arm64",
 			Getenv:   func(string) string { return "" },
