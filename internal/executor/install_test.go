@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	osexec "os/exec"
@@ -606,7 +607,7 @@ func TestExecInstallFirstBlock_OutputCapturedInPhase(t *testing.T) {
 
 	e.Outputs.Reset()
 	ctx := &stepExecCtx{automation: a}
-	err := e.execInstallFirstBlock(ctx, steps[0], 0, io.Discard)
+	err := e.execInstallFirstBlock(context.Background(), ctx, steps[0], 0, io.Discard)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -635,7 +636,7 @@ func TestCaptureVersion_UsesRegistry(t *testing.T) {
 		Stderr:    io.Discard,
 	}
 
-	version := e.captureVersion(a, "echo 5.6.7", nil)
+	version := e.captureVersion(context.Background(), a, "echo 5.6.7", nil)
 	if version != "5.6.7" {
 		t.Errorf("expected '5.6.7', got %q", version)
 	}
@@ -650,7 +651,7 @@ func TestCaptureVersion_EmptyCommand(t *testing.T) {
 	}
 
 	a := newInstallerAutomation("test-tool", &automation.InstallSpec{})
-	version := e.captureVersion(a, "", nil)
+	version := e.captureVersion(context.Background(), a, "", nil)
 	if version != "" {
 		t.Errorf("expected empty string for empty version command, got %q", version)
 	}
@@ -665,7 +666,7 @@ func TestCaptureVersion_CommandFails(t *testing.T) {
 	}
 
 	a := newInstallerAutomation("test-tool", &automation.InstallSpec{})
-	version := e.captureVersion(a, "exit 1", nil)
+	version := e.captureVersion(context.Background(), a, "exit 1", nil)
 	if version != "" {
 		t.Errorf("expected empty string for failed version command, got %q", version)
 	}

@@ -176,14 +176,28 @@ func (r *RunStepRunner) Run(ctx *RunContext) error {
 		return fmt.Errorf("run step: %w", err)
 	}
 
+	runCtx := ctx.Ctx
+	if ctx.Step.Timeout > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(runCtx, ctx.Step.Timeout)
+		defer cancel()
+	}
+
+	var runErr error
 	if len(ctx.Step.With) > 0 {
 		with := ctx.Step.With
 		if ctx.InterpolateWith != nil {
 			with = ctx.InterpolateWith(with, ctx.InputEnv)
 		}
-		return ctx.RunAutomation(target, nil, with, ctx.Stdout, ctx.Stdin)
+		runErr = ctx.RunAutomation(runCtx, target, nil, with, ctx.Stdout, ctx.Stdin)
+	} else {
+		runErr = ctx.RunAutomation(runCtx, target, ctx.Args, nil, ctx.Stdout, ctx.Stdin)
 	}
-	return ctx.RunAutomation(target, ctx.Args, nil, ctx.Stdout, ctx.Stdin)
+
+	if runErr != nil && ctx.Step.Timeout > 0 && runCtx.Err() == context.DeadlineExceeded {
+		return &ExitError{Code: TimeoutExitCode}
+	}
+	return runErr
 }
 
 // TimeoutExitCode is the exit code returned when a step exceeds its timeout.
@@ -192,14 +206,23 @@ const TimeoutExitCode = 124
 
 // runStepCommand executes a command using the RunContext for directory, env, and I/O.
 // Non-zero exit codes are returned as *ExitError. Other exec failures are returned as-is.
-// When the step has a timeout, exec.CommandContext is used with a deadline.
+// When the step has a timeout on a subprocess step, exec.CommandContext is used with
+// a deadline. The parent context from RunContext.Ctx is always used as the base,
+// enabling cancellation from run: step timeouts.
 func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	var cmd *exec.Cmd
 
+	baseCtx := ctx.Ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+
 	if ctx.Step.Timeout > 0 {
-		deadline, cancel := context.WithTimeout(context.Background(), ctx.Step.Timeout)
+		deadline, cancel := context.WithTimeout(baseCtx, ctx.Step.Timeout)
 		defer cancel()
 		cmd = exec.CommandContext(deadline, bin, args...)
+	} else if baseCtx != context.Background() {
+		cmd = exec.CommandContext(baseCtx, bin, args...)
 	} else {
 		cmd = exec.Command(bin, args...)
 	}
@@ -219,10 +242,11 @@ func runStepCommand(bin string, args []string, ctx *RunContext) error {
 	cmd.Env = BuildStepEnv(ctx.RuntimePaths, ctx.InputEnv, autoEnv, stepEnv)
 
 	if err := cmd.Run(); err != nil {
-		if ctx.Step.Timeout > 0 && cmd.ProcessState != nil && !cmd.ProcessState.Exited() {
+		timedOut := ctx.Step.Timeout > 0 || (baseCtx != nil && baseCtx.Err() == context.DeadlineExceeded)
+		if timedOut && cmd.ProcessState != nil && !cmd.ProcessState.Exited() {
 			return &ExitError{Code: TimeoutExitCode}
 		}
-		if ctx.Step.Timeout > 0 && err.Error() == "signal: killed" {
+		if timedOut && err.Error() == "signal: killed" {
 			return &ExitError{Code: TimeoutExitCode}
 		}
 		var exitErr *exec.ExitError

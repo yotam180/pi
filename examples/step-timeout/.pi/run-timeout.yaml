@@ -1,0 +1,4 @@
+description: Call a slow target with a timeout
+steps:
+  - run: slow-target
+    timeout: 500ms

@@ -4,7 +4,7 @@
 research
 
 ## Status
-todo
+done
 
 ## Priority
 low
@@ -48,24 +48,26 @@ The restriction stays, but the error message is improved to explain *why* and su
 **Recommendation:** Implement Option A. The context plumbing for `RunWithInputs` is already partially in place (the executor has a `context.Background()` in `runStepCommand`). Promoting it to a shared cancellable context is achievable. The risk of partial state on timeout exists but is acceptable — it's the same risk as ctrl+C.
 
 ## Acceptance Criteria
-- [ ] Research document (this file updated with decision) is complete
-- [ ] If implementing: `timeout:` on `run:` steps works end-to-end with the same 124 exit code semantics
-- [ ] If not implementing: error message improved with actionable guidance
-- [ ] `go build ./...` and `go test ./...` pass
+- [x] Research document (this file updated with decision) is complete
+- [x] If implementing: `timeout:` on `run:` steps works end-to-end with the same 124 exit code semantics
+- [x] `go build ./...` and `go test ./...` pass
 
 ## Implementation Notes
 
-If implementing Option A, the plumbing path is:
-1. `executor/executor.go` — `RunWithInputs` accepts a `context.Context`
-2. `executor/runners.go` — `RunStepRunner.Run` passes `ctx.Context` to `RunAutomation`
-3. `executor/runners.go` — `runStepCommand` uses the context if non-nil instead of `context.Background()`
-4. `executor/runner_iface.go` — `RunContext` gains a `Context context.Context` field
-5. The step executor sets a deadline on the context when `step.Timeout > 0` and `step.Type == StepTypeRun`
+**Decision: Option A implemented** in task `context-propagation-and-run-timeout`.
+
+The implementation followed the plumbing path outlined below, with one key difference: instead of modifying the public `RunWithInputs()` signature, an internal `runWithContext()` method was added. This minimized the blast radius while achieving full context propagation.
+
+Implementation details:
+1. `executor/executor.go` — added `runWithContext(ctx, a, args, withArgs, stdout, stdin)` as internal entry point; `RunWithInputs()` delegates to it
+2. `executor/runners.go` — `RunStepRunner.Run()` wraps context with `context.WithTimeout` when step has `timeout:`; `runStepCommand()` uses `RunContext.Ctx` as base context
+3. `executor/runner_iface.go` — `RunContext` gained `Ctx context.Context` field; `RunAutomation` callback accepts `context.Context`
+4. `automation/step.go` — removed parse-time restriction on `timeout:` for `run:` steps
 
 ## Subtasks
-- [ ] Evaluate options, update implementation notes with decision
-- [ ] Implement chosen option
-- [ ] Write tests
-- [ ] Update docs
+- [x] Evaluate options, update implementation notes with decision
+- [x] Implement chosen option
+- [x] Write tests
+- [x] Update docs
 
 ## Blocked By

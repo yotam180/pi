@@ -1080,12 +1080,18 @@ steps:
     timeout: 30s
 `)
 
-	_, err := Load(path, nil)
-	if err == nil {
-		t.Fatal("expected error for timeout on run step")
+	a, err := Load(path, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "'timeout' is not valid on 'run' steps") {
-		t.Errorf("error = %q, expected to mention timeout not valid on run steps", err.Error())
+	if len(a.Steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(a.Steps))
+	}
+	if a.Steps[0].Timeout.Seconds() != 30 {
+		t.Errorf("timeout = %v, want 30s", a.Steps[0].Timeout)
+	}
+	if a.Steps[0].TimeoutRaw != "30s" {
+		t.Errorf("TimeoutRaw = %q, want %q", a.Steps[0].TimeoutRaw, "30s")
 	}
 }
 

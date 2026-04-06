@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"io"
 
 	"github.com/vyper-tooling/pi/internal/automation"
@@ -18,6 +19,7 @@ type StepRunner interface {
 // Runners should treat this as read-only except for stdout/stdin which
 // represent the step's I/O targets.
 type RunContext struct {
+	Ctx        context.Context
 	Automation *automation.Automation
 	Step       automation.Step
 	Args       []string
@@ -38,7 +40,7 @@ type RunContext struct {
 
 	// RunAutomation is the callback for run: steps to recursively execute
 	// another automation. The runner must not hold a reference to the Executor.
-	RunAutomation func(target *automation.Automation, args []string, withArgs map[string]string, stdout io.Writer, stdin io.Reader) error
+	RunAutomation func(ctx context.Context, target *automation.Automation, args []string, withArgs map[string]string, stdout io.Writer, stdin io.Reader) error
 
 	// InterpolateWith resolves outputs.last, outputs.<N>, and inputs.<name>
 	// references in with: values. Returns a new map with interpolated values.

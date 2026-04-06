@@ -312,9 +312,17 @@ steps:
 
 The value is a Go-style duration string (e.g., `30s`, `5m`, `1h30m`). Timeout must be positive — zero or negative values are rejected at parse time.
 
-Timeout works with all subprocess step types (`bash`, `python`, `typescript`). It cannot be used on `run:` steps (set timeouts on the target automation's own steps instead) or `parent_shell` steps (they don't execute as subprocesses).
+Timeout works with all step types: `bash`, `python`, `typescript`, and `run`. On `run:` steps, the timeout bounds the entire sub-automation execution — if the target automation exceeds the deadline, the currently running subprocess is killed and the `run:` step returns exit code 124. This is useful for bounding third-party builtins or package automations whose individual step timeouts you don't control. Timeout cannot be used on `parent_shell` steps (they don't execute as subprocesses).
 
-Timeout is compatible with all other step fields: `env:`, `dir:`, `silent:`, `if:`, and `pipe: true`. When a step with `if:` is skipped, no timeout applies. When a step with `silent: true` times out, the timeout error still propagates.
+```yaml
+steps:
+  - run: pi:install-python
+    timeout: 5m
+    with:
+      version: "3.13"
+```
+
+Timeout is compatible with all other step fields: `env:`, `dir:`, `silent:`, `if:`, `with:`, and `pipe: true`. When a step with `if:` is skipped, no timeout applies. When a step with `silent: true` times out, the timeout error still propagates.
 
 ### Step Trace Lines
 

@@ -1,0 +1,2 @@
+description: A target automation that takes a long time
+bash: sleep 30

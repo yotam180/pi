@@ -159,9 +159,6 @@ func (sr *stepRaw) toStep(index int, warnWriter io.Writer) (Step, error) {
 		}
 	}
 	if sr.Timeout != "" {
-		if s.t == StepTypeRun {
-			return Step{}, fmt.Errorf("step[%d]: 'timeout' is not valid on 'run' steps (set timeouts on the target automation's steps instead)", index)
-		}
 		if sr.ParentShell {
 			return Step{}, fmt.Errorf("step[%d]: 'timeout' cannot be combined with 'parent_shell'", index)
 		}

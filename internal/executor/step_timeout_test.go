@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/discovery"
 )
 
 func bashStepWithTimeout(value string, timeout time.Duration) automation.Step {
@@ -160,5 +161,163 @@ func TestStep_Timeout_MultipleSteps_OnlyTimedOutStepKilled(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "first") {
 		t.Error("first step should have completed before timeout")
+	}
+}
+
+func runStepWithTimeout(value string, timeout time.Duration) automation.Step {
+	return automation.Step{
+		Type:       automation.StepTypeRun,
+		Value:      value,
+		Timeout:    timeout,
+		TimeoutRaw: timeout.String(),
+	}
+}
+
+func TestStep_RunTimeout_Exceeded(t *testing.T) {
+	dir := t.TempDir()
+	target := newAutomation("slow-target", bashStep(`sleep 30`))
+
+	a := newAutomation("caller",
+		runStepWithTimeout("slow-target", 300*time.Millisecond),
+	)
+
+	disc := &discovery.Result{
+		Automations: map[string]*automation.Automation{
+			"slow-target": target,
+		},
+	}
+	exec, _, _ := newExecutorWithCapture(dir, disc)
+
+	start := time.Now()
+	err := exec.Run(a, nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error for timed-out run step")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != TimeoutExitCode {
+		t.Errorf("exit code = %d, want %d", exitErr.Code, TimeoutExitCode)
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("timeout took too long: %v (expected ~300ms)", elapsed)
+	}
+}
+
+func TestStep_RunTimeout_NotExceeded(t *testing.T) {
+	dir := t.TempDir()
+	target := newAutomation("fast-target", bashStep(`echo "target-done"`))
+
+	a := newAutomation("caller",
+		runStepWithTimeout("fast-target", 5*time.Second),
+	)
+
+	disc := &discovery.Result{
+		Automations: map[string]*automation.Automation{
+			"fast-target": target,
+		},
+	}
+	exec, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	err := exec.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "target-done") {
+		t.Errorf("output = %q, want to contain 'target-done'", stdout.String())
+	}
+}
+
+func TestStep_RunTimeout_StopsChain(t *testing.T) {
+	dir := t.TempDir()
+	target := newAutomation("slow-target", bashStep(`sleep 30`))
+
+	a := newAutomation("caller",
+		runStepWithTimeout("slow-target", 300*time.Millisecond),
+		bashStep(`echo "should not run"`),
+	)
+
+	disc := &discovery.Result{
+		Automations: map[string]*automation.Automation{
+			"slow-target": target,
+		},
+	}
+	exec, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	err := exec.Run(a, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if strings.Contains(stdout.String(), "should not run") {
+		t.Error("steps after timed-out run step should not execute")
+	}
+}
+
+func TestStep_RunTimeout_MultiStepTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := newAutomation("multi-step",
+		bashStep(`echo "step1"`),
+		bashStep(`sleep 30`),
+		bashStep(`echo "step3"`),
+	)
+
+	a := newAutomation("caller",
+		runStepWithTimeout("multi-step", 300*time.Millisecond),
+	)
+
+	disc := &discovery.Result{
+		Automations: map[string]*automation.Automation{
+			"multi-step": target,
+		},
+	}
+	exec, _, _ := newExecutorWithCapture(dir, disc)
+
+	start := time.Now()
+	err := exec.Run(a, nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error for timed-out run step")
+	}
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("expected *ExitError, got %T: %v", err, err)
+	}
+	if exitErr.Code != TimeoutExitCode {
+		t.Errorf("exit code = %d, want %d", exitErr.Code, TimeoutExitCode)
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("timeout took too long: %v", elapsed)
+	}
+}
+
+func TestStep_RunTimeout_WithWith(t *testing.T) {
+	dir := t.TempDir()
+	target := automationWithInputs("greet",
+		map[string]automation.InputSpec{"name": {Required: boolPtr(true)}},
+		[]string{"name"},
+		bashStep(`echo "hello $PI_IN_NAME"`),
+	)
+
+	step := runStepWithTimeout("greet", 5*time.Second)
+	step.With = map[string]string{"name": "world"}
+	a := newAutomation("caller", step)
+
+	disc := &discovery.Result{
+		Automations: map[string]*automation.Automation{
+			"greet": target,
+		},
+	}
+	exec, stdout, _ := newExecutorWithCapture(dir, disc)
+
+	err := exec.Run(a, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "hello world") {
+		t.Errorf("output = %q, want to contain 'hello world'", stdout.String())
 	}
 }

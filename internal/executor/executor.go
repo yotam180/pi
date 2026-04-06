@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -120,6 +121,13 @@ func (e *Executor) Run(a *automation.Automation, args []string) error {
 // RunWithInputs executes all steps with explicit --with input values.
 // Only one of args (positional) or withArgs may be non-empty.
 func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withArgs map[string]string) error {
+	return e.runWithContext(context.Background(), a, args, withArgs, e.stdout(), e.stdin())
+}
+
+// runWithContext is the internal entry point for automation execution.
+// All execution flows through here, carrying an explicit context for
+// cancellation/timeout and explicit stdout/stdin for recursive calls.
+func (e *Executor) runWithContext(ctx context.Context, a *automation.Automation, args []string, withArgs map[string]string, stdout io.Writer, stdin io.Reader) error {
 	if a.If != "" {
 		skip, err := e.evaluateCondition(a.If)
 		if err != nil {
@@ -181,10 +189,10 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 	}
 
 	if a.IsInstaller() {
-		return e.execInstall(a, inputEnv)
+		return e.execInstall(ctx, a, inputEnv)
 	}
 
-	ctx := &stepExecCtx{
+	sCtx := &stepExecCtx{
 		automation:    a,
 		args:          args,
 		inputEnv:      inputEnv,
@@ -220,7 +228,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		if step.IsFirst() {
 			isPipeSrc := step.Pipe && i < len(a.Steps)-1
-			if err := e.execFirstBlock(ctx, step, i, pipedInput, isPipeSrc); err != nil {
+			if err := e.execFirstBlock(ctx, sCtx, step, i, pipedInput, isPipeSrc, stdout); err != nil {
 				return err
 			}
 			pipedInput = nil
@@ -231,7 +239,7 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		}
 
 		if step.ParentShell {
-			if err := e.execParentShell(ctx, step); err != nil {
+			if err := e.execParentShell(sCtx, step); err != nil {
 				return fmt.Errorf("automation %q step[%d]: %w", a.Name, i, err)
 			}
 			continue
@@ -239,15 +247,19 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 
 		suppress := step.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, ctx.inputEnv, ctx.automationEnv, step.Env))
+			e.printer().StepTrace(string(step.Type), expandTraceVars(step.Value, sCtx.inputEnv, sCtx.automationEnv, step.Env))
 		}
 
 		isPipeSrc := step.Pipe && i < len(a.Steps)-1
-		stdoutW, stderrW := e.stdout(), e.stderr()
+		stdoutW, stderrW := stdout, e.stderr()
 		if suppress {
 			stdoutW, stderrW = io.Discard, io.Discard
 		}
-		if err := e.execStep(ctx, step, i, pipedInput, isPipeSrc, stdoutW, stderrW); err != nil {
+		stdinR := stdin
+		if pipedInput != nil {
+			stdinR = pipedInput
+		}
+		if err := e.execStep(ctx, sCtx, step, i, stdinR, isPipeSrc, stdoutW, stderrW); err != nil {
 			return err
 		}
 		pipedInput = nil
@@ -261,8 +273,8 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 // execFirstBlock runs a first: block — evaluates sub-step conditions in order and
 // executes only the first sub-step whose if: condition passes (or has no if:).
 // If no sub-step matches, the block is silently skipped.
-func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
-	a := ctx.automation
+func (e *Executor) execFirstBlock(goCtx context.Context, sCtx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool, baseStdout io.Writer) error {
+	a := sCtx.automation
 	for j, sub := range step.First {
 		if sub.If != "" {
 			skip, err := e.evaluateCondition(sub.If)
@@ -275,7 +287,7 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 		}
 
 		if sub.ParentShell {
-			if err := e.execParentShell(ctx, sub); err != nil {
+			if err := e.execParentShell(sCtx, sub); err != nil {
 				return fmt.Errorf("automation %q step[%d].first[%d]: %w", a.Name, index, j, err)
 			}
 			return nil
@@ -283,14 +295,14 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 
 		suppress := sub.Silent && !e.Loud
 		if !suppress {
-			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, ctx.inputEnv, ctx.automationEnv, sub.Env))
+			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, sCtx.inputEnv, sCtx.automationEnv, sub.Env))
 		}
 
-		stdoutW, stderrW := e.stdout(), e.stderr()
+		stdoutW, stderrW := baseStdout, e.stderr()
 		if suppress {
 			stdoutW, stderrW = io.Discard, io.Discard
 		}
-		return e.execStep(ctx, sub, index, stdinOverride, capturePipe, stdoutW, stderrW)
+		return e.execStep(goCtx, sCtx, sub, index, stdinOverride, capturePipe, stdoutW, stderrW)
 	}
 
 	if capturePipe {
@@ -303,8 +315,8 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 // displayStdout is where visible output goes (io.Discard for suppressed steps).
 // stderrW is where stderr goes (io.Discard for suppressed steps).
 // Output is always captured for outputs.last regardless of displayStdout.
-func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool, displayStdout io.Writer, stderrW io.Writer) error {
-	a := ctx.automation
+func (e *Executor) execStep(goCtx context.Context, sCtx *stepExecCtx, step automation.Step, index int, stdinR io.Reader, capturePipe bool, displayStdout io.Writer, stderrW io.Writer) error {
+	a := sCtx.automation
 
 	workDir := e.RepoRoot
 	if step.Dir != "" {
@@ -328,9 +340,8 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		stdout = io.MultiWriter(displayStdout, &outputCapture)
 	}
 
-	stdin := e.stdin()
-	if stdinOverride != nil {
-		stdin = stdinOverride
+	if stdinR == nil {
+		stdinR = e.stdin()
 	}
 
 	runner := e.registry().Get(step.Type)
@@ -338,9 +349,9 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
-	rc := e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir, stderrW)
-	rc.ResolvedAutomationEnv = ctx.automationEnv
-	rc.ResolvedStepEnv = interpolation.ResolveEnv(step.Env, &e.Outputs, ctx.inputEnv)
+	rc := e.newRunContext(goCtx, a, step, sCtx.args, stdout, stdinR, sCtx.inputEnv, workDir, stderrW)
+	rc.ResolvedAutomationEnv = sCtx.automationEnv
+	rc.ResolvedStepEnv = interpolation.ResolveEnv(step.Env, &e.Outputs, sCtx.inputEnv)
 	err := runner.Run(rc)
 	if !capturePipe {
 		e.Outputs.Record(outputCapture.String())
@@ -364,8 +375,9 @@ func (e *Executor) registry() *Registry {
 // has no dir: override. stderrW is the stderr destination for this step.
 // The caller is responsible for resolving and validating the directory
 // before calling this method.
-func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, workDir string, stderrW io.Writer) *RunContext {
+func (e *Executor) newRunContext(goCtx context.Context, a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, workDir string, stderrW io.Writer) *RunContext {
 	return &RunContext{
+		Ctx:          goCtx,
 		Automation:   a,
 		Step:         step,
 		Args:         args,
@@ -377,17 +389,8 @@ func (e *Executor) newRunContext(a *automation.Automation, step automation.Step,
 		RuntimePaths: e.runtimePaths,
 		WorkDir:      workDir,
 		Discovery:    e.Discovery,
-		RunAutomation: func(target *automation.Automation, args []string, withArgs map[string]string, targetStdout io.Writer, targetStdin io.Reader) error {
-			origStdout, origStdin := e.Stdout, e.Stdin
-			e.Stdout, e.Stdin = targetStdout, targetStdin
-			var runErr error
-			if len(withArgs) > 0 {
-				runErr = e.RunWithInputs(target, nil, withArgs)
-			} else {
-				runErr = e.RunWithInputs(target, args, nil)
-			}
-			e.Stdout, e.Stdin = origStdout, origStdin
-			return runErr
+		RunAutomation: func(ctx context.Context, target *automation.Automation, args []string, withArgs map[string]string, targetStdout io.Writer, targetStdin io.Reader) error {
+			return e.runWithContext(ctx, target, args, withArgs, targetStdout, targetStdin)
 		},
 		InterpolateWith: func(with map[string]string, inputEnv []string) map[string]string {
 			return interpolation.ResolveWith(with, &e.Outputs, inputEnv)

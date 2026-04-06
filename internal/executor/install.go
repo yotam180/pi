@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -11,13 +12,13 @@ import (
 )
 
 // execInstall runs the structured install lifecycle: test → [run → verify] → version.
-func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) error {
+func (e *Executor) execInstall(goCtx context.Context, a *automation.Automation, inputEnv []string) error {
 	inst := a.Install
 
 	// Phase 1: test — exit 0 means already installed
-	testErr := e.execInstallPhase(a, &inst.Test, inputEnv)
+	testErr := e.execInstallPhase(goCtx, a, &inst.Test, inputEnv)
 	if testErr == nil {
-		version := e.captureVersion(a, inst.Version, inputEnv)
+		version := e.captureVersion(goCtx, a, inst.Version, inputEnv)
 		e.printInstallStatus(display.StatusSuccessCached, a.Name, "already installed", version)
 		return nil
 	}
@@ -26,7 +27,7 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	// Stderr is streamed live to the terminal so the user sees errors as they happen.
 	e.printInstallStatus(display.StatusInProgress, a.Name, "installing...", "")
 
-	runErr := e.execInstallPhaseLive(a, &inst.Run, inputEnv)
+	runErr := e.execInstallPhaseLive(goCtx, a, &inst.Run, inputEnv)
 	if runErr != nil {
 		e.printInstallStatus(display.StatusFailed, a.Name, "failed", "")
 		return runErr
@@ -37,39 +38,39 @@ func (e *Executor) execInstall(a *automation.Automation, inputEnv []string) erro
 	if verifyPhase == nil {
 		verifyPhase = &inst.Test
 	}
-	verifyErr := e.execInstallPhase(a, verifyPhase, inputEnv)
+	verifyErr := e.execInstallPhase(goCtx, a, verifyPhase, inputEnv)
 	if verifyErr != nil {
 		e.printInstallStatus(display.StatusFailed, a.Name, "failed", "")
 		return verifyErr
 	}
 
-	version := e.captureVersion(a, inst.Version, inputEnv)
+	version := e.captureVersion(goCtx, a, inst.Version, inputEnv)
 	e.printInstallStatus(display.StatusSuccess, a.Name, "installed", version)
 	return nil
 }
 
 // execInstallPhase runs an install phase with stdout and stderr suppressed.
-func (e *Executor) execInstallPhase(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
-	return e.execInstallPhaseWithStderr(a, phase, inputEnv, io.Discard)
+func (e *Executor) execInstallPhase(goCtx context.Context, a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
+	return e.execInstallPhaseWithStderr(goCtx, a, phase, inputEnv, io.Discard)
 }
 
 // execInstallPhaseLive runs an install phase with stdout suppressed but stderr
 // streamed live to the terminal.
-func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
-	return e.execInstallPhaseWithStderr(a, phase, inputEnv, e.stderr())
+func (e *Executor) execInstallPhaseLive(goCtx context.Context, a *automation.Automation, phase *automation.InstallPhase, inputEnv []string) error {
+	return e.execInstallPhaseWithStderr(goCtx, a, phase, inputEnv, e.stderr())
 }
 
 // execInstallPhaseWithStderr runs an install phase with stdout suppressed and
 // stderr routed to the given writer. Steps are dispatched through execStep,
 // sharing the same condition evaluation, runner lookup, and output capture
 // logic as the main execution loop.
-func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrWriter io.Writer) error {
+func (e *Executor) execInstallPhaseWithStderr(goCtx context.Context, a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrWriter io.Writer) error {
 	steps := phase.Steps
 	if phase.IsScalar {
 		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
 	}
 
-	ctx := &stepExecCtx{
+	sCtx := &stepExecCtx{
 		automation: a,
 		inputEnv:   inputEnv,
 	}
@@ -90,13 +91,13 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 		}
 
 		if step.IsFirst() {
-			if err := e.execInstallFirstBlock(ctx, step, i, stderrWriter); err != nil {
+			if err := e.execInstallFirstBlock(goCtx, sCtx, step, i, stderrWriter); err != nil {
 				return err
 			}
 			continue
 		}
 
-		if err := e.execStep(ctx, step, i, nil, false, io.Discard, stderrWriter); err != nil {
+		if err := e.execStep(goCtx, sCtx, step, i, nil, false, io.Discard, stderrWriter); err != nil {
 			return err
 		}
 	}
@@ -104,7 +105,7 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 }
 
 // captureVersion runs the version command and returns the trimmed output.
-func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, inputEnv []string) string {
+func (e *Executor) captureVersion(goCtx context.Context, a *automation.Automation, versionCmd string, inputEnv []string) string {
 	if versionCmd == "" {
 		return ""
 	}
@@ -117,7 +118,7 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 
 	step := automation.Step{Type: versionStepType, Value: versionCmd}
 	var buf bytes.Buffer
-	rc := e.newRunContext(a, step, nil, &buf, nil, inputEnv, e.RepoRoot, io.Discard)
+	rc := e.newRunContext(goCtx, a, step, nil, &buf, nil, inputEnv, e.RepoRoot, io.Discard)
 
 	if err := runner.Run(rc); err != nil {
 		return ""
@@ -136,7 +137,7 @@ func (e *Executor) printInstallStatus(kind display.StatusKind, name, status, ver
 // execInstallFirstBlock handles a first: block inside an install phase.
 // Each sub-step is dispatched through execStep, sharing runner lookup and
 // output capture with the main execution loop.
-func (e *Executor) execInstallFirstBlock(ctx *stepExecCtx, step automation.Step, index int, stderrWriter io.Writer) error {
+func (e *Executor) execInstallFirstBlock(goCtx context.Context, sCtx *stepExecCtx, step automation.Step, index int, stderrWriter io.Writer) error {
 	for j, sub := range step.First {
 		if sub.If != "" {
 			skip, err := e.evaluateCondition(sub.If)
@@ -148,7 +149,7 @@ func (e *Executor) execInstallFirstBlock(ctx *stepExecCtx, step automation.Step,
 			}
 		}
 
-		return e.execStep(ctx, sub, index, nil, false, io.Discard, stderrWriter)
+		return e.execStep(goCtx, sCtx, sub, index, nil, false, io.Discard, stderrWriter)
 	}
 	return nil
 }

@@ -1,0 +1,4 @@
+description: Call a fast target with a generous timeout
+steps:
+  - run: fast
+    timeout: 10s

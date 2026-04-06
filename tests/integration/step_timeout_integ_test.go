@@ -77,3 +77,36 @@ func TestStepTimeout_InfoShowsAnnotation(t *testing.T) {
 		t.Errorf("expected 'silent' annotation on step 2, got: %s", out)
 	}
 }
+
+func TestStepTimeout_RunStepTimeoutExceeded(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-timeout")
+	_, code := runPi(t, dir, "run", "run-timeout")
+	if code == 0 {
+		t.Fatal("expected non-zero exit for timed-out run step")
+	}
+	if code != 124 {
+		t.Errorf("expected exit code 124 (timeout), got %d", code)
+	}
+}
+
+func TestStepTimeout_RunStepTimeoutNotExceeded(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-timeout")
+	stdout, _, code := runPiSplit(t, dir, "run", "run-fast-target")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if !strings.Contains(stdout, "completed-fast") {
+		t.Errorf("expected 'completed-fast' in output, got: %s", stdout)
+	}
+}
+
+func TestStepTimeout_RunStepInfoShowsAnnotation(t *testing.T) {
+	dir := filepath.Join(examplesDir(), "step-timeout")
+	out, code := runPi(t, dir, "info", "run-timeout")
+	if code != 0 {
+		t.Fatalf("expected exit 0, got %d: %s", code, out)
+	}
+	if !strings.Contains(out, "timeout: 500ms") {
+		t.Errorf("expected 'timeout: 500ms' annotation in info output, got: %s", out)
+	}
+}
