@@ -60,12 +60,18 @@ func (e *Executor) execInstallPhaseLive(a *automation.Automation, phase *automat
 }
 
 // execInstallPhaseWithStderr runs an install phase with stdout suppressed and
-// stderr routed to the given writer. This is the unified implementation for both
-// suppressed (io.Discard) and live (e.stderr()) stderr modes.
+// stderr routed to the given writer. Steps are dispatched through execStep,
+// sharing the same condition evaluation, runner lookup, and output capture
+// logic as the main execution loop.
 func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *automation.InstallPhase, inputEnv []string, stderrWriter io.Writer) error {
 	steps := phase.Steps
 	if phase.IsScalar {
 		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
+	}
+
+	ctx := &stepExecCtx{
+		automation: a,
+		inputEnv:   inputEnv,
 	}
 
 	saved := e.Outputs.Snapshot()
@@ -84,34 +90,20 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 		}
 
 		if step.IsFirst() {
-			if err := e.execInstallFirstBlock(a, step, i, inputEnv, stderrWriter); err != nil {
+			if err := e.execInstallFirstBlock(ctx, step, i, stderrWriter); err != nil {
 				return err
 			}
 			continue
 		}
 
-		runner := e.registry().Get(step.Type)
-		if runner == nil {
-			return fmt.Errorf("install phase step[%d]: unsupported step type %q", i, step.Type)
-		}
-
-		var outputCapture bytes.Buffer
-		ctx := e.newRunContext(a, step, nil, &outputCapture, nil, inputEnv, e.RepoRoot)
-		ctx.Stderr = stderrWriter
-
-		if err := runner.Run(ctx); err != nil {
+		if err := e.execStep(ctx, step, i, nil, false, io.Discard, stderrWriter); err != nil {
 			return err
 		}
-		e.Outputs.Record(outputCapture.String())
 	}
 	return nil
 }
 
 // captureVersion runs the version command and returns the trimmed output.
-// The version: field is always a shell command today, so we default to the Bash
-// runner. A future schema change could allow typed version steps (e.g.
-// version: {python: get_version.py}), at which point this function would accept
-// the step type from the parsed YAML.
 func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, inputEnv []string) string {
 	if versionCmd == "" {
 		return ""
@@ -125,10 +117,9 @@ func (e *Executor) captureVersion(a *automation.Automation, versionCmd string, i
 
 	step := automation.Step{Type: versionStepType, Value: versionCmd}
 	var buf bytes.Buffer
-	ctx := e.newRunContext(a, step, nil, &buf, nil, inputEnv, e.RepoRoot)
-	ctx.Stderr = io.Discard
+	rc := e.newRunContext(a, step, nil, &buf, nil, inputEnv, e.RepoRoot, io.Discard)
 
-	if err := runner.Run(ctx); err != nil {
+	if err := runner.Run(rc); err != nil {
 		return ""
 	}
 	return strings.TrimSpace(buf.String())
@@ -143,8 +134,9 @@ func (e *Executor) printInstallStatus(kind display.StatusKind, name, status, ver
 }
 
 // execInstallFirstBlock handles a first: block inside an install phase.
-// stderrWriter controls where stderr goes (e.g. e.stderr() for live, io.Discard for suppressed).
-func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automation.Step, index int, inputEnv []string, stderrWriter io.Writer) error {
+// Each sub-step is dispatched through execStep, sharing runner lookup and
+// output capture with the main execution loop.
+func (e *Executor) execInstallFirstBlock(ctx *stepExecCtx, step automation.Step, index int, stderrWriter io.Writer) error {
 	for j, sub := range step.First {
 		if sub.If != "" {
 			skip, err := e.evaluateCondition(sub.If)
@@ -156,21 +148,7 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 			}
 		}
 
-		runner := e.registry().Get(sub.Type)
-		if runner == nil {
-			return fmt.Errorf("install phase step[%d].first[%d]: unsupported step type %q", index, j, sub.Type)
-		}
-
-		var outputCapture bytes.Buffer
-		ctx := e.newRunContext(a, sub, nil, &outputCapture, nil, inputEnv, e.RepoRoot)
-		ctx.Stderr = stderrWriter
-
-		if err := runner.Run(ctx); err != nil {
-			return err
-		}
-		e.Outputs.Record(outputCapture.String())
-		return nil
+		return e.execStep(ctx, sub, index, nil, false, io.Discard, stderrWriter)
 	}
 	return nil
 }
-

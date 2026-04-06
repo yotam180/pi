@@ -243,14 +243,12 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		}
 
 		isPipeSrc := step.Pipe && i < len(a.Steps)-1
+		stdoutW, stderrW := e.stdout(), e.stderr()
 		if suppress {
-			if err := e.execStepSuppressed(ctx, step, i, pipedInput, isPipeSrc); err != nil {
-				return err
-			}
-		} else {
-			if err := e.execStep(ctx, step, i, pipedInput, isPipeSrc); err != nil {
-				return err
-			}
+			stdoutW, stderrW = io.Discard, io.Discard
+		}
+		if err := e.execStep(ctx, step, i, pipedInput, isPipeSrc, stdoutW, stderrW); err != nil {
+			return err
 		}
 		pipedInput = nil
 		if isPipeSrc {
@@ -288,10 +286,11 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 			e.printer().StepTrace(string(sub.Type), expandTraceVars(sub.Value, ctx.inputEnv, ctx.automationEnv, sub.Env))
 		}
 
+		stdoutW, stderrW := e.stdout(), e.stderr()
 		if suppress {
-			return e.execStepSuppressed(ctx, sub, index, stdinOverride, capturePipe)
+			stdoutW, stderrW = io.Discard, io.Discard
 		}
-		return e.execStep(ctx, sub, index, stdinOverride, capturePipe)
+		return e.execStep(ctx, sub, index, stdinOverride, capturePipe, stdoutW, stderrW)
 	}
 
 	if capturePipe {
@@ -300,20 +299,11 @@ func (e *Executor) execFirstBlock(ctx *stepExecCtx, step automation.Step, index 
 	return nil
 }
 
-// execStepSuppressed runs a step with stdout and stderr suppressed (for silent: true steps).
-// Pipe capture still works so that downstream steps can receive data.
-func (e *Executor) execStepSuppressed(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
-	origStdout, origStderr := e.Stdout, e.Stderr
-	if !capturePipe {
-		e.Stdout = io.Discard
-	}
-	e.Stderr = io.Discard
-	err := e.execStep(ctx, step, index, stdinOverride, capturePipe)
-	e.Stdout, e.Stderr = origStdout, origStderr
-	return err
-}
-
-func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool) error {
+// execStep runs a single step using the provided I/O destinations.
+// displayStdout is where visible output goes (io.Discard for suppressed steps).
+// stderrW is where stderr goes (io.Discard for suppressed steps).
+// Output is always captured for outputs.last regardless of displayStdout.
+func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, stdinOverride io.Reader, capturePipe bool, displayStdout io.Writer, stderrW io.Writer) error {
 	a := ctx.automation
 
 	workDir := e.RepoRoot
@@ -325,7 +315,7 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		workDir = resolved
 	}
 
-	stdout := e.stdout()
+	var stdout io.Writer
 	var outputCapture bytes.Buffer
 	if capturePipe {
 		buf := &bytes.Buffer{}
@@ -335,7 +325,7 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 			e.Outputs.Record(buf.String())
 		}()
 	} else {
-		stdout = io.MultiWriter(stdout, &outputCapture)
+		stdout = io.MultiWriter(displayStdout, &outputCapture)
 	}
 
 	stdin := e.stdin()
@@ -348,7 +338,7 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		return fmt.Errorf("automation %q step[%d]: step type %q is not implemented", a.Name, index, step.Type)
 	}
 
-	rc := e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir)
+	rc := e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir, stderrW)
 	rc.ResolvedAutomationEnv = ctx.automationEnv
 	rc.ResolvedStepEnv = interpolation.ResolveEnv(step.Env, &e.Outputs, ctx.inputEnv)
 	err := runner.Run(rc)
@@ -371,15 +361,16 @@ func (e *Executor) registry() *Registry {
 
 // newRunContext builds a RunContext from the executor's current state.
 // workDir is the resolved working directory — pass e.RepoRoot when the step
-// has no dir: override. The caller is responsible for resolving and validating
-// the directory before calling this method.
-func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, workDir string) *RunContext {
+// has no dir: override. stderrW is the stderr destination for this step.
+// The caller is responsible for resolving and validating the directory
+// before calling this method.
+func (e *Executor) newRunContext(a *automation.Automation, step automation.Step, args []string, stdout io.Writer, stdin io.Reader, inputEnv []string, workDir string, stderrW io.Writer) *RunContext {
 	return &RunContext{
 		Automation:   a,
 		Step:         step,
 		Args:         args,
 		Stdout:       stdout,
-		Stderr:       e.stderr(),
+		Stderr:       stderrW,
 		Stdin:        stdin,
 		InputEnv:     inputEnv,
 		RepoRoot:     e.RepoRoot,

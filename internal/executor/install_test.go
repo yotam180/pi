@@ -605,7 +605,8 @@ func TestExecInstallFirstBlock_OutputCapturedInPhase(t *testing.T) {
 	steps := phase.Steps
 
 	e.Outputs.Reset()
-	err := e.execInstallFirstBlock(a, steps[0], 0, nil, io.Discard)
+	ctx := &stepExecCtx{automation: a}
+	err := e.execInstallFirstBlock(ctx, steps[0], 0, io.Discard)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
