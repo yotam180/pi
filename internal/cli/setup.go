@@ -150,22 +150,7 @@ func runSetup(stdout, stderr io.Writer, noShell, silent, loud bool) error {
 // evaluateSetupCondition resolves and evaluates an if: expression for a setup entry.
 // Returns true if the entry should be skipped (condition evaluates to false).
 func evaluateSetupCondition(expr string, repoRoot string) (bool, error) {
-	predNames, err := conditions.Predicates(expr)
-	if err != nil {
-		return false, err
-	}
-
-	resolved, err := executor.ResolvePredicates(predNames, repoRoot)
-	if err != nil {
-		return false, err
-	}
-
-	result, err := conditions.Eval(expr, resolved)
-	if err != nil {
-		return false, err
-	}
-
-	return !result, nil
+	return conditions.NewEvaluator(repoRoot, nil).ShouldSkip(expr)
 }
 
 func isCI() bool {

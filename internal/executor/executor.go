@@ -80,6 +80,9 @@ type Executor struct {
 	// stepOutputs stores trimmed stdout from each executed step (0-indexed).
 	// Used to implement outputs.last interpolation in with: values.
 	stepOutputs []string
+
+	// condEval is the lazily-created condition evaluator for if: expressions.
+	condEval *conditions.Evaluator
 }
 
 // stepExecCtx bundles the per-automation execution state that is constant
@@ -384,27 +387,16 @@ func (e *Executor) newRunContext(a *automation.Automation, step automation.Step,
 // evaluateCondition resolves and evaluates an if: expression.
 // Returns true if the step should be skipped (condition is false).
 func (e *Executor) evaluateCondition(expr string) (bool, error) {
-	predNames, err := conditions.Predicates(expr)
-	if err != nil {
-		return false, err
-	}
+	return e.conditionEvaluator().ShouldSkip(expr)
+}
 
-	env := e.RuntimeEnv
-	if env == nil {
-		env = DefaultRuntimeEnv()
+// conditionEvaluator returns the executor's condition evaluator, lazily creating one.
+func (e *Executor) conditionEvaluator() *conditions.Evaluator {
+	if e.condEval != nil {
+		return e.condEval
 	}
-
-	resolved, err := ResolvePredicatesWithEnv(predNames, e.RepoRoot, env)
-	if err != nil {
-		return false, err
-	}
-
-	result, err := conditions.Eval(expr, resolved)
-	if err != nil {
-		return false, err
-	}
-
-	return !result, nil
+	e.condEval = conditions.NewEvaluator(e.RepoRoot, e.RuntimeEnv)
+	return e.condEval
 }
 
 // printer returns the executor's display Printer, lazily creating one from Stderr.

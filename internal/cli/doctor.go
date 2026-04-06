@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/display"
 	"github.com/vyper-tooling/pi/internal/executor"
 )
@@ -47,7 +48,7 @@ func runDoctor(startDir string, out io.Writer) error {
 	}
 
 	p := display.New(out)
-	env := executor.DefaultRuntimeEnv()
+	env := conditions.DefaultRuntimeEnv()
 	anyFailed := false
 	anyPrinted := false
 

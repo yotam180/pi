@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/executor"
@@ -360,7 +361,7 @@ func validateConditions(disc *discovery.Result, result *ValidationResult) {
 		a := disc.Automations[name]
 
 		if a.If != "" {
-			if err := executor.ValidateConditionExpr(a.If); err != nil {
+			if err := conditions.ValidateConditionExpr(a.If); err != nil {
 				result.Errors = append(result.Errors,
 					fmt.Sprintf("%s if: %s", name, err))
 			}
@@ -368,7 +369,7 @@ func validateConditions(disc *discovery.Result, result *ValidationResult) {
 
 		automation.WalkSteps(a, func(step automation.Step, loc automation.StepLocation) {
 			if step.If != "" {
-				if err := executor.ValidateConditionExpr(step.If); err != nil {
+				if err := conditions.ValidateConditionExpr(step.If); err != nil {
 					result.Errors = append(result.Errors,
 						fmt.Sprintf("%s if: %s", loc.FormatPath(a.Name), err))
 				}
