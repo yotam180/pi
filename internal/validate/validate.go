@@ -179,6 +179,7 @@ func checkRunStepRefs(ctx *Context) []string {
 }
 
 func checkFileReferences(ctx *Context) []string {
+	fileExts := executor.DefaultFileExtensions()
 	var errs []string
 	for _, name := range ctx.Discovery.Names() {
 		if ctx.Discovery.IsBuiltin(name) {
@@ -189,7 +190,8 @@ func checkFileReferences(ctx *Context) []string {
 			if step.Type == automation.StepTypeRun {
 				return
 			}
-			if !executor.IsFilePath(step.Value) {
+			ext := fileExts[step.Type]
+			if !executor.IsFilePath(step.Value, ext) {
 				return
 			}
 			resolved := filepath.Join(a.Dir(), step.Value)

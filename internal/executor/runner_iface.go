@@ -67,6 +67,16 @@ func (r *Registry) Get(stepType automation.StepType) StepRunner {
 	return r.runners[stepType]
 }
 
+// FileExtForStepType returns the file extension for a step type's runner,
+// or "" if the runner is not a SubprocessRunner or has no FileExt set.
+func (r *Registry) FileExtForStepType(stepType automation.StepType) string {
+	runner := r.runners[stepType]
+	if sr, ok := runner.(*SubprocessRunner); ok {
+		return sr.Config.FileExt
+	}
+	return ""
+}
+
 // NewDefaultRegistry creates a registry with all built-in step runners.
 func NewDefaultRegistry() *Registry {
 	r := NewRegistry()
@@ -75,4 +85,18 @@ func NewDefaultRegistry() *Registry {
 	r.Register(automation.StepTypeTypeScript, NewTypeScriptRunner())
 	r.Register(automation.StepTypeRun, &RunStepRunner{})
 	return r
+}
+
+// DefaultFileExtensions returns the file extension for each step type in the
+// default registry. Used by validation to detect file references without
+// hardcoding extension lists.
+func DefaultFileExtensions() map[automation.StepType]string {
+	reg := NewDefaultRegistry()
+	exts := make(map[automation.StepType]string)
+	for stepType := range reg.runners {
+		if ext := reg.FileExtForStepType(stepType); ext != "" {
+			exts[stepType] = ext
+		}
+	}
+	return exts
 }

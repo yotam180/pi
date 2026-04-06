@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-// IsFilePath returns true if the value looks like a file path rather than inline script.
-// A file path ends in a known script extension, contains no newlines, and contains no spaces.
-func IsFilePath(value string) bool {
-	hasKnownExt := strings.HasSuffix(value, ".sh") ||
-		strings.HasSuffix(value, ".py") ||
-		strings.HasSuffix(value, ".ts")
-	return hasKnownExt &&
+// IsFilePath returns true if the value looks like a file path rather than
+// inline script. The ext parameter is the file extension for the step type
+// (e.g. ".sh", ".py", ".ts"). A value is a file path when it ends with ext,
+// contains no newlines, and contains no spaces. Returns false when ext is empty.
+func IsFilePath(value, ext string) bool {
+	return ext != "" &&
+		strings.HasSuffix(value, ext) &&
 		!strings.Contains(value, "\n") &&
 		!strings.Contains(value, " ")
 }
@@ -68,8 +68,9 @@ func BuildStepEnv(runtimePaths []string, inputEnv []string, automationEnv map[st
 // resolveFileStep checks if a step value is a file path, resolves it relative
 // to the automation directory, and verifies the file exists. Returns the
 // resolved path and true if it's a file, or ("", false) for inline scripts.
-func resolveFileStep(automationDir, value, lang string) (string, bool, error) {
-	if !IsFilePath(value) {
+// The ext parameter is the file extension for the runner (e.g. ".sh").
+func resolveFileStep(automationDir, value, lang, ext string) (string, bool, error) {
+	if !IsFilePath(value, ext) {
 		return "", false, nil
 	}
 	resolved := resolveScriptPath(automationDir, value)

@@ -40,6 +40,12 @@ type SubprocessConfig struct {
 	// If empty, a generic error is used.
 	NotFoundMsg string
 
+	// FileExt is the file extension that identifies script files for this
+	// language (e.g. ".sh", ".py", ".ts"). Used by resolveFileStep to
+	// distinguish file references from inline scripts. When empty, all
+	// step values are treated as inline scripts.
+	FileExt string
+
 	// Language is the human-readable name for error messages (e.g. "bash", "python").
 	Language string
 }
@@ -60,7 +66,7 @@ func (r *SubprocessRunner) Run(ctx *RunContext) error {
 
 	var cmdArgs []string
 
-	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, r.Config.Language)
+	resolved, isFile, err := resolveFileStep(ctx.Automation.Dir(), ctx.Step.Value, r.Config.Language, r.Config.FileExt)
 	if err != nil {
 		return err
 	}
@@ -125,6 +131,7 @@ func NewBashRunner() *SubprocessRunner {
 	return &SubprocessRunner{Config: SubprocessConfig{
 		Binary:   "bash",
 		Language: "bash",
+		FileExt:  ".sh",
 		InlineArgs: func(script string) []string {
 			return []string{"-c", script, "--"}
 		},
@@ -136,6 +143,7 @@ func NewPythonRunner() *SubprocessRunner {
 	return &SubprocessRunner{Config: SubprocessConfig{
 		BinaryFunc:  resolvePythonBin,
 		Language:    "python",
+		FileExt:     ".py",
 		NotFoundMsg: "python3 not found in PATH — install Python 3 or activate a virtualenv",
 		InlineArgs: func(script string) []string {
 			return []string{"-c", script}
@@ -148,6 +156,7 @@ func NewTypeScriptRunner() *SubprocessRunner {
 	return &SubprocessRunner{Config: SubprocessConfig{
 		Binary:      "tsx",
 		Language:    "typescript",
+		FileExt:     ".ts",
 		NotFoundMsg: "tsx not found in PATH — install it with: npm install -g tsx",
 		TempFileExt: ".ts",
 	}}
