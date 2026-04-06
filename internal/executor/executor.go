@@ -12,6 +12,7 @@ import (
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/discovery"
 	"github.com/vyper-tooling/pi/internal/display"
+	"github.com/vyper-tooling/pi/internal/interpolation"
 	"github.com/vyper-tooling/pi/internal/runtimes"
 )
 
@@ -82,9 +83,8 @@ type Executor struct {
 	// registry() doesn't allocate a new one on every step execution.
 	cachedRegistry *Registry
 
-	// stepOutputs stores trimmed stdout from each executed step (0-indexed).
-	// Used to implement outputs.last interpolation in with: values.
-	stepOutputs []string
+	// Outputs tracks step outputs for interpolation (outputs.last, outputs.<N>).
+	Outputs interpolation.OutputTracker
 
 	// condEval is the lazily-created condition evaluator for if: expressions.
 	condEval *conditions.Evaluator
@@ -188,12 +188,12 @@ func (e *Executor) RunWithInputs(a *automation.Automation, args []string, withAr
 		automation:    a,
 		args:          args,
 		inputEnv:      inputEnv,
-		automationEnv: e.interpolateEnv(a.Env, inputEnv),
+		automationEnv: interpolation.ResolveEnv(a.Env, &e.Outputs, inputEnv),
 	}
 
-	savedOutputs := e.stepOutputs
-	e.stepOutputs = nil
-	defer func() { e.stepOutputs = savedOutputs }()
+	saved := e.Outputs.Snapshot()
+	e.Outputs.Reset()
+	defer func() { e.Outputs.Restore(saved) }()
 
 	var pipedInput io.Reader
 	for i, step := range a.Steps {
@@ -332,7 +332,7 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 		stdout = buf
 		defer func() {
 			e.lastPipeBuffer = buf
-			e.recordOutput(buf.String())
+			e.Outputs.Record(buf.String())
 		}()
 	} else {
 		stdout = io.MultiWriter(stdout, &outputCapture)
@@ -350,10 +350,10 @@ func (e *Executor) execStep(ctx *stepExecCtx, step automation.Step, index int, s
 
 	rc := e.newRunContext(a, step, ctx.args, stdout, stdin, ctx.inputEnv, workDir)
 	rc.ResolvedAutomationEnv = ctx.automationEnv
-	rc.ResolvedStepEnv = e.interpolateEnv(step.Env, ctx.inputEnv)
+	rc.ResolvedStepEnv = interpolation.ResolveEnv(step.Env, &e.Outputs, ctx.inputEnv)
 	err := runner.Run(rc)
 	if !capturePipe {
-		e.recordOutput(outputCapture.String())
+		e.Outputs.Record(outputCapture.String())
 	}
 	return err
 }
@@ -398,7 +398,9 @@ func (e *Executor) newRunContext(a *automation.Automation, step automation.Step,
 			e.Stdout, e.Stdin = origStdout, origStdin
 			return runErr
 		},
-		InterpolateWith: e.interpolateWithCtx,
+		InterpolateWith: func(with map[string]string, inputEnv []string) map[string]string {
+			return interpolation.ResolveWith(with, &e.Outputs, inputEnv)
+		},
 	}
 }
 
@@ -471,84 +473,25 @@ func AppendToParentEval(path, command string) error {
 	return nil
 }
 
-// lastOutput returns the trimmed stdout of the most recently executed step,
-// or "" if no step has produced output yet.
-func (e *Executor) lastOutput() string {
-	if len(e.stepOutputs) == 0 {
-		return ""
-	}
-	return e.stepOutputs[len(e.stepOutputs)-1]
-}
-
-// recordOutput appends a step's captured stdout to the outputs list.
-func (e *Executor) recordOutput(output string) {
-	e.stepOutputs = append(e.stepOutputs, strings.TrimSpace(output))
-}
-
-// interpolateWithCtx resolves outputs.last, outputs.<N>, and inputs.<name>
-// references in with: values, given the current automation's resolved inputs.
+// interpolateWithCtx delegates to interpolation.ResolveWith for backward
+// compatibility with tests that reference the method name.
 func (e *Executor) interpolateWithCtx(with map[string]string, currentInputEnv []string) map[string]string {
-	if len(with) == 0 {
-		return with
-	}
-	result := make(map[string]string, len(with))
-	for k, v := range with {
-		result[k] = e.interpolateValue(v, currentInputEnv)
-	}
-	return result
+	return interpolation.ResolveWith(with, &e.Outputs, currentInputEnv)
 }
 
 // interpolateWith resolves output references without input context.
 func (e *Executor) interpolateWith(with map[string]string) map[string]string {
-	return e.interpolateWithCtx(with, nil)
+	return interpolation.ResolveWith(with, &e.Outputs, nil)
 }
 
-// interpolateEnv applies interpolateValue to each value in an env map.
-// Returns the original map unchanged if no values contain interpolation references.
+// interpolateEnv delegates to interpolation.ResolveEnv.
 func (e *Executor) interpolateEnv(env map[string]string, inputEnv []string) map[string]string {
-	if len(env) == 0 {
-		return env
-	}
-	result := make(map[string]string, len(env))
-	changed := false
-	for k, v := range env {
-		resolved := e.interpolateValue(v, inputEnv)
-		result[k] = resolved
-		if resolved != v {
-			changed = true
-		}
-	}
-	if !changed {
-		return env
-	}
-	return result
+	return interpolation.ResolveEnv(env, &e.Outputs, inputEnv)
 }
 
-// interpolateValue replaces "outputs.last", "outputs.<N>", and "inputs.<name>"
-// references in a string value.
+// interpolateValue delegates to interpolation.ResolveValue.
 func (e *Executor) interpolateValue(v string, inputEnv []string) string {
-	if v == "outputs.last" {
-		return e.lastOutput()
-	}
-	if strings.HasPrefix(v, "outputs.") {
-		suffix := strings.TrimPrefix(v, "outputs.")
-		var n int
-		if _, err := fmt.Sscanf(suffix, "%d", &n); err == nil {
-			if n >= 0 && n < len(e.stepOutputs) {
-				return e.stepOutputs[n]
-			}
-		}
-	}
-	if strings.HasPrefix(v, "inputs.") {
-		name := strings.TrimPrefix(v, "inputs.")
-		envKey := "PI_IN_" + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-		for _, entry := range inputEnv {
-			if strings.HasPrefix(entry, envKey+"=") {
-				return entry[len(envKey)+1:]
-			}
-		}
-	}
-	return v
+	return interpolation.ResolveValue(v, &e.Outputs, inputEnv)
 }
 
 func (e *Executor) stdout() io.Writer {

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/vyper-tooling/pi/internal/automation"
+	"github.com/vyper-tooling/pi/internal/interpolation"
 )
 
 // dryRunAutomation prints the steps that would be executed without running them.
@@ -24,7 +25,7 @@ func (e *Executor) dryRunAutomation(a *automation.Automation, args []string, inp
 		automation:    a,
 		args:          args,
 		inputEnv:      inputEnv,
-		automationEnv: e.interpolateEnv(a.Env, inputEnv),
+		automationEnv: interpolation.ResolveEnv(a.Env, &e.Outputs, inputEnv),
 	}
 
 	for i, step := range a.Steps {
@@ -108,7 +109,7 @@ func (e *Executor) dryRunRunStep(ctx *stepExecCtx, step automation.Step, depth i
 
 	var targetInputEnv []string
 	if len(step.With) > 0 {
-		with := e.interpolateWithCtx(step.With, ctx.inputEnv)
+		with := interpolation.ResolveWith(step.With, &e.Outputs, ctx.inputEnv)
 		resolvedInputs, err := target.ResolveInputs(with, nil)
 		if err == nil {
 			targetInputEnv = automation.InputEnvVars(resolvedInputs)
@@ -124,7 +125,7 @@ func (e *Executor) dryRunRunStep(ctx *stepExecCtx, step automation.Step, depth i
 		automation:    target,
 		args:          ctx.args,
 		inputEnv:      targetInputEnv,
-		automationEnv: e.interpolateEnv(target.Env, targetInputEnv),
+		automationEnv: interpolation.ResolveEnv(target.Env, &e.Outputs, targetInputEnv),
 	}
 
 	if target.IsInstaller() {
@@ -195,7 +196,7 @@ func (e *Executor) dryRunInstaller(a *automation.Automation, inputEnv []string, 
 	ctx := &stepExecCtx{
 		automation:    a,
 		inputEnv:      inputEnv,
-		automationEnv: e.interpolateEnv(a.Env, inputEnv),
+		automationEnv: interpolation.ResolveEnv(a.Env, &e.Outputs, inputEnv),
 	}
 
 	e.dryRunPrint(depth, "install", a.Name, "")

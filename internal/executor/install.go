@@ -68,9 +68,9 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 		steps = []automation.Step{{Type: automation.StepTypeBash, Value: phase.Scalar}}
 	}
 
-	savedOutputs := e.stepOutputs
-	e.stepOutputs = nil
-	defer func() { e.stepOutputs = savedOutputs }()
+	saved := e.Outputs.Snapshot()
+	e.Outputs.Reset()
+	defer func() { e.Outputs.Restore(saved) }()
 
 	for i, step := range steps {
 		if step.If != "" {
@@ -102,7 +102,7 @@ func (e *Executor) execInstallPhaseWithStderr(a *automation.Automation, phase *a
 		if err := runner.Run(ctx); err != nil {
 			return err
 		}
-		e.recordOutput(outputCapture.String())
+		e.Outputs.Record(outputCapture.String())
 	}
 	return nil
 }
@@ -168,7 +168,7 @@ func (e *Executor) execInstallFirstBlock(a *automation.Automation, step automati
 		if err := runner.Run(ctx); err != nil {
 			return err
 		}
-		e.recordOutput(outputCapture.String())
+		e.Outputs.Record(outputCapture.String())
 		return nil
 	}
 	return nil

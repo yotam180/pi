@@ -33,7 +33,9 @@ func TestInterpolateWith_EmptyMap(t *testing.T) {
 }
 
 func TestInterpolateWith_OutputsLast(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"hello", "world"}}
+	e := &Executor{}
+	e.Outputs.Record("hello")
+	e.Outputs.Record("world")
 	got := e.interpolateWith(map[string]string{"key": "outputs.last"})
 	if got["key"] != "world" {
 		t.Errorf("interpolateWith outputs.last = %q, want %q", got["key"], "world")
@@ -49,7 +51,9 @@ func TestInterpolateWith_Literal(t *testing.T) {
 }
 
 func TestInterpolateWith_MultipleKeys(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"v1", "v2"}}
+	e := &Executor{}
+	e.Outputs.Record("v1")
+	e.Outputs.Record("v2")
 	got := e.interpolateWith(map[string]string{
 		"a": "outputs.0",
 		"b": "outputs.last",

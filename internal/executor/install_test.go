@@ -569,8 +569,8 @@ func TestExecInstall_FirstBlockRecordsOutput(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(e.stepOutputs) > 0 {
-		t.Errorf("stepOutputs should be restored to outer scope after install, got %d entries", len(e.stepOutputs))
+	if e.Outputs.Len() > 0 {
+		t.Errorf("Outputs should be restored to outer scope after install, got %d entries", e.Outputs.Len())
 	}
 }
 
@@ -604,17 +604,17 @@ func TestExecInstallFirstBlock_OutputCapturedInPhase(t *testing.T) {
 	phase := &a.Install.Run
 	steps := phase.Steps
 
-	e.stepOutputs = nil
+	e.Outputs.Reset()
 	err := e.execInstallFirstBlock(a, steps[0], 0, nil, io.Discard)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(e.stepOutputs) != 1 {
-		t.Fatalf("expected 1 recorded output, got %d", len(e.stepOutputs))
+	if e.Outputs.Len() != 1 {
+		t.Fatalf("expected 1 recorded output, got %d", e.Outputs.Len())
 	}
-	if e.stepOutputs[0] != "captured-value" {
-		t.Errorf("expected recorded output 'captured-value', got %q", e.stepOutputs[0])
+	if val, _ := e.Outputs.Get(0); val != "captured-value" {
+		t.Errorf("expected recorded output 'captured-value', got %q", val)
 	}
 }
 

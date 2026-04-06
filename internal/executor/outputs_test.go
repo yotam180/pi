@@ -447,7 +447,9 @@ func TestInterpolateValue_NoMatch(t *testing.T) {
 }
 
 func TestInterpolateValue_OutputsLast(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"first", "second"}}
+	e := &Executor{}
+	e.Outputs.Record("first")
+	e.Outputs.Record("second")
 
 	if got := e.interpolateValue("outputs.last", nil); got != "second" {
 		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.last", got, "second")
@@ -455,7 +457,10 @@ func TestInterpolateValue_OutputsLast(t *testing.T) {
 }
 
 func TestInterpolateValue_OutputsIndexed(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"zero", "one", "two"}}
+	e := &Executor{}
+	e.Outputs.Record("zero")
+	e.Outputs.Record("one")
+	e.Outputs.Record("two")
 
 	if got := e.interpolateValue("outputs.0", nil); got != "zero" {
 		t.Errorf("interpolateValue(%q) = %q, want %q", "outputs.0", got, "zero")
@@ -507,7 +512,9 @@ func TestInterpolateEnv_NoInterpolation(t *testing.T) {
 }
 
 func TestInterpolateEnv_OutputsLast(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"first", "second"}}
+	e := &Executor{}
+	e.Outputs.Record("first")
+	e.Outputs.Record("second")
 	env := map[string]string{"MY_VAR": "outputs.last"}
 	got := e.interpolateEnv(env, nil)
 	if got["MY_VAR"] != "second" {
@@ -516,7 +523,9 @@ func TestInterpolateEnv_OutputsLast(t *testing.T) {
 }
 
 func TestInterpolateEnv_OutputsIndexed(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"zero", "one"}}
+	e := &Executor{}
+	e.Outputs.Record("zero")
+	e.Outputs.Record("one")
 	env := map[string]string{"FIRST": "outputs.0", "SECOND": "outputs.1"}
 	got := e.interpolateEnv(env, nil)
 	if got["FIRST"] != "zero" {
@@ -538,7 +547,8 @@ func TestInterpolateEnv_Inputs(t *testing.T) {
 }
 
 func TestInterpolateEnv_MixedValues(t *testing.T) {
-	e := &Executor{stepOutputs: []string{"captured"}}
+	e := &Executor{}
+	e.Outputs.Record("captured")
 	inputEnv := []string{"PI_IN_NAME=alice"}
 	env := map[string]string{
 		"LITERAL":    "hello",
