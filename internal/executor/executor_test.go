@@ -390,36 +390,6 @@ func TestExitError_Message(t *testing.T) {
 	}
 }
 
-func TestIsFilePath(t *testing.T) {
-	tests := []struct {
-		input string
-		ext   string
-		want  bool
-	}{
-		{"run.sh", ".sh", true},
-		{"scripts/deploy.sh", ".sh", true},
-		{"run.py", ".py", true},
-		{"scripts/format.py", ".py", true},
-		{"run.ts", ".ts", true},
-		{"scripts/build.ts", ".ts", true},
-		{"echo hello", ".sh", false},
-		{"echo hello.sh", ".sh", false},
-		{"line1\nline2.sh", ".sh", false},
-		{"docker-compose up -d", ".sh", false},
-		{"import sys; print('hello')", ".py", false},
-		{"print('hello.py')", ".py", false},
-		{"run.rb", ".rb", true},
-		{"run.sh", ".py", false},
-		{"run.sh", "", false},
-	}
-	for _, tt := range tests {
-		got := IsFilePath(tt.input, tt.ext)
-		if got != tt.want {
-			t.Errorf("IsFilePath(%q, %q) = %v, want %v", tt.input, tt.ext, got, tt.want)
-		}
-	}
-}
-
 func TestCallStackIsolation(t *testing.T) {
 	dir := t.TempDir()
 

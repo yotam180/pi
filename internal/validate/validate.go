@@ -11,7 +11,6 @@ import (
 	"github.com/vyper-tooling/pi/internal/conditions"
 	"github.com/vyper-tooling/pi/internal/config"
 	"github.com/vyper-tooling/pi/internal/discovery"
-	"github.com/vyper-tooling/pi/internal/executor"
 )
 
 // Context holds everything a validation check needs. Checks receive this
@@ -180,7 +179,7 @@ func checkRunStepRefs(ctx *Context) []string {
 }
 
 func checkFileReferences(ctx *Context) []string {
-	fileExts := executor.DefaultFileExtensions()
+	fileExts := automation.DefaultFileExtensions()
 	var errs []string
 	for _, name := range ctx.Discovery.Names() {
 		if ctx.Discovery.IsBuiltin(name) {
@@ -192,7 +191,7 @@ func checkFileReferences(ctx *Context) []string {
 				return
 			}
 			ext := fileExts[step.Type]
-			if !executor.IsFilePath(step.Value, ext) {
+			if !automation.IsFilePath(step.Value, ext) {
 				return
 			}
 			resolved := filepath.Join(a.Dir(), step.Value)
@@ -302,7 +301,6 @@ func checkConditions(ctx *Context) []string {
 }
 
 func checkParentShellCapability(ctx *Context) []string {
-	reg := executor.NewDefaultRegistry()
 	var errs []string
 	for _, name := range ctx.Discovery.Names() {
 		a := ctx.Discovery.Automations[name]
@@ -310,7 +308,7 @@ func checkParentShellCapability(ctx *Context) []string {
 			if !step.ParentShell {
 				return
 			}
-			if !reg.StepTypeSupportsParentShell(step.Type) {
+			if !automation.StepTypeSupportsParentShell(step.Type) {
 				errs = append(errs,
 					fmt.Sprintf("%s: step type %q does not support parent_shell", loc.FormatPath(a.Name), step.Type))
 			}

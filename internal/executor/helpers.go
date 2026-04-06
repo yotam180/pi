@@ -6,18 +6,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-)
 
-// IsFilePath returns true if the value looks like a file path rather than
-// inline script. The ext parameter is the file extension for the step type
-// (e.g. ".sh", ".py", ".ts"). A value is a file path when it ends with ext,
-// contains no newlines, and contains no spaces. Returns false when ext is empty.
-func IsFilePath(value, ext string) bool {
-	return ext != "" &&
-		strings.HasSuffix(value, ext) &&
-		!strings.Contains(value, "\n") &&
-		!strings.Contains(value, " ")
-}
+	"github.com/vyper-tooling/pi/internal/automation"
+)
 
 // resolveScriptPath resolves a script path relative to the automation's directory.
 func resolveScriptPath(automationDir, scriptPath string) string {
@@ -70,7 +61,7 @@ func BuildStepEnv(runtimePaths []string, inputEnv []string, automationEnv map[st
 // resolved path and true if it's a file, or ("", false) for inline scripts.
 // The ext parameter is the file extension for the runner (e.g. ".sh").
 func resolveFileStep(automationDir, value, lang, ext string) (string, bool, error) {
-	if !IsFilePath(value, ext) {
+	if !automation.IsFilePath(value, ext) {
 		return "", false, nil
 	}
 	resolved := resolveScriptPath(automationDir, value)

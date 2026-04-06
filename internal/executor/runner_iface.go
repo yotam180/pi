@@ -120,17 +120,3 @@ func NewDefaultRegistry() *Registry {
 	r.Register(automation.StepTypeRun, &RunStepRunner{})
 	return r
 }
-
-// DefaultFileExtensions returns the file extension for each step type in the
-// default registry. Used by validation to detect file references without
-// hardcoding extension lists.
-func DefaultFileExtensions() map[automation.StepType]string {
-	reg := NewDefaultRegistry()
-	exts := make(map[automation.StepType]string)
-	for stepType := range reg.runners {
-		if ext := reg.FileExtForStepType(stepType); ext != "" {
-			exts[stepType] = ext
-		}
-	}
-	return exts
-}
