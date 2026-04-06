@@ -995,3 +995,354 @@ func TestCheckWithInputs_MultipleUnknownSorted(t *testing.T) {
 		t.Errorf("expected second error (sorted) to be about 'platform', got: %s", msgs[1])
 	}
 }
+
+// --- Circular dependency detection tests ---
+
+func TestValidate_DirectCircularDep(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "alpha.yaml"), []byte(`description: Alpha
+steps:
+  - run: beta
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "beta.yaml"), []byte(`description: Beta
+steps:
+  - run: alpha
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for circular dependency")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "circular dependency") {
+		t.Errorf("expected 'circular dependency' error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "alpha") {
+		t.Errorf("expected error to mention 'alpha', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "beta") {
+		t.Errorf("expected error to mention 'beta', got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "→") {
+		t.Errorf("expected error to contain chain arrow, got: %s", errOut)
+	}
+}
+
+func TestValidate_IndirectCircularDep(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "a.yaml"), []byte(`description: A
+steps:
+  - run: b
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "b.yaml"), []byte(`description: B
+steps:
+  - run: c
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "c.yaml"), []byte(`description: C
+steps:
+  - run: a
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for indirect circular dependency")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "circular dependency") {
+		t.Errorf("expected 'circular dependency' error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "a") && !strings.Contains(errOut, "b") && !strings.Contains(errOut, "c") {
+		t.Errorf("expected error to mention all three automations, got: %s", errOut)
+	}
+}
+
+func TestValidate_SelfReferencing(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "loop.yaml"), []byte(`description: Loop
+steps:
+  - run: loop
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for self-referencing automation")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "circular dependency") {
+		t.Errorf("expected 'circular dependency' error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "loop") {
+		t.Errorf("expected error to mention 'loop', got: %s", errOut)
+	}
+}
+
+func TestValidate_CircularDepInFirstBlock(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "start.yaml"), []byte(`description: Start
+steps:
+  - first:
+      - run: end
+        if: os.macos
+      - bash: echo fallback
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "end.yaml"), []byte(`description: End
+steps:
+  - run: start
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error for circular dep through first: block")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "circular dependency") {
+		t.Errorf("expected 'circular dependency' error, got: %s", errOut)
+	}
+}
+
+func TestValidate_DiamondDep_NoCycle(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "top.yaml"), []byte(`description: Top
+steps:
+  - run: left
+  - run: right
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "left.yaml"), []byte(`description: Left
+steps:
+  - run: bottom
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "right.yaml"), []byte(`description: Right
+steps:
+  - run: bottom
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "bottom.yaml"), []byte(`description: Bottom
+bash: echo done
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("diamond dependencies should not be flagged: %v\nstderr: %s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "✓") {
+		t.Errorf("expected success marker, got: %s", stdout.String())
+	}
+}
+
+func TestValidate_NoCircularDep_LinearChain(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "first.yaml"), []byte(`description: First
+steps:
+  - run: second
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "second.yaml"), []byte(`description: Second
+steps:
+  - run: third
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "third.yaml"), []byte(`description: Third
+bash: echo end
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("linear chain should not be flagged: %v\nstderr: %s", err, stderr.String())
+	}
+}
+
+func TestValidate_CircularDepChainFormat(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte("project: test\n"), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "x.yaml"), []byte(`description: X
+steps:
+  - run: y
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "y.yaml"), []byte(`description: Y
+steps:
+  - run: x
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errOut := stderr.String()
+	// Chain should show the full cycle: x → y → x
+	if !strings.Contains(errOut, " → ") {
+		t.Errorf("expected chain with arrows, got: %s", errOut)
+	}
+}
+
+func TestValidate_CircularDepWithOtherErrors(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pi.yaml"), []byte(`project: test
+shortcuts:
+  bad: nonexistent
+`), 0644)
+	piDir := filepath.Join(dir, ".pi")
+	os.MkdirAll(piDir, 0755)
+	os.WriteFile(filepath.Join(piDir, "a.yaml"), []byte(`description: A
+steps:
+  - run: b
+`), 0644)
+	os.WriteFile(filepath.Join(piDir, "b.yaml"), []byte(`description: B
+steps:
+  - run: a
+`), 0644)
+
+	var stdout, stderr bytes.Buffer
+	err := runValidate(dir, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected errors")
+	}
+	errOut := stderr.String()
+	if !strings.Contains(errOut, "nonexistent") {
+		t.Errorf("expected broken ref error, got: %s", errOut)
+	}
+	if !strings.Contains(errOut, "circular dependency") {
+		t.Errorf("expected circular dependency error, got: %s", errOut)
+	}
+}
+
+// --- Unit tests for cycle detection internals ---
+
+func TestDetectCycles_NoCycles(t *testing.T) {
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": {"c"},
+		"c": nil,
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 0 {
+		t.Errorf("expected no cycles, got: %v", cycles)
+	}
+}
+
+func TestDetectCycles_DirectCycle(t *testing.T) {
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": {"a"},
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 1 {
+		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
+	}
+	cycle := cycles[0]
+	if cycle[0] != cycle[len(cycle)-1] {
+		t.Errorf("cycle should start and end with same node, got: %v", cycle)
+	}
+}
+
+func TestDetectCycles_SelfLoop(t *testing.T) {
+	graph := map[string][]string{
+		"x": {"x"},
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 1 {
+		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
+	}
+	if len(cycles[0]) != 2 {
+		t.Errorf("self-loop cycle should have 2 elements (x → x), got: %v", cycles[0])
+	}
+}
+
+func TestDetectCycles_ThreeNodeCycle(t *testing.T) {
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": {"c"},
+		"c": {"a"},
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 1 {
+		t.Fatalf("expected 1 cycle, got %d: %v", len(cycles), cycles)
+	}
+}
+
+func TestDetectCycles_DiamondNoCycle(t *testing.T) {
+	graph := map[string][]string{
+		"top":    {"left", "right"},
+		"left":   {"bottom"},
+		"right":  {"bottom"},
+		"bottom": nil,
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 0 {
+		t.Errorf("diamond should have no cycles, got: %v", cycles)
+	}
+}
+
+func TestDetectCycles_MultipleCycles(t *testing.T) {
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": {"a"},
+		"c": {"d"},
+		"d": {"c"},
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 2 {
+		t.Fatalf("expected 2 cycles, got %d: %v", len(cycles), cycles)
+	}
+}
+
+func TestDetectCycles_DisconnectedGraphWithCycle(t *testing.T) {
+	graph := map[string][]string{
+		"a":      {"b"},
+		"b":      {"a"},
+		"island": nil,
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 1 {
+		t.Fatalf("expected 1 cycle (island should not affect detection), got %d: %v", len(cycles), cycles)
+	}
+}
+
+func TestNormalizeCycleKey_Rotation(t *testing.T) {
+	k1 := normalizeCycleKey([]string{"b", "c", "a", "b"})
+	k2 := normalizeCycleKey([]string{"a", "b", "c", "a"})
+	if k1 != k2 {
+		t.Errorf("rotated cycles should normalize to same key: %q vs %q", k1, k2)
+	}
+}
+
+func TestNormalizeCycleKey_SelfLoop(t *testing.T) {
+	key := normalizeCycleKey([]string{"x", "x"})
+	if key != "x" {
+		t.Errorf("self-loop key = %q, want %q", key, "x")
+	}
+}
+
+func TestBuildRunGraph_SkipsBrokenRefs(t *testing.T) {
+	graph := map[string][]string{
+		"a": {"b"},
+		"b": nil,
+	}
+	cycles := detectCycles(graph)
+	if len(cycles) != 0 {
+		t.Errorf("expected no cycles for valid graph, got: %v", cycles)
+	}
+}

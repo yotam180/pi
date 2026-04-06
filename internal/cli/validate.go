@@ -21,7 +21,7 @@ func newValidateCmd() *cobra.Command {
 		Short: "Validate all automation files and config",
 		Long: `Statically validate pi.yaml and all automation YAML files in .pi/ without
 executing anything. Checks for schema errors, broken references, missing
-script files, input mismatches, and configuration mistakes.
+script files, input mismatches, circular dependencies, and configuration mistakes.
 
 Checks performed:
   - pi.yaml parsing and schema validation
@@ -33,6 +33,7 @@ Checks performed:
   - with: keys on shortcuts match target automation's declared inputs
   - with: keys on setup entries match target automation's declared inputs
   - with: keys on run: steps match target automation's declared inputs
+  - Circular run: step dependencies (A → B → A)
 
 Exits with code 0 if all checks pass, or code 1 if any errors are found.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -100,6 +101,7 @@ func validateProject(root string) ValidationResult {
 	validateShortcutInputs(cfg, disc, &result)
 	validateSetupInputs(cfg, disc, &result)
 	validateRunStepInputs(disc, &result)
+	validateCircularDeps(disc, &result)
 
 	return result
 }
@@ -221,6 +223,130 @@ func validateRunStepInputs(disc *discovery.Result, result *ValidationResult) {
 			}
 		})
 	}
+}
+
+// validateCircularDeps builds a directed graph of run: step edges and detects
+// cycles using DFS. Each cycle is reported as a validation error with the full chain.
+func validateCircularDeps(disc *discovery.Result, result *ValidationResult) {
+	graph := buildRunGraph(disc)
+	cycles := detectCycles(graph)
+	for _, cycle := range cycles {
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("circular dependency: %s", strings.Join(cycle, " → ")))
+	}
+}
+
+// buildRunGraph extracts a directed graph from all run: steps in discovered automations.
+// Keys are automation names; values are deduplicated lists of target automation names.
+func buildRunGraph(disc *discovery.Result) map[string][]string {
+	graph := make(map[string][]string)
+	for _, name := range disc.Names() {
+		a := disc.Automations[name]
+		seen := make(map[string]bool)
+		automation.WalkSteps(a, func(step automation.Step, loc automation.StepLocation) {
+			if step.Type != automation.StepTypeRun {
+				return
+			}
+			target, err := disc.Find(step.Value)
+			if err != nil {
+				return
+			}
+			if !seen[target.Name] {
+				seen[target.Name] = true
+				graph[name] = append(graph[name], target.Name)
+			}
+		})
+		if _, exists := graph[name]; !exists {
+			graph[name] = nil
+		}
+	}
+	return graph
+}
+
+// detectCycles finds all unique cycles in a directed graph using DFS.
+// Returns each cycle as a slice of names (e.g., ["A", "B", "C", "A"]).
+// Only one representative cycle per strongly connected component is reported
+// to avoid duplicate noise.
+func detectCycles(graph map[string][]string) [][]string {
+	const (
+		white = 0 // unvisited
+		gray  = 1 // in current DFS path
+		black = 2 // fully processed
+	)
+
+	color := make(map[string]int)
+	path := make([]string, 0)
+	var cycles [][]string
+	reported := make(map[string]bool)
+
+	var dfs func(node string)
+	dfs = func(node string) {
+		color[node] = gray
+		path = append(path, node)
+
+		for _, neighbor := range graph[node] {
+			if color[neighbor] == gray {
+				cycleStart := -1
+				for i, n := range path {
+					if n == neighbor {
+						cycleStart = i
+						break
+					}
+				}
+				if cycleStart >= 0 {
+					cycle := make([]string, len(path)-cycleStart+1)
+					copy(cycle, path[cycleStart:])
+					cycle[len(cycle)-1] = neighbor
+
+					key := normalizeCycleKey(cycle)
+					if !reported[key] {
+						reported[key] = true
+						cycles = append(cycles, cycle)
+					}
+				}
+			} else if color[neighbor] == white {
+				dfs(neighbor)
+			}
+		}
+
+		path = path[:len(path)-1]
+		color[node] = black
+	}
+
+	nodes := make([]string, 0, len(graph))
+	for node := range graph {
+		nodes = append(nodes, node)
+	}
+	sort.Strings(nodes)
+
+	for _, node := range nodes {
+		if color[node] == white {
+			dfs(node)
+		}
+	}
+
+	return cycles
+}
+
+// normalizeCycleKey produces a canonical string for a cycle so that the same
+// cycle discovered from different starting nodes is only reported once.
+// It rotates the cycle to start from the lexicographically smallest node.
+func normalizeCycleKey(cycle []string) string {
+	if len(cycle) <= 1 {
+		return strings.Join(cycle, "→")
+	}
+	ring := cycle[:len(cycle)-1]
+	minIdx := 0
+	for i, name := range ring {
+		if name < ring[minIdx] {
+			minIdx = i
+		}
+	}
+	rotated := make([]string, len(ring))
+	for i := range ring {
+		rotated[i] = ring[(minIdx+i)%len(ring)]
+	}
+	return strings.Join(rotated, "→")
 }
 
 // checkWithInputs validates that with: keys match the target automation's
